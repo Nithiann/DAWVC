@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DawVcs.Application</RootNamespace>
+    <AssemblyName>DawVcs.Application</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DawVcs.Domain\DawVcs.Domain.csproj" />
+    <ProjectReference Include="..\DawVcs.Adapters.Abstractions\DawVcs.Adapters.Abstractions.csproj" />
+  </ItemGroup>
+</Project>

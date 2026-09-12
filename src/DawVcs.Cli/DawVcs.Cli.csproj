@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>DawVcs.Cli</RootNamespace>
+    <AssemblyName>dawvc</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DawVcs.Domain\DawVcs.Domain.csproj" />
+    <ProjectReference Include="..\DawVcs.Application\DawVcs.Application.csproj" />
+    <ProjectReference Include="..\DawVcs.Infrastructure\DawVcs.Infrastructure.csproj" />
+    <ProjectReference Include="..\DawVcs.Adapters.Abstractions\DawVcs.Adapters.Abstractions.csproj" />
+    <ProjectReference Include="..\DawVcs.Adapters.FLStudio\DawVcs.Adapters.FLStudio.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Spectre.Console" />
+    <PackageReference Include="System.CommandLine" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+</Project>
