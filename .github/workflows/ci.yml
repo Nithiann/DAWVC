@@ -23,14 +23,14 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
+      - name: Verify code formatting
+        run: dotnet format --no-restore --verify-no-changes --verbosity diagnostic
+
       - name: Build solution (Release)
         run: dotnet build --no-restore -c Release
 
       - name: Run all tests
         run: dotnet test --no-build -c Release --verbosity normal --logger "trx;LogFileName=test_results.trx"
-
-      - name: Verify code formatting
-        run: dotnet format --verify-no-changes --verbosity diagnostic
 
   build-and-test-linux:
     name: Core Domain & App Integrity (Ubuntu)
