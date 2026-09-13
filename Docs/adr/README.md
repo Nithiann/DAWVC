@@ -8,9 +8,9 @@ Dit register bevat alle formele architectuurbesluiten voor DAWVC.
 |---|---|---|---|
 | [ADR-000](ADR-000-template.md) | Sjabloon voor Architecture Decision Records | Actief | Alle |
 | *ADR-ADP-001* | *FLP Parser boundaries & fallback behavior* | Gepland (WP-01 Spike A) | WP-01, WP-05 |
-| *ADR-HASH-001* | *BLAKE3 library selection & streaming API* | Gepland (WP-01 Spike B) | WP-01, WP-02 |
-| *ADR-OBJ-001* | *Canonical object envelope format (v1)* | Gepland (WP-01 Spike C) | WP-01, WP-02 |
-| *ADR-IO-001* | *Windows atomic file replace & staging primitives* | Gepland (WP-01 Spike D) | WP-01, WP-07 |
+| [ADR-HASH-001](ADR-HASH-001-blake3-library-selection.md) | BLAKE3 library selection & streaming API | Geaccepteerd | WP-01 (Spike B), WP-02 |
+| [ADR-OBJ-001](ADR-OBJ-001-canonical-object-envelope.md) | Canonical object envelope format (v1) | Geaccepteerd | WP-01 (Spike C), WP-02 |
+| [ADR-IO-001](ADR-IO-001-windows-atomic-file-replace.md) | Windows atomic file replace & staging primitives | Geaccepteerd | WP-01 (Spike D), WP-02, WP-07 |
 
 ---
 
