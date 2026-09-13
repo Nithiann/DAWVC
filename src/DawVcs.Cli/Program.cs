@@ -1,5 +1,8 @@
 using System.CommandLine;
 
+using DawVcs.Adapters.Abstractions;
+using DawVcs.Adapters.FLStudio;
+using DawVcs.Application.Adapters;
 using DawVcs.Application.Checkouts;
 using DawVcs.Application.Commits;
 using DawVcs.Application.Repositories;
@@ -24,12 +27,14 @@ public static class Program
     {
         var services = new ServiceCollection();
         services.AddSingleton<Func<string, IRepositoryContext>>(sp => dir => new FileSystemRepositoryContext(dir));
+        services.AddSingleton<IDawAdapterRegistry>(sp => new DawAdapterRegistry([new FLStudioAdapter()]));
         services.AddTransient<InitRepositoryUseCase>();
         services.AddTransient<CommitUseCase>();
         services.AddTransient<LogUseCase>();
         services.AddTransient<CheckoutRestoreUseCase>();
         services.AddTransient<StatusUseCase>();
         services.AddTransient<AddUseCase>();
+        services.AddTransient<ScanUseCase>();
 
         using var serviceProvider = services.BuildServiceProvider();
 
@@ -280,7 +285,121 @@ public static class Program
             }
         }, addPathsArg, addAllOption, addDirOption);
 
+        // --- dawvc scan ---
+        var scanCommand = new Command("scan", "Inspect and validate project files and detect DAW dependencies");
+        var scanDirOption = new Option<string?>("--dir", "Working directory to scan (default: current directory)");
+        var scanFileOption = new Option<string?>("--file", "Explicit path to the project file to scan");
+        var scanTimeoutOption = new Option<int?>("--timeout", "Maximum scan timeout in seconds (default: 5)");
+        scanCommand.AddOption(scanDirOption);
+        scanCommand.AddOption(scanFileOption);
+        scanCommand.AddOption(scanTimeoutOption);
+
+        scanCommand.SetHandler(async (dir, file, timeoutSec) =>
+        {
+            try
+            {
+                var targetDir = string.IsNullOrWhiteSpace(dir) ? Directory.GetCurrentDirectory() : Path.GetFullPath(dir);
+                var useCase = serviceProvider.GetRequiredService<ScanUseCase>();
+                var timeout = timeoutSec.HasValue ? TimeSpan.FromSeconds(timeoutSec.Value) : ScanUseCase.DefaultTimeout;
+
+                var result = await useCase.ExecuteAsync(new ScanRequest(targetDir, file, timeout));
+                var detection = result.Detection;
+
+                string statusColor = detection.Status switch
+                {
+                    ProjectDetectionStatus.Valid => "green",
+                    ProjectDetectionStatus.Suspicious => "yellow",
+                    ProjectDetectionStatus.Unsupported => "darkorange",
+                    ProjectDetectionStatus.Invalid => "red",
+                    _ => "grey"
+                };
+
+                AnsiConsole.WriteLine();
+                var rule = new Rule($"[bold]Project Scan — {Markup.Escape(result.PrimaryDawName ?? "Unknown DAW")}[/]");
+                rule.LeftJustified();
+                AnsiConsole.Write(rule);
+
+                var table = new Table().Border(TableBorder.Rounded);
+                table.AddColumn("Property");
+                table.AddColumn("Value");
+
+                table.AddRow("Artifact", Markup.Escape(result.RelativeArtifactPath.Value));
+                table.AddRow("Status", $"[{statusColor}]{detection.Status}[/]");
+                table.AddRow("Confidence", $"{Math.Round(detection.Confidence * 100, 1)}%");
+                if (!string.IsNullOrEmpty(detection.DetectedVersion))
+                {
+                    table.AddRow("Version", Markup.Escape(detection.DetectedVersion));
+                }
+                if (detection.Metadata.TryGetValue("ReleaseName", out var release))
+                {
+                    table.AddRow("Release", Markup.Escape(release));
+                }
+                if (detection.Metadata.TryGetValue("ProjectTitle", out var title))
+                {
+                    table.AddRow("Title", Markup.Escape(title));
+                }
+                if (detection.Metadata.TryGetValue("ChannelCount", out var channels))
+                {
+                    table.AddRow("Channels", Markup.Escape(channels));
+                }
+                if (detection.Metadata.TryGetValue("Ppq", out var ppq))
+                {
+                    table.AddRow("PPQ", Markup.Escape(ppq));
+                }
+                if (detection.Metadata.TryGetValue("TempoBpm", out var tempo))
+                {
+                    table.AddRow("Tempo", $"{Markup.Escape(tempo)} BPM");
+                }
+                table.AddRow("Duration", $"{result.Duration.TotalMilliseconds:F1} ms");
+
+                AnsiConsole.Write(table);
+
+                if (detection.Metadata.TryGetValue("SamplePaths", out var samplePaths) && !string.IsNullOrWhiteSpace(samplePaths))
+                {
+                    var samples = samplePaths.Split(';', StringSplitOptions.RemoveEmptyEntries);
+                    var tree = new Tree($"[bold]Referenced Samples ({samples.Length})[/]");
+                    foreach (var s in samples)
+                    {
+                        tree.AddNode(Markup.Escape(s));
+                    }
+                    AnsiConsole.Write(tree);
+                }
+
+                if (detection.Metadata.TryGetValue("PluginNames", out var pluginNames) && !string.IsNullOrWhiteSpace(pluginNames))
+                {
+                    var plugins = pluginNames.Split(';', StringSplitOptions.RemoveEmptyEntries);
+                    var tree = new Tree($"[bold]Referenced Plugins ({plugins.Length})[/]");
+                    foreach (var p in plugins)
+                    {
+                        tree.AddNode(Markup.Escape(p));
+                    }
+                    AnsiConsole.Write(tree);
+                }
+
+                if (detection.Findings.Count > 0)
+                {
+                    AnsiConsole.MarkupLine("\n[bold]Findings:[/]");
+                    foreach (var finding in detection.Findings)
+                    {
+                        AnsiConsole.MarkupLine($"  • {Markup.Escape(finding)}");
+                    }
+                }
+
+                if (result.RequiresOpaqueFallback)
+                {
+                    AnsiConsole.MarkupLine("\n[yellow]Note: This project will be safely tracked as an opaque artifact without blocking commits (FR-FLP-008).[/]");
+                }
+                AnsiConsole.WriteLine();
+            }
+            catch (Exception ex)
+            {
+                AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
+                Environment.ExitCode = 1;
+            }
+        }, scanDirOption, scanFileOption, scanTimeoutOption);
+
         rootCommand.AddCommand(initCommand);
+        rootCommand.AddCommand(scanCommand);
         rootCommand.AddCommand(commitCommand);
         rootCommand.AddCommand(logCommand);
         rootCommand.AddCommand(checkoutCommand);

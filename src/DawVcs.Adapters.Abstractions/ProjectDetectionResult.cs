@@ -1,7 +1,9 @@
+using DawVcs.Domain.Metadata;
+
 namespace DawVcs.Adapters.Abstractions;
 
 /// <summary>
-/// Structured result returned by DAW adapters after inspecting a candidate project file or directory.
+/// Gestructureerd resultaat van projectinspectie door een DAW-adapter (FR-SCAN-003, IMP-0504, IMP-0507).
 /// </summary>
 public sealed record ProjectDetectionResult
 {
@@ -11,8 +13,18 @@ public sealed record ProjectDetectionResult
     public double Confidence { get; init; }
     public IReadOnlyDictionary<string, string> Metadata { get; init; }
     public IReadOnlyList<string> Findings { get; init; }
+    public IReadOnlyList<DetectionEvidence> Evidence { get; init; }
+    public IReadOnlyList<MetadataObservation<string>> Observations { get; init; }
 
+    /// <summary>
+    /// Geeft aan of het project volledig semantisch ondersteund wordt.
+    /// </summary>
     public bool IsSupported => Status == ProjectDetectionStatus.Valid;
+
+    /// <summary>
+    /// Geeft aan of het project veilig als opaque artifact behandeld moet worden (FR-FLP-008).
+    /// </summary>
+    public bool RequiresOpaqueFallback => Status is ProjectDetectionStatus.Unsupported or ProjectDetectionStatus.Suspicious;
 
     public ProjectDetectionResult(
         ProjectDetectionStatus status,
@@ -20,7 +32,9 @@ public sealed record ProjectDetectionResult
         string? detectedVersion,
         double confidence,
         IReadOnlyDictionary<string, string>? metadata = null,
-        IReadOnlyList<string>? findings = null)
+        IReadOnlyList<string>? findings = null,
+        IReadOnlyList<DetectionEvidence>? evidence = null,
+        IReadOnlyList<MetadataObservation<string>>? observations = null)
     {
         Status = status;
         DawName = dawName;
@@ -28,6 +42,8 @@ public sealed record ProjectDetectionResult
         Confidence = Math.Clamp(confidence, 0.0, 1.0);
         Metadata = metadata ?? new Dictionary<string, string>();
         Findings = findings ?? Array.Empty<string>();
+        Evidence = evidence ?? Array.Empty<DetectionEvidence>();
+        Observations = observations ?? Array.Empty<MetadataObservation<string>>();
     }
 
     public static ProjectDetectionResult Valid(
@@ -35,7 +51,9 @@ public sealed record ProjectDetectionResult
         string detectedVersion,
         double confidence = 1.0,
         IReadOnlyDictionary<string, string>? metadata = null,
-        IEnumerable<string>? findings = null)
+        IEnumerable<string>? findings = null,
+        IEnumerable<DetectionEvidence>? evidence = null,
+        IEnumerable<MetadataObservation<string>>? observations = null)
     {
         return new ProjectDetectionResult(
             ProjectDetectionStatus.Valid,
@@ -43,14 +61,35 @@ public sealed record ProjectDetectionResult
             detectedVersion,
             confidence,
             metadata,
-            findings?.ToList());
+            findings?.ToList(),
+            evidence?.ToList(),
+            observations?.ToList());
+    }
+
+    public static ProjectDetectionResult Suspicious(
+        string dawName,
+        string? detectedVersion,
+        string reason,
+        double confidence = 0.6,
+        IReadOnlyDictionary<string, string>? metadata = null,
+        IEnumerable<DetectionEvidence>? evidence = null)
+    {
+        return new ProjectDetectionResult(
+            ProjectDetectionStatus.Suspicious,
+            dawName,
+            detectedVersion,
+            confidence,
+            metadata,
+            new[] { reason },
+            evidence?.ToList());
     }
 
     public static ProjectDetectionResult Unsupported(
         string dawName,
         string? detectedVersion,
         string reason,
-        IReadOnlyDictionary<string, string>? metadata = null)
+        IReadOnlyDictionary<string, string>? metadata = null,
+        IEnumerable<DetectionEvidence>? evidence = null)
     {
         return new ProjectDetectionResult(
             ProjectDetectionStatus.Unsupported,
@@ -58,10 +97,14 @@ public sealed record ProjectDetectionResult
             detectedVersion,
             confidence: 0.8,
             metadata,
-            new[] { reason });
+            new[] { reason },
+            evidence?.ToList());
     }
 
-    public static ProjectDetectionResult Invalid(string dawName, string reason)
+    public static ProjectDetectionResult Invalid(
+        string dawName,
+        string reason,
+        IEnumerable<DetectionEvidence>? evidence = null)
     {
         return new ProjectDetectionResult(
             ProjectDetectionStatus.Invalid,
@@ -69,10 +112,13 @@ public sealed record ProjectDetectionResult
             detectedVersion: null,
             confidence: 0.0,
             metadata: null,
-            new[] { reason });
+            new[] { reason },
+            evidence?.ToList());
     }
 
-    public static ProjectDetectionResult Unknown(string reason)
+    public static ProjectDetectionResult Unknown(
+        string reason,
+        IEnumerable<DetectionEvidence>? evidence = null)
     {
         return new ProjectDetectionResult(
             ProjectDetectionStatus.Unknown,
@@ -80,6 +126,7 @@ public sealed record ProjectDetectionResult
             detectedVersion: null,
             confidence: 0.0,
             metadata: null,
-            new[] { reason });
+            new[] { reason },
+            evidence?.ToList());
     }
 }

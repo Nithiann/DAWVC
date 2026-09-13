@@ -1,25 +1,33 @@
 namespace DawVcs.Adapters.Abstractions;
 
+/// <summary>
+/// Status van project- en formaatdetectie door een DAW-adapter (IMP-0507).
+/// </summary>
 public enum ProjectDetectionStatus
 {
     /// <summary>
-    /// Project is positively identified and supported by the adapter.
+    /// Project is positief geïdentificeerd en wordt ondersteund door de adapter.
     /// </summary>
     Valid,
 
     /// <summary>
-    /// Project is identified as the expected DAW format, but the specific version is not supported for full semantic parsing.
-    /// Safe to treat as an opaque project artifact.
+    /// Project bezit een geldige header/handtekening, maar vertoont verdachte afwijkingen of niet-fatale corruptie.
+    /// </summary>
+    Suspicious,
+
+    /// <summary>
+    /// Project is herkend als het verwachte DAW-formaat, maar de specifieke versie valt buiten de geverifieerde baseline.
+    /// Veilig te behandelen als een opaque project artifact (FR-FLP-008).
     /// </summary>
     Unsupported,
 
     /// <summary>
-    /// Project signature or binary structure is corrupted or invalid.
+    /// Handtekening of binaire structuur is fundamenteel ongeldig of corrupt.
     /// </summary>
     Invalid,
 
     /// <summary>
-    /// Insufficient evidence or unrecognized format.
+    /// Onvoldoende bewijs of onbekend formaat.
     /// </summary>
     Unknown
 }
