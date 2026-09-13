@@ -3,6 +3,8 @@ using System.CommandLine;
 using DawVcs.Application.Checkouts;
 using DawVcs.Application.Commits;
 using DawVcs.Application.Repositories;
+using DawVcs.Application.Scanning;
+using DawVcs.Application.Staging;
 using DawVcs.Domain.Repositories;
 using DawVcs.Infrastructure.Repositories;
 
@@ -16,6 +18,7 @@ public static class Program
 {
     private static readonly string[] MessageAliases = ["-m", "--message"];
     private static readonly string[] LimitAliases = ["-n", "--limit"];
+    private static readonly string[] AllAliases = ["-A", "--all"];
 
     public static async Task<int> Main(string[] args)
     {
@@ -25,6 +28,8 @@ public static class Program
         services.AddTransient<CommitUseCase>();
         services.AddTransient<LogUseCase>();
         services.AddTransient<CheckoutRestoreUseCase>();
+        services.AddTransient<StatusUseCase>();
+        services.AddTransient<AddUseCase>();
 
         using var serviceProvider = services.BuildServiceProvider();
 
@@ -170,10 +175,117 @@ public static class Program
             }
         }, checkoutRefArg, checkoutRestoreToOption, checkoutDirOption);
 
+        // --- dawvc status ---
+        var statusCommand = new Command("status", "Show the working tree status");
+        var statusDirOption = new Option<string?>("--dir", "Repository directory");
+        statusCommand.AddOption(statusDirOption);
+
+        statusCommand.SetHandler(async (dir) =>
+        {
+            try
+            {
+                var repoDir = ResolveRepoDirectory(dir);
+                var useCase = serviceProvider.GetRequiredService<StatusUseCase>();
+                var result = await useCase.ExecuteAsync(new StatusRequest(repoDir));
+                var s = result.Status;
+
+                AnsiConsole.MarkupLine($"On branch [yellow]{s.CurrentBranch.Value}[/]");
+                if (!s.HeadCommit.HasValue)
+                {
+                    AnsiConsole.MarkupLine("\nNo commits yet\n");
+                }
+
+                if (s.HasStagedChanges)
+                {
+                    AnsiConsole.MarkupLine("\nChanges to be committed:");
+                    AnsiConsole.MarkupLine("  [dim](use \"dawvc commit\" to record changes)[/]\n");
+                    foreach (var item in s.Staged)
+                    {
+                        AnsiConsole.MarkupLine($"\t[green]staged:[/]   {Markup.Escape(item.Path.Value)}");
+                    }
+                }
+
+                if (s.HasWorkingTreeModifications)
+                {
+                    AnsiConsole.MarkupLine("\nChanges not staged for commit:");
+                    AnsiConsole.MarkupLine("  [dim](use \"dawvc add <file>...\" to update what will be committed)[/]\n");
+                    foreach (var item in s.Modified)
+                    {
+                        AnsiConsole.MarkupLine($"\t[red]modified:[/] {Markup.Escape(item.Path.Value)}");
+                    }
+                    foreach (var item in s.Missing)
+                    {
+                        AnsiConsole.MarkupLine($"\t[red]deleted:[/]  {Markup.Escape(item.Path.Value)}");
+                    }
+                }
+
+                if (s.Renamed.Count > 0)
+                {
+                    AnsiConsole.MarkupLine("\nRenamed files:");
+                    foreach (var item in s.Renamed)
+                    {
+                        AnsiConsole.MarkupLine($"\t[cyan]renamed:[/]  {Markup.Escape(item.OldPath?.Value ?? string.Empty)} -> {Markup.Escape(item.Path.Value)}");
+                    }
+                }
+
+                if (s.HasUntrackedAssets)
+                {
+                    AnsiConsole.MarkupLine("\nUntracked files:");
+                    AnsiConsole.MarkupLine("  [dim](use \"dawvc add <file>...\" to include in what will be committed)[/]\n");
+                    foreach (var item in s.Untracked)
+                    {
+                        AnsiConsole.MarkupLine($"\t[yellow]{Markup.Escape(item.Path.Value)}[/]");
+                    }
+                }
+
+                if (s.IsClean)
+                {
+                    AnsiConsole.MarkupLine("nothing to commit, working tree clean");
+                }
+            }
+            catch (Exception ex)
+            {
+                AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
+                Environment.ExitCode = 1;
+            }
+        }, statusDirOption);
+
+        // --- dawvc add ---
+        var addCommand = new Command("add", "Add file contents to the staging area");
+        var addPathsArg = new Argument<string[]>("paths", () => Array.Empty<string>(), "Files to add content from");
+        var addAllOption = new Option<bool>(AllAliases, "Add all untracked and modified files to staging");
+        var addDirOption = new Option<string?>("--dir", "Repository directory");
+        addCommand.AddArgument(addPathsArg);
+        addCommand.AddOption(addAllOption);
+        addCommand.AddOption(addDirOption);
+
+        addCommand.SetHandler(async (paths, all, dir) =>
+        {
+            try
+            {
+                var repoDir = ResolveRepoDirectory(dir);
+                var useCase = serviceProvider.GetRequiredService<AddUseCase>();
+                var result = await useCase.ExecuteAsync(new AddRequest(repoDir, paths, all));
+
+                AnsiConsole.MarkupLine($"[green]✓[/] Staged [bold]{result.StagedPaths.Count}[/] file(s)");
+                foreach (var path in result.StagedPaths)
+                {
+                    AnsiConsole.MarkupLine($"  [green]+[/] {Markup.Escape(path.Value)}");
+                }
+            }
+            catch (Exception ex)
+            {
+                AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
+                Environment.ExitCode = 1;
+            }
+        }, addPathsArg, addAllOption, addDirOption);
+
         rootCommand.AddCommand(initCommand);
         rootCommand.AddCommand(commitCommand);
         rootCommand.AddCommand(logCommand);
         rootCommand.AddCommand(checkoutCommand);
+        rootCommand.AddCommand(statusCommand);
+        rootCommand.AddCommand(addCommand);
 
         Environment.ExitCode = 0;
         var exitCode = await rootCommand.InvokeAsync(args);

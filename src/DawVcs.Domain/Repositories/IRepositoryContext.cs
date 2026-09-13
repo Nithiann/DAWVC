@@ -8,10 +8,11 @@ namespace DawVcs.Domain.Repositories;
 /// <summary>
 /// Domain port for interaction with the local repository state, config, and reference pointers.
 /// </summary>
-public interface IRepositoryContext
+public interface IRepositoryContext : IDisposable
 {
     string RootPath { get; }
     IObjectStore ObjectStore { get; }
+    IStagingIndex StagingIndex { get; }
 
     RepositoryConfig LoadConfig();
     void SaveConfig(RepositoryConfig config);

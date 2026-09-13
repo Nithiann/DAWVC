@@ -11,6 +11,7 @@ This registry contains all formal architecture decisions for DAWVC.
 | [ADR-HASH-001](ADR-HASH-001-blake3-library-selection.md) | BLAKE3 library selection & streaming API | Accepted | WP-01 (Spike B), WP-02 |
 | [ADR-OBJ-001](ADR-OBJ-001-canonical-object-envelope.md) | Canonical object envelope format (v1) | Accepted | WP-01 (Spike C), WP-02 |
 | [ADR-IO-001](ADR-IO-001-windows-atomic-file-replace.md) | Windows atomic file replace & staging primitives | Accepted | WP-01 (Spike D), WP-02, WP-07 |
+| [ADR-009](ADR-009-sqlite-local-index.md) | SQLite + Dapper for Local Workspace Metadata & Staging Index | Accepted | WP-04 |
 
 ---
 

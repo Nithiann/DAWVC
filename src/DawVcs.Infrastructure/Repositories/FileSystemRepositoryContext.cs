@@ -25,9 +25,11 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
     private readonly string _headFilePath;
     private readonly string _objectsPath;
     private readonly LooseObjectStore _objectStore;
+    private readonly SqliteStagingIndex _stagingIndex;
 
     public string RootPath => _rootPath;
     public IObjectStore ObjectStore => _objectStore;
+    public IStagingIndex StagingIndex => _stagingIndex;
 
     public FileSystemRepositoryContext(string rootPath)
     {
@@ -40,6 +42,7 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
         _objectsPath = Path.Combine(_dotDawvcPath, "objects");
 
         _objectStore = new LooseObjectStore(_rootPath);
+        _stagingIndex = new SqliteStagingIndex(_rootPath);
     }
 
     /// <summary>
@@ -261,5 +264,10 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
         public string Hash { get; set; } = string.Empty;
         public long Size { get; set; }
         public int Role { get; set; }
+    }
+
+    public void Dispose()
+    {
+        _stagingIndex.Dispose();
     }
 }
