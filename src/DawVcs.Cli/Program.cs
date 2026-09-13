@@ -5,6 +5,7 @@ using DawVcs.Adapters.FLStudio;
 using DawVcs.Application.Adapters;
 using DawVcs.Application.Checkouts;
 using DawVcs.Application.Commits;
+using DawVcs.Application.Exceptions;
 using DawVcs.Application.Repositories;
 using DawVcs.Application.Scanning;
 using DawVcs.Application.Staging;
@@ -29,7 +30,9 @@ public static class Program
         services.AddSingleton<Func<string, IRepositoryContext>>(sp => dir => new FileSystemRepositoryContext(dir));
         services.AddSingleton<IDawAdapterRegistry>(sp => new DawAdapterRegistry([new FLStudioAdapter()]));
         services.AddTransient<InitRepositoryUseCase>();
-        services.AddTransient<CommitUseCase>();
+        services.AddTransient<CommitUseCase>(sp => new CommitUseCase(
+            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
+            sp.GetRequiredService<IDawAdapterRegistry>()));
         services.AddTransient<LogUseCase>();
         services.AddTransient<CheckoutRestoreUseCase>();
         services.AddTransient<StatusUseCase>();
@@ -83,21 +86,33 @@ public static class Program
         var commitMessageOption = new Option<string>(MessageAliases, "Commit message describing the changes") { IsRequired = true };
         var commitAuthorOption = new Option<string?>("--author", "Author name/identity");
         var commitDirOption = new Option<string?>("--dir", "Repository directory");
+        var commitAllowIncompleteOption = new Option<bool>("--allow-incomplete", "Allow commit even if required bundle dependencies are missing (marks snapshot incomplete)");
         commitCommand.AddOption(commitMessageOption);
         commitCommand.AddOption(commitAuthorOption);
         commitCommand.AddOption(commitDirOption);
+        commitCommand.AddOption(commitAllowIncompleteOption);
 
-        commitCommand.SetHandler(async (message, author, dir) =>
+        commitCommand.SetHandler(async (message, author, dir, allowIncomplete) =>
         {
             try
             {
                 var repoDir = ResolveRepoDirectory(dir);
                 var useCase = serviceProvider.GetRequiredService<CommitUseCase>();
-                var result = await useCase.ExecuteAsync(new CommitRequest(repoDir, message, author));
+                var result = await useCase.ExecuteAsync(new CommitRequest(repoDir, message, author, allowIncomplete));
 
                 AnsiConsole.MarkupLine($"[green]✓[/] ([yellow]{result.Branch.Value}[/] [bold]{result.CommitId.ToString()[..8]}[/]) {Markup.Escape(result.Message)}");
                 AnsiConsole.MarkupLine($"  [dim]Author:[/]   {Markup.Escape(result.Author)}");
                 AnsiConsole.MarkupLine($"  [dim]Snapshot:[/] {result.SnapshotId.ToString()[..8]}");
+                if (!result.IsComplete)
+                {
+                    AnsiConsole.MarkupLine($"  [yellow]![/] [bold yellow]Incomplete snapshot:[/] {Markup.Escape(result.IncompleteReason ?? "Ontbrekende afhankelijkheden")}");
+                }
+            }
+            catch (IncompleteDependencyException ex)
+            {
+                AnsiConsole.MarkupLine($"[bold red]Error (Exit Code 5):[/] {Markup.Escape(ex.Message)}");
+                AnsiConsole.MarkupLine("[yellow]Remediation:[/] Add the missing files to the project directory or use [bold]dawvc commit -m \"...\" --allow-incomplete[/]");
+                Environment.ExitCode = 5;
             }
             catch (InvalidOperationException ex) when (ex.Message.Contains("clean", StringComparison.OrdinalIgnoreCase))
             {
@@ -109,7 +124,7 @@ public static class Program
                 AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
                 Environment.ExitCode = 1;
             }
-        }, commitMessageOption, commitAuthorOption, commitDirOption);
+        }, commitMessageOption, commitAuthorOption, commitDirOption, commitAllowIncompleteOption);
 
         // --- dawvc log ---
         var logCommand = new Command("log", "Show commit history");

@@ -1,12 +1,13 @@
 using DawVcs.Domain.Artifacts;
 using DawVcs.Domain.Common;
+using DawVcs.Domain.Dependencies;
 using DawVcs.Domain.Hashing;
 using DawVcs.Domain.Serialization;
 
 namespace DawVcs.Domain.Entities;
 
 /// <summary>
-/// Immutable snapshot entity capturing the state of project artifacts and metadata at a point in time.
+/// Onveranderlijke snapshot entity die de staat van projectartifacts, metadata en dependencies vastlegt (FR-DEP-002, FR-DEP-013).
 /// </summary>
 public sealed record ProjectSnapshot
 {
@@ -15,18 +16,27 @@ public sealed record ProjectSnapshot
     public ProjectArtifact Project { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public IReadOnlyDictionary<string, string> Metadata { get; init; }
+    public bool IsComplete { get; init; }
+    public string? IncompleteReason { get; init; }
+    public DependencyGraph Dependencies { get; init; }
 
     public ProjectSnapshot(
         ProjectArtifact project,
         DateTimeOffset createdAt,
         IReadOnlyDictionary<string, string>? metadata = null,
-        SnapshotId? id = null)
+        SnapshotId? id = null,
+        bool isComplete = true,
+        string? incompleteReason = null,
+        DependencyGraph? dependencies = null)
     {
         ArgumentNullException.ThrowIfNull(project);
 
         Project = project;
         CreatedAt = createdAt;
         Metadata = metadata ?? new Dictionary<string, string>();
+        IsComplete = isComplete;
+        IncompleteReason = incompleteReason;
+        Dependencies = dependencies ?? DependencyGraph.Empty;
 
         Id = id ?? ComputeId(this);
     }
@@ -42,6 +52,15 @@ public sealed record ProjectSnapshot
             role = (int)e.Role
         }).ToArray();
 
+        var depEntries = Dependencies.Dependencies.Select(d => new
+        {
+            id = d.Id.Value,
+            kind = (int)d.Kind,
+            name = d.Name,
+            requirement = (int)d.Requirement,
+            portability = (int)d.Portability.Mode
+        }).ToArray();
+
         return CanonicalJsonSerializer.SerializeCanonical(new
         {
             schemaVersion = SchemaVersion,
@@ -49,7 +68,10 @@ public sealed record ProjectSnapshot
             containerKind = (int)Project.Root.Kind,
             aggregateHash = Project.AggregateHash.ToString(),
             createdAt = CreatedAt.ToUnixTimeMilliseconds(),
+            isComplete = IsComplete,
+            incompleteReason = IncompleteReason,
             entries = entries,
+            dependencies = depEntries,
             metadata = Metadata
         });
     }

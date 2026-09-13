@@ -1,6 +1,11 @@
+using DawVcs.Adapters.Abstractions;
+using DawVcs.Application.Adapters;
 using DawVcs.Application.Common;
+using DawVcs.Application.Dependencies;
+using DawVcs.Application.Exceptions;
 using DawVcs.Domain.Artifacts;
 using DawVcs.Domain.Common;
+using DawVcs.Domain.Dependencies;
 using DawVcs.Domain.Entities;
 using DawVcs.Domain.Hashing;
 using DawVcs.Domain.Repositories;
@@ -12,7 +17,8 @@ namespace DawVcs.Application.Commits;
 public sealed record CommitRequest(
     string RepositoryDirectory,
     string Message,
-    string? Author = null);
+    string? Author = null,
+    bool AllowIncomplete = false);
 
 public sealed record CommitResult(
     CommitId CommitId,
@@ -20,18 +26,24 @@ public sealed record CommitResult(
     string Message,
     string Author,
     DateTimeOffset Timestamp,
-    BranchName Branch);
+    BranchName Branch,
+    bool IsComplete = true,
+    string? IncompleteReason = null);
 
 /// <summary>
-/// Orchestrates committing the primary project artifact into repository history (FR-COM-001 through FR-COM-011).
+/// Orchestreert het committen van projectbestanden en dependencies naar de repositoryhistorie (FR-COM-001 t/m FR-COM-011, FR-DEP-011 t/m FR-DEP-013).
 /// </summary>
 public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
 {
     private readonly Func<string, IRepositoryContext> _contextFactory;
+    private readonly IDawAdapterRegistry? _adapterRegistry;
 
-    public CommitUseCase(Func<string, IRepositoryContext> contextFactory)
+    public CommitUseCase(
+        Func<string, IRepositoryContext> contextFactory,
+        IDawAdapterRegistry? adapterRegistry = null)
     {
-        _contextFactory = contextFactory;
+        _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
+        _adapterRegistry = adapterRegistry;
     }
 
     public async Task<CommitResult> ExecuteAsync(CommitRequest request, CancellationToken cancellationToken = default)
@@ -61,22 +73,37 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
             [config.PrimaryArtifact.Value] = ArtifactEntry.Create(config.PrimaryArtifact, primaryBlobHash, primaryFileSize, ArtifactRole.PrimaryProjectFile)
         };
 
-        // 2. Resolve parent commit from current branch ref
+        // 2. Discover and evaluate dependencies from adapter (WP-06, FR-DEP-001..015)
+        var dependencyGraph = DependencyGraph.Empty;
+        if (_adapterRegistry != null)
+        {
+            var ext = Path.GetExtension(primaryFile);
+            var adapter = _adapterRegistry.FindAdapterForExtension(ext);
+            if (adapter != null)
+            {
+                using var readContext = new ArtifactReadContext(primaryFile);
+                var detection = await adapter.DetectAsync(readContext, cancellationToken).ConfigureAwait(false);
+                dependencyGraph = await DependencyDiscoveryService.DiscoverAsync(context.RootPath, detection, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        var missingBundleDependencies = new List<AssetDependency>();
+
+        // 3. Preserve previously tracked assets from HEAD snapshot (FR-STG-002)
         var currentBranch = context.GetCurrentBranch();
-        var currentCommitId = context.GetBranchCommit(currentBranch);
+        var headCommitId = context.GetBranchCommit(currentBranch);
         var parents = new List<CommitId>();
         ProjectSnapshot? parentSnapshot = null;
 
-        if (currentCommitId.HasValue)
+        if (headCommitId is not null)
         {
-            parents.Add(currentCommitId.Value);
-            var parentCommit = await context.LoadCommitAsync(currentCommitId.Value, cancellationToken).ConfigureAwait(false);
-            if (parentCommit is not null)
+            parents.Add(headCommitId.Value);
+            var headCommit = await context.LoadCommitAsync(headCommitId.Value, cancellationToken).ConfigureAwait(false);
+            if (headCommit is not null)
             {
-                parentSnapshot = await context.LoadSnapshotAsync(parentCommit.SnapshotId, cancellationToken).ConfigureAwait(false);
+                parentSnapshot = await context.LoadSnapshotAsync(headCommit.SnapshotId, cancellationToken).ConfigureAwait(false);
                 if (parentSnapshot is not null)
                 {
-                    // Carry forward previously tracked assets automatically (FR-STG-002)
                     foreach (var tracked in parentSnapshot.Project.Root.GetEntries())
                     {
                         if (tracked.Path == config.PrimaryArtifact)
@@ -91,12 +118,24 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
                             var currentBlobHash = await StreamFileToBlobStoreAsync(context, trackedFullPath, cancellationToken).ConfigureAwait(false);
                             entriesByPath[tracked.Path.Value] = ArtifactEntry.Create(tracked.Path, currentBlobHash, fileInfo.Length, tracked.Role);
                         }
+                        else
+                        {
+                            // Tracked bundle dependency is missing on disk (FR-DEP-012, AC-005)
+                            missingBundleDependencies.Add(new AssetDependency(
+                                DependencyId.ForAsset(tracked.Path.Value),
+                                tracked.Path.FileName,
+                                DependencyRequirement.Required,
+                                DependencySource.ManualStaging,
+                                PortabilityPolicy.BundleDefault,
+                                relativePath: tracked.Path,
+                                isMissing: true));
+                        }
                     }
                 }
             }
         }
 
-        // 3. Include explicitly staged entries (FR-STG-004, AC-004)
+        // 4. Include explicitly staged entries (FR-STG-004, AC-004)
         var stagedEntries = await context.StagingIndex.GetStagedEntriesAsync(cancellationToken).ConfigureAwait(false);
         foreach (var staged in stagedEntries)
         {
@@ -107,28 +146,60 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
                 var currentBlobHash = await StreamFileToBlobStoreAsync(context, stagedFullPath, cancellationToken).ConfigureAwait(false);
                 entriesByPath[staged.Path.Value] = ArtifactEntry.Create(staged.Path, currentBlobHash, fileInfo.Length, staged.Role);
             }
+            else
+            {
+                // Staged bundle dependency is missing on disk (FR-DEP-012, AC-005)
+                missingBundleDependencies.Add(new AssetDependency(
+                    DependencyId.ForAsset(staged.Path.Value),
+                    staged.Path.FileName,
+                    DependencyRequirement.Required,
+                    DependencySource.ManualStaging,
+                    PortabilityPolicy.BundleDefault,
+                    relativePath: staged.Path,
+                    isMissing: true));
+            }
         }
 
-        // 4. Build ProjectArtifact (SingleFileArtifact or DirectoryArtifact)
+        // 5. Check for missing required Bundle dependencies (FR-DEP-012, AC-005)
+        bool isComplete = true;
+        string? incompleteReason = null;
+
+        if (missingBundleDependencies.Count > 0)
+        {
+            if (!request.AllowIncomplete)
+            {
+                throw new IncompleteDependencyException(missingBundleDependencies);
+            }
+
+            isComplete = false;
+            incompleteReason = $"Ontbrekende verplichte bundle-dependencies: {string.Join(", ", missingBundleDependencies.Select(m => m.Name))}";
+        }
+
+        // 6. Build ProjectArtifact (SingleFileArtifact or DirectoryArtifact)
         var entriesList = entriesByPath.Values.ToList();
         ArtifactRoot root = entriesList.Count == 1
             ? new SingleFileArtifact(entriesList[0])
             : new DirectoryArtifact(entriesList);
 
         var projectArtifact = new ProjectArtifact("FL Studio", root);
-        var snapshot = new ProjectSnapshot(projectArtifact, DateTimeOffset.UtcNow);
+        var snapshot = new ProjectSnapshot(
+            projectArtifact,
+            DateTimeOffset.UtcNow,
+            isComplete: isComplete,
+            incompleteReason: incompleteReason,
+            dependencies: dependencyGraph);
 
-        // 5. Rejection of no-op commits (FR-COM-003)
+        // 7. Rejection of no-op commits (FR-COM-003)
         if (parentSnapshot is not null && parentSnapshot.Project.AggregateHash == projectArtifact.AggregateHash)
         {
             throw new InvalidOperationException("Nothing to commit, working tree clean.");
         }
 
-        // 6. Store snapshot object in object store
+        // 8. Store snapshot object in object store
         var snapshotBytes = snapshot.ToCanonicalBytes();
         await context.ObjectStore.WriteObjectAsync(ObjectType.Snapshot, snapshotBytes, cancellationToken).ConfigureAwait(false);
 
-        // 7. Build and store commit object
+        // 9. Build and store commit object
         var author = !string.IsNullOrWhiteSpace(request.Author)
             ? request.Author.Trim()
             : (Environment.GetEnvironmentVariable("DAWVC_AUTHOR") ?? Environment.UserName);
@@ -143,10 +214,10 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
         var commitBytes = commit.ToCanonicalBytes();
         await context.ObjectStore.WriteObjectAsync(ObjectType.Commit, commitBytes, cancellationToken).ConfigureAwait(false);
 
-        // 8. Atomically update branch ref pointer (FR-COM-006)
+        // 10. Atomically update branch ref pointer (FR-COM-006)
         await context.UpdateBranchCommitAsync(currentBranch, commit.Id, cancellationToken).ConfigureAwait(false);
 
-        // 9. Clear staging index upon successful commit (FR-STG-001)
+        // 11. Clear staging index upon successful commit (FR-STG-001)
         await context.StagingIndex.ClearStagedEntriesAsync(cancellationToken).ConfigureAwait(false);
 
         return new CommitResult(
@@ -155,7 +226,9 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
             commit.Message,
             commit.Author,
             commit.Timestamp,
-            currentBranch);
+            currentBranch,
+            snapshot.IsComplete,
+            snapshot.IncompleteReason);
     }
 
     private static async Task<ContentHash> StreamFileToBlobStoreAsync(IRepositoryContext context, string filePath, CancellationToken cancellationToken)

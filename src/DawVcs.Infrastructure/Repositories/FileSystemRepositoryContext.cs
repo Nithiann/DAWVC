@@ -3,6 +3,7 @@ using System.Text;
 using DawVcs.Domain.Artifacts;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Configuration;
+using DawVcs.Domain.Dependencies;
 using DawVcs.Domain.Entities;
 using DawVcs.Domain.Hashing;
 using DawVcs.Domain.Repositories;
@@ -233,7 +234,41 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
         var project = new ProjectArtifact(dto.DawName, root);
         var createdAt = DateTimeOffset.FromUnixTimeMilliseconds(dto.CreatedAt);
 
-        return new ProjectSnapshot(project, createdAt, dto.Metadata, id);
+        var depList = new List<Dependency>();
+        if (dto.Dependencies != null)
+        {
+            foreach (var d in dto.Dependencies)
+            {
+                var portMode = (PortabilityMode)d.Portability;
+                var policy = new PortabilityPolicy(portMode);
+                if ((DependencyKind)d.Kind == DependencyKind.Plugin)
+                {
+                    depList.Add(new PluginDependency(
+                        new DependencyId(d.Id),
+                        new PluginIdentity("Unknown", d.Name, PluginFormat.Unknown),
+                        portability: policy));
+                }
+                else
+                {
+                    depList.Add(new AssetDependency(
+                        new DependencyId(d.Id),
+                        d.Name,
+                        (DependencyRequirement)d.Requirement,
+                        DependencySource.NativeProjectParser,
+                        policy));
+                }
+            }
+        }
+        var depGraph = new DependencyGraph(depList);
+
+        return new ProjectSnapshot(
+            project,
+            createdAt,
+            dto.Metadata,
+            id,
+            isComplete: dto.IsComplete,
+            incompleteReason: dto.IncompleteReason,
+            dependencies: depGraph);
     }
 
     private sealed class RawCommitDto
@@ -253,8 +288,20 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
         public int ContainerKind { get; set; }
         public string AggregateHash { get; set; } = string.Empty;
         public long CreatedAt { get; set; }
+        public bool IsComplete { get; set; } = true;
+        public string? IncompleteReason { get; set; }
         public RawEntryDto[]? Entries { get; set; }
+        public RawDependencyDto[]? Dependencies { get; set; }
         public Dictionary<string, string>? Metadata { get; set; }
+    }
+
+    private sealed class RawDependencyDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public int Kind { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public int Requirement { get; set; }
+        public int Portability { get; set; }
     }
 
     private sealed class RawEntryDto
