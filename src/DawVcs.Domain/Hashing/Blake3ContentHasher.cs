@@ -34,6 +34,16 @@ public sealed class Blake3ContentHasher : IContentHasher
         return hasher.FinalizeHash();
     }
 
+    /// <summary>
+    /// Computes the BLAKE3 hash of a file on disk asynchronously.
+    /// </summary>
+    public static async Task<ContentHash> HashFileAsync(string filePath, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        await using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, StreamBufferSize, FileOptions.Asynchronous);
+        return await HashAsync(stream, cancellationToken).ConfigureAwait(false);
+    }
+
     public void Update(ReadOnlySpan<byte> data)
     {
         ObjectDisposedException.ThrowIf(_disposed || _hasher is null, this);

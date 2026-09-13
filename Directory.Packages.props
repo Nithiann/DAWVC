@@ -12,6 +12,9 @@
     <!-- Cryptography & Hashing -->
     <PackageVersion Include="Blake3" Version="3.0.2" />
 
+    <!-- Configuration & Serialization -->
+    <PackageVersion Include="YamlDotNet" Version="18.1.0" />
+
     <!-- Testing Frameworks & Assertion Libraries -->
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.13.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />
