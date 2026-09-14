@@ -29,6 +29,10 @@ jobs:
       - name: Build solution (Release)
         run: dotnet build --no-restore -c Release
 
+      - name: Package Windows x64 distribution
+        shell: pwsh
+        run: ./scripts/package.ps1
+
       - name: Run all tests
         run: dotnet test --no-build -c Release --verbosity normal --logger "trx;LogFileName=test_results.trx"
 
