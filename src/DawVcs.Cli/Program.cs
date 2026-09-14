@@ -1,11 +1,14 @@
 using System.CommandLine;
+using System.Text.Json;
 
 using DawVcs.Adapters.Abstractions;
 using DawVcs.Adapters.FLStudio;
 using DawVcs.Application.Adapters;
+using DawVcs.Application.Branches;
 using DawVcs.Application.Checkouts;
 using DawVcs.Application.Commits;
 using DawVcs.Application.Dependencies;
+using DawVcs.Application.Diagnostics;
 using DawVcs.Application.Exceptions;
 using DawVcs.Application.Repositories;
 using DawVcs.Application.Scanning;
@@ -24,6 +27,11 @@ public static class Program
     private static readonly string[] MessageAliases = ["-m", "--message"];
     private static readonly string[] LimitAliases = ["-n", "--limit"];
     private static readonly string[] AllAliases = ["-A", "--all"];
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
 
     public static async Task<int> Main(string[] args)
     {
@@ -41,6 +49,14 @@ public static class Program
         services.AddTransient<StatusUseCase>();
         services.AddTransient<AddUseCase>();
         services.AddTransient<ScanUseCase>();
+        services.AddTransient<BranchUseCase>();
+        services.AddTransient<SwitchUseCase>();
+        services.AddTransient<DoctorUseCase>(sp => new DoctorUseCase(
+            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
+            sp.GetRequiredService<IDawAdapterRegistry>()));
+        services.AddTransient<FsckUseCase>(sp => new FsckUseCase(
+            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
+            sp.GetRequiredService<IDawAdapterRegistry>()));
 
         using var serviceProvider = services.BuildServiceProvider();
 
@@ -483,6 +499,348 @@ public static class Program
             }
         }, scanDirOption, scanFileOption, scanTimeoutOption);
 
+        // --- dawvc branch ---
+        var branchCommand = new Command("branch", "List, create, or delete branches (FR-BRA-001..003)");
+        var branchNameArg = new Argument<string?>("name", () => null, "Branch name to create");
+        var branchStartArg = new Argument<string?>("start-point", () => null, "Starting commit or reference");
+        var branchDeleteOption = new Option<string?>(["-d", "--delete"], "Delete a branch");
+        var branchForceDeleteOption = new Option<string?>(["-D", "--force-delete"], "Force delete a branch");
+        var branchDirOption = new Option<string?>("--dir", "Repository directory");
+
+        branchCommand.AddArgument(branchNameArg);
+        branchCommand.AddArgument(branchStartArg);
+        branchCommand.AddOption(branchDeleteOption);
+        branchCommand.AddOption(branchForceDeleteOption);
+        branchCommand.AddOption(branchDirOption);
+
+        branchCommand.SetHandler(async (name, startPoint, deleteName, forceDeleteName, dir) =>
+        {
+            try
+            {
+                var repoDir = ResolveRepoDirectory(dir);
+                var useCase = serviceProvider.GetRequiredService<BranchUseCase>();
+
+                var branchToDelete = forceDeleteName ?? deleteName;
+                if (!string.IsNullOrWhiteSpace(branchToDelete))
+                {
+                    await useCase.DeleteAsync(new BranchDeleteRequest(repoDir, branchToDelete, forceDeleteName != null));
+                    AnsiConsole.MarkupLine($"[green]✓[/] Deleted branch [yellow]{Markup.Escape(branchToDelete)}[/]");
+                    return;
+                }
+
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    var created = await useCase.CreateAsync(new BranchCreateRequest(repoDir, name, startPoint));
+                    AnsiConsole.MarkupLine($"[green]✓[/] Created branch [yellow]{Markup.Escape(created.Name.Value)}[/] at [bold]{(created.CommitId?.ToString()[..8] ?? "HEAD")}[/]");
+                    return;
+                }
+
+                // List branches
+                var branches = await useCase.ListAsync(repoDir);
+                foreach (var b in branches)
+                {
+                    var commitShort = b.CommitId.HasValue ? b.CommitId.Value.ToString()[..8] : "(no commits)";
+                    if (b.IsCurrent)
+                    {
+                        AnsiConsole.MarkupLine($"* [bold green]{Markup.Escape(b.Name.Value)}[/] [dim]{commitShort}[/]");
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLine($"  {Markup.Escape(b.Name.Value)} [dim]{commitShort}[/]");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
+                Environment.ExitCode = 1;
+            }
+        }, branchNameArg, branchStartArg, branchDeleteOption, branchForceDeleteOption, branchDirOption);
+
+        // --- dawvc switch ---
+        var switchCommand = new Command("switch", "Switch branches or restore working tree files (FR-BRA-004..007)");
+        var switchBranchArg = new Argument<string>("branch", "Branch name to switch to");
+        var switchCreateOption = new Option<bool>(["-c", "-b", "--create"], "Create and switch to a new branch");
+        var switchStartPointOption = new Option<string?>("--start-point", "Starting commit when creating a new branch");
+        var switchForceOption = new Option<bool>(["-f", "--force"], "Proceed and create a recovery copy if workspace is dirty");
+        var switchDirOption = new Option<string?>("--dir", "Repository directory");
+
+        switchCommand.AddArgument(switchBranchArg);
+        switchCommand.AddOption(switchCreateOption);
+        switchCommand.AddOption(switchStartPointOption);
+        switchCommand.AddOption(switchForceOption);
+        switchCommand.AddOption(switchDirOption);
+
+        switchCommand.SetHandler(async (branch, create, startPoint, force, dir) =>
+        {
+            try
+            {
+                var repoDir = ResolveRepoDirectory(dir);
+                var useCase = serviceProvider.GetRequiredService<SwitchUseCase>();
+                var result = await useCase.ExecuteAsync(new SwitchRequest(repoDir, branch, create, startPoint, force));
+
+                if (result.AlreadyOnBranch)
+                {
+                    AnsiConsole.MarkupLine($"Already on '[yellow]{Markup.Escape(result.Branch.Value)}[/]'");
+                    return;
+                }
+
+                if (result.CreatedNewBranch)
+                {
+                    AnsiConsole.MarkupLine($"[green]✓[/] Switched to a new branch '[yellow]{Markup.Escape(result.Branch.Value)}[/]'");
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine($"[green]✓[/] Switched to branch '[yellow]{Markup.Escape(result.Branch.Value)}[/]'");
+                }
+
+                if (!string.IsNullOrEmpty(result.RecoveryDirectory))
+                {
+                    AnsiConsole.MarkupLine($"  [yellow]⚠ Recovery copy created:[/] [dim]{Markup.Escape(result.RecoveryDirectory)}[/]");
+                }
+            }
+            catch (DirtyWorkspaceException ex)
+            {
+                AnsiConsole.MarkupLine($"[bold red]Error (Exit Code 7):[/] {Markup.Escape(ex.Message)}");
+                AnsiConsole.MarkupLine("[yellow]Remediation:[/] Commit or stage your changes, or use [bold]dawvc switch --force <branch>[/] to create a recovery copy.");
+                Environment.ExitCode = 7;
+            }
+            catch (CheckoutStagingException ex)
+            {
+                AnsiConsole.MarkupLine($"[bold red]Error (Exit Code 7):[/] {Markup.Escape(ex.Message)}");
+                AnsiConsole.MarkupLine("[yellow]Remediation:[/] Commit or stage your changes, or use [bold]dawvc switch --force <branch>[/] to create a recovery copy.");
+                Environment.ExitCode = 7;
+            }
+            catch (Exception ex)
+            {
+                AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
+                Environment.ExitCode = 1;
+            }
+        }, switchBranchArg, switchCreateOption, switchStartPointOption, switchForceOption, switchDirOption);
+
+        // --- dawvc doctor ---
+        var doctorCommand = new Command("doctor", "Evaluate repository health, dependency reproducibility, and DAW environment (FR-DOC-001..010)");
+        var doctorJsonOption = new Option<bool>("--json", "Output diagnostics report as JSON");
+        var doctorDirOption = new Option<string?>("--dir", "Repository directory");
+
+        doctorCommand.AddOption(doctorJsonOption);
+        doctorCommand.AddOption(doctorDirOption);
+
+        doctorCommand.SetHandler(async (json, dir) =>
+        {
+            try
+            {
+                var repoDir = ResolveRepoDirectory(dir);
+                var useCase = serviceProvider.GetRequiredService<DoctorUseCase>();
+                var report = await useCase.ExecuteAsync(new DoctorRequest(repoDir));
+
+                if (json)
+                {
+                    var jsonStr = JsonSerializer.Serialize(report, JsonOptions);
+                    Console.WriteLine(jsonStr);
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine("\n[bold]DAWVC Doctor Diagnostic Report[/]\n");
+
+                    // 1. Artifacts
+                    AnsiConsole.MarkupLine("[bold underline]1. Artifact Integrity[/]");
+                    foreach (var art in report.ArtifactHealth)
+                    {
+                        var icon = art.Status switch
+                        {
+                            HealthStatus.Healthy => "[green]✓[/]",
+                            HealthStatus.Warning => "[yellow]⚠[/]",
+                            _ => "[red]✗[/]"
+                        };
+                        AnsiConsole.MarkupLine($"  {icon} [bold]{Markup.Escape(art.Path)}[/] ({Markup.Escape(art.DawName)} {Markup.Escape(art.DetectedVersion ?? "Unknown")})");
+                        foreach (var finding in art.Findings)
+                        {
+                            AnsiConsole.MarkupLine($"    [dim]•[/] {Markup.Escape(finding)}");
+                        }
+                    }
+
+                    // 2. Dependencies & Reproducibility
+                    AnsiConsole.MarkupLine("\n[bold underline]2. Dependency Health & Reproducibility[/]");
+                    AnsiConsole.MarkupLine($"  Reproducibility Score: [bold]{report.ReproducibilityScore:F1}%[/]");
+
+                    if (report.DependencyHealth.Count > 0)
+                    {
+                        var table = new Table();
+                        table.Border(TableBorder.Rounded);
+                        table.AddColumn("Type");
+                        table.AddColumn("Name");
+                        table.AddColumn("Requirement");
+                        table.AddColumn("Status");
+
+                        foreach (var dep in report.DependencyHealth)
+                        {
+                            var statusMarkup = dep.Status switch
+                            {
+                                Domain.Dependencies.BindingStatus.Verified => "[green]Verified[/]",
+                                Domain.Dependencies.BindingStatus.Mismatch => "[red]Mismatch[/]",
+                                Domain.Dependencies.BindingStatus.Missing => "[red]Missing[/]",
+                                _ => "[yellow]Unresolved[/]"
+                            };
+                            table.AddRow(dep.Category, Markup.Escape(dep.Name), dep.Requirement.ToString(), statusMarkup);
+                        }
+                        AnsiConsole.Write(table);
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLine("  [dim]No external dependencies discovered.[/]");
+                    }
+
+                    // 3. Environment
+                    AnsiConsole.MarkupLine("\n[bold underline]3. Environment & DAW Installation[/]");
+                    AnsiConsole.MarkupLine($"  [dim]OS:[/] {Markup.Escape(report.EnvironmentHealth.OperatingSystem)} ({report.EnvironmentHealth.Architecture})");
+                    AnsiConsole.MarkupLine($"  [dim].NET:[/] {Markup.Escape(report.EnvironmentHealth.DotNetVersion)}");
+
+                    if (report.EnvironmentHealth.DawInstallations.Count > 0)
+                    {
+                        foreach (var daw in report.EnvironmentHealth.DawInstallations)
+                        {
+                            AnsiConsole.MarkupLine($"  [green]✓[/] {Markup.Escape(daw.DawName)} ({Markup.Escape(daw.Version)}): [dim]{Markup.Escape(daw.ExecutablePath ?? "")}[/]");
+                        }
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLine("  [yellow]![/] No standard FL Studio installation detected.");
+                    }
+
+                    // Verdict
+                    AnsiConsole.WriteLine();
+                    if (report.IsHealthy)
+                    {
+                        AnsiConsole.MarkupLine("[green]✓ Repository is healthy and reproducible.[/]");
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLine($"[red]✗ Repository has {report.BlockingIssuesCount} blocking issue(s).[/]");
+                    }
+                    AnsiConsole.WriteLine();
+                }
+
+                // Exit codes (FR-DOC-010)
+                if (report.ArtifactHealth.Any(a => a.IsBlocking))
+                {
+                    Environment.ExitCode = 6;
+                }
+                else if (report.DependencyHealth.Any(d => d.IsBlocking))
+                {
+                    Environment.ExitCode = 5;
+                }
+                else
+                {
+                    Environment.ExitCode = 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
+                Environment.ExitCode = 1;
+            }
+        }, doctorJsonOption, doctorDirOption);
+
+        // --- dawvc fsck ---
+        var fsckCommand = new Command("fsck", "Verify repository object graph and integrity without auto-repair (FR-FSC-001..008, AC-012)");
+        var fsckArtifactsOption = new Option<bool>("--artifacts", "Perform deep native adapter validation on project artifacts (AC-012)");
+        var fsckJsonOption = new Option<bool>("--json", "Output integrity report as JSON");
+        var fsckDirOption = new Option<string?>("--dir", "Repository directory");
+
+        fsckCommand.AddOption(fsckArtifactsOption);
+        fsckCommand.AddOption(fsckJsonOption);
+        fsckCommand.AddOption(fsckDirOption);
+
+        fsckCommand.SetHandler(async (artifacts, json, dir) =>
+        {
+            try
+            {
+                var repoDir = ResolveRepoDirectory(dir);
+                var useCase = serviceProvider.GetRequiredService<FsckUseCase>();
+                var report = await useCase.ExecuteAsync(new FsckRequest(repoDir, artifacts));
+
+                if (json)
+                {
+                    var jsonStr = JsonSerializer.Serialize(report, JsonOptions);
+                    Console.WriteLine(jsonStr);
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine("\n[bold]DAWVC Object Store & Graph Integrity Check (fsck)[/]\n");
+
+                    var repo = report.RepositoryIntegrity;
+                    AnsiConsole.MarkupLine($"Objects scanned: [bold]{repo.TotalObjectsScanned}[/] ([green]{repo.ValidObjectsCount} valid[/], [red]{repo.CorruptObjectsCount} corrupt[/], [red]{repo.MissingObjectsCount} missing[/], [yellow]{repo.OrphanObjectsCount} orphan[/])");
+
+                    if (repo.Errors.Count > 0)
+                    {
+                        AnsiConsole.MarkupLine("\n[bold red]Repository Errors:[/]");
+                        foreach (var err in repo.Errors)
+                        {
+                            AnsiConsole.MarkupLine($"  [red]✗[/] [{err.Code}] {Markup.Escape(err.Target)}: {Markup.Escape(err.Message)}");
+                        }
+                    }
+
+                    if (repo.Warnings.Count > 0)
+                    {
+                        AnsiConsole.MarkupLine("\n[bold yellow]Warnings (Orphan objects):[/]");
+                        foreach (var w in repo.Warnings)
+                        {
+                            AnsiConsole.MarkupLine($"  [yellow]![/] [{w.Code}] {Markup.Escape(w.Target)}: {Markup.Escape(w.Message)}");
+                        }
+                    }
+
+                    if (report.ArtifactIntegrity != null)
+                    {
+                        var art = report.ArtifactIntegrity;
+                        AnsiConsole.MarkupLine($"\nArtifacts validated: [bold]{art.ArtifactsScanned}[/] ([green]{art.ValidArtifactsCount} valid[/], [red]{art.FailedArtifactsCount} failed[/])");
+
+                        if (art.Errors.Count > 0)
+                        {
+                            AnsiConsole.MarkupLine("\n[bold red]Artifact Validation Failures (AC-012):[/]");
+                            foreach (var err in art.Errors)
+                            {
+                                AnsiConsole.MarkupLine($"  [red]✗[/] [{err.Code}] {Markup.Escape(err.Target)}: {Markup.Escape(err.Message)}");
+                            }
+                        }
+                    }
+
+                    AnsiConsole.WriteLine();
+                    if (report.IsHealthy)
+                    {
+                        AnsiConsole.MarkupLine("[green]✓ Repository and object store integrity verified. Zero corruption detected.[/]");
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLine("[red]✗ Integrity verification failed![/]");
+                    }
+                    AnsiConsole.WriteLine();
+                }
+
+                // Exit codes:
+                // 4 if repository corruption
+                // 6 if native adapter artifact validation failure
+                // 0 if healthy
+                if (!report.RepositoryIntegrity.IsIntact)
+                {
+                    Environment.ExitCode = 4;
+                }
+                else if (report.ArtifactIntegrity != null && !report.ArtifactIntegrity.IsIntact)
+                {
+                    Environment.ExitCode = 6;
+                }
+                else
+                {
+                    Environment.ExitCode = 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
+                Environment.ExitCode = 1;
+            }
+        }, fsckArtifactsOption, fsckJsonOption, fsckDirOption);
+
         rootCommand.AddCommand(initCommand);
         rootCommand.AddCommand(scanCommand);
         rootCommand.AddCommand(commitCommand);
@@ -491,6 +849,10 @@ public static class Program
         rootCommand.AddCommand(bindCommand);
         rootCommand.AddCommand(statusCommand);
         rootCommand.AddCommand(addCommand);
+        rootCommand.AddCommand(branchCommand);
+        rootCommand.AddCommand(switchCommand);
+        rootCommand.AddCommand(doctorCommand);
+        rootCommand.AddCommand(fsckCommand);
 
         Environment.ExitCode = 0;
         var exitCode = await rootCommand.InvokeAsync(args);

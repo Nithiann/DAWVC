@@ -106,6 +106,65 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
         File.WriteAllText(_headFilePath, $"ref: refs/heads/{branch.Value}\n");
     }
 
+    public IReadOnlyList<BranchInfo> GetBranches()
+    {
+        var currentBranch = GetCurrentBranch();
+        var result = new List<BranchInfo>();
+
+        if (!Directory.Exists(_refsHeadsPath))
+        {
+            return [new BranchInfo(currentBranch, GetBranchCommit(currentBranch), true)];
+        }
+
+        foreach (var file in Directory.EnumerateFiles(_refsHeadsPath))
+        {
+            var fileName = Path.GetFileName(file);
+            if (BranchName.TryCreate(fileName, out var branchName, out _))
+            {
+                var commitId = GetBranchCommit(branchName);
+                var isCurrent = branchName == currentBranch;
+                result.Add(new BranchInfo(branchName, commitId, isCurrent));
+            }
+        }
+
+        if (result.Count == 0)
+        {
+            result.Add(new BranchInfo(currentBranch, GetBranchCommit(currentBranch), true));
+        }
+
+        return result.OrderBy(b => b.Name.Value, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    public void CreateBranch(BranchName branch, CommitId commitId)
+    {
+        Directory.CreateDirectory(_refsHeadsPath);
+        var branchRefFile = Path.Combine(_refsHeadsPath, branch.Value);
+        if (File.Exists(branchRefFile))
+        {
+            throw new InvalidOperationException($"Branch '{branch.Value}' already exists.");
+        }
+
+        File.WriteAllText(branchRefFile, commitId.ToString() + "\n");
+    }
+
+    public bool DeleteBranch(BranchName branch)
+    {
+        var currentBranch = GetCurrentBranch();
+        if (branch == currentBranch)
+        {
+            throw new InvalidOperationException($"Cannot delete the currently active branch '{branch.Value}'.");
+        }
+
+        var branchRefFile = Path.Combine(_refsHeadsPath, branch.Value);
+        if (File.Exists(branchRefFile))
+        {
+            File.Delete(branchRefFile);
+            return true;
+        }
+
+        return false;
+    }
+
     public CommitId? GetBranchCommit(BranchName branch)
     {
         var branchRefFile = Path.Combine(_refsHeadsPath, branch.Value);

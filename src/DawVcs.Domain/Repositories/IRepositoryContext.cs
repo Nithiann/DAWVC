@@ -22,6 +22,10 @@ public interface IRepositoryContext : IDisposable
     BranchName GetCurrentBranch();
     void SetCurrentBranch(BranchName branch);
 
+    IReadOnlyList<BranchInfo> GetBranches();
+    void CreateBranch(BranchName branch, CommitId commitId);
+    bool DeleteBranch(BranchName branch);
+
     CommitId? GetBranchCommit(BranchName branch);
     Task UpdateBranchCommitAsync(BranchName branch, CommitId newCommit, CancellationToken cancellationToken = default);
 

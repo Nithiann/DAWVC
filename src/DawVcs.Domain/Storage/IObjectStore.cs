@@ -38,7 +38,19 @@ public interface IObjectStore
     /// Checks whether an object with the given hash exists in the store.
     /// </summary>
     bool Exists(ContentHash hash);
+
+    /// <summary>
+    /// Returns all stored object entries present in the object store.
+    /// </summary>
+    IReadOnlyList<StoredObjectEntry> EnumerateStoredObjects();
+
+    /// <summary>
+    /// Fully streams and validates the envelope header and BLAKE3 payload hash for the specified object.
+    /// </summary>
+    Task VerifyObjectIntegrityAsync(ContentHash hash, CancellationToken cancellationToken = default);
 }
+
+public sealed record StoredObjectEntry(string RelativePath, ContentHash? Hash, bool HasValidName);
 
 public class HashCollisionException : Exception
 {

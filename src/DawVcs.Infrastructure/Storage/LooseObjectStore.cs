@@ -166,6 +166,66 @@ public sealed class LooseObjectStore : IObjectStore
         return await ObjectEnvelopeReader.ReadHeaderAsync(stream, cancellationToken).ConfigureAwait(false);
     }
 
+    public IReadOnlyList<StoredObjectEntry> EnumerateStoredObjects()
+    {
+        var entries = new List<StoredObjectEntry>();
+        if (!Directory.Exists(_objectsRoot))
+        {
+            return entries;
+        }
+
+        foreach (var subDir in Directory.GetDirectories(_objectsRoot))
+        {
+            var dirName = Path.GetFileName(subDir);
+            if (dirName.StartsWith('.') || dirName.Length != 2)
+            {
+                continue;
+            }
+
+            foreach (var file in Directory.GetFiles(subDir))
+            {
+                var fileName = Path.GetFileName(file);
+                if (fileName.StartsWith('.'))
+                {
+                    continue;
+                }
+
+                var relPath = $"{dirName}/{fileName}";
+                var fullHashHex = dirName + fileName;
+                if (ContentHash.TryParse(fullHashHex, out var hash))
+                {
+                    entries.Add(new StoredObjectEntry(relPath, hash, true));
+                }
+                else
+                {
+                    entries.Add(new StoredObjectEntry(relPath, null, false));
+                }
+            }
+        }
+
+        return entries;
+    }
+
+    public async Task VerifyObjectIntegrityAsync(ContentHash hash, CancellationToken cancellationToken = default)
+    {
+        var path = GetObjectPath(hash);
+        if (!File.Exists(path))
+        {
+            throw new FileNotFoundException($"Object with hash '{hash}' was not found in the object store.", path);
+        }
+
+        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.Asynchronous);
+        var header = await ObjectEnvelopeReader.ReadHeaderAsync(stream, cancellationToken).ConfigureAwait(false);
+
+        if (header.PayloadHash != hash)
+        {
+            throw new PayloadHashMismatchException($"Envelope header hash mismatch! Expected {hash}, but header has {header.PayloadHash}.");
+        }
+
+        using var nullStream = Stream.Null;
+        await ObjectEnvelopeReader.ReadAndVerifyPayloadAsync(stream, header, nullStream, cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task<ContentHash> PublishObjectAsync(
         string tempFilePath,
         ObjectEnvelopeHeader header,
