@@ -5,6 +5,12 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release tag name (e.g. v0.1.0-preview.1)'
+        required: false
+        default: 'v0.1.0-preview.1'
+        type: string
 
 permissions:
   contents: write
@@ -32,25 +38,47 @@ jobs:
       - name: Run all tests
         run: dotnet test -c Release --verbosity normal
 
-      - name: Package Distribution (Self-Contained Windows x64)
+      - name: Determine Release Tag & Version
+        id: tag_info
         shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}"
+          $inputTag = "${{ inputs.tag_name }}"
+          $refName = "${{ github.ref_name }}"
+          $isTag = "${{ startsWith(github.ref, 'refs/tags/') }}"
+          
+          if (-not [string]::IsNullOrWhiteSpace($inputTag)) {
+            $tag = $inputTag
+          } elseif ($isTag -eq "true") {
+            $tag = $refName
+          } else {
+            $tag = "v0.1.0-preview.1"
+          }
+          
           if ($tag -match '^v(.*)$') {
             $version = $Matches[1]
           } else {
-            $version = "0.1.0-preview.1"
+            $version = $tag
           }
-          ./scripts/package.ps1 -Version $version -OutputDir "artifacts"
+          
+          Write-Host "Determined Release Tag: $tag (Version: $version)"
+          "TAG=$tag" >> $env:GITHUB_ENV
+          "VERSION=$version" >> $env:GITHUB_ENV
+
+      - name: Package Distribution (Self-Contained Windows x64)
+        shell: pwsh
+        run: |
+          ./scripts/package.ps1 -Version $env:VERSION -OutputDir "artifacts"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
         with:
+          tag_name: ${{ env.TAG }}
           files: |
             artifacts/*.zip
             artifacts/SHA256SUMS.txt
           draft: false
           prerelease: true
           generate_release_notes: true
+
 
