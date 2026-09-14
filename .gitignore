@@ -14,7 +14,7 @@ bld/
 [Ll]ogs/
 TestResults/
 coverage/
-artifacts/
+/artifacts/
 
 # Visual Studio & Roslyn
 .vs/
