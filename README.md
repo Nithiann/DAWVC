@@ -1,6 +1,7 @@
 # DAWVC — DAW Version Control & Dependency Management
 
 [![CI](https://github.com/dawvc/dawvc/actions/workflows/ci.yml/badge.svg)](https://github.com/dawvc/dawvc/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/badge/Release-v0.1.0--preview.1-green.svg)](https://github.com/dawvc/dawvc/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![.NET](https://img.shields.io/badge/.NET-10.0-purple.svg)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2011%20x64-blue.svg)]()
@@ -29,6 +30,11 @@ DAWVC solves this by semantically binding project files, audio assets, and plugi
 └─────────────────────────────────────────────────────────────┘
 ```
 
+> [!IMPORTANT]
+> **Important Disclaimers (`NFR-REL-007`, `NFR-REL-008`):**
+> 1. **Proprietary Plugins & Libraries**: DAWVC does **not** bundle commercial plugin binaries (`.dll`, `.vst3`), license keys, or commercial sample packs. It records plugin metadata and verifies their presence via `dawvc doctor`.
+> 2. **Native Project Bytes Are Sacred**: DAWVC **never** modifies or rewrites native `.flp` files. When collaborating across machines with different folder layouts, configure FL Studio's *Extra Search Folders* to point to your DAWVC project or sample root. See [FL Studio Search Paths & Relinking Guide](Docs/FLStudio_Search_Paths_Relinking.md).
+
 ---
 
 ## 2. Core Concepts & Philosophy
@@ -47,7 +53,34 @@ DAWVC solves this by semantically binding project files, audio assets, and plugi
 
 ---
 
-## 3. MVP v0.1 Scope & Feature Set
+## 3. Quick Start (5-Minute Walkthrough)
+
+Detailed tutorial: **[Quick Start Guide](Docs/QuickStart.md)** | Setup instructions: **[Installation Guide](Docs/Installation.md)**
+
+```powershell
+# 1. Initialize repository inside an FL Studio project folder
+cd C:\Music\My_Track
+dawvc init
+
+# 2. Inspect project dependencies and referenced samples
+dawvc scan
+
+# 3. Check workspace state
+dawvc status
+
+# 4. Stage external samples for bundling into version control
+dawvc add samples\vocals.wav
+
+# 5. Record your first immutable snapshot
+dawvc commit -m "feat: initial arrangement and vocal stems"
+
+# 6. Check environment health on another workstation
+dawvc doctor
+```
+
+---
+
+## 4. MVP v0.1 Scope & Feature Set
 
 The initial release (**MVP v0.1**) focuses on a rock-solid, local workflow for **FL Studio** on **Windows 11 x64**:
 
@@ -62,7 +95,9 @@ The initial release (**MVP v0.1**) focuses on a rock-solid, local workflow for *
 
 ---
 
-## 4. CLI Overview
+## 5. CLI Overview
+
+For options, exit codes, and JSON schemas, see the complete **[CLI Command Reference](Docs/CLI_Reference.md)**.
 
 | Command | Description |
 |---|---|
@@ -75,12 +110,13 @@ The initial release (**MVP v0.1**) focuses on a rock-solid, local workflow for *
 | `dawvc branch [name]` | Lists existing branches or creates a new branch pointer. |
 | `dawvc switch <branch>` | Safely switches the workspace to a different branch. |
 | `dawvc checkout <commit>` | Restores a specific snapshot (supports `--restore-to` and `--force`). |
+| `dawvc bind <id> <path>` | Links an external asset to a logical dependency ID. |
 | `dawvc doctor` | Verifies whether all required samples, plugins, and dependencies exist locally. |
 | `dawvc fsck` | Validates internal integrity across the object store and refs. |
 
 ---
 
-## 5. Architecture & Solution Structure
+## 6. Architecture & Solution Structure
 
 The solution adheres to Clean Architecture principles with strictly enforced dependency boundaries:
 
@@ -106,74 +142,58 @@ The solution adheres to Clean Architecture principles with strictly enforced dep
 └──────────────────────┘             └─────────────────────────────┘
 ```
 
-### Directory Structure
-
-```text
-src/
-  DawVcs.Domain/                  # Pure domain entities, value objects, and invariants (0 external deps)
-  DawVcs.Application/             # Use cases, interfaces, and command orchestration
-  DawVcs.Infrastructure/          # Object store, BLAKE3 hasher, atomic filesystem I/O, and envelope serialization
-  DawVcs.Adapters.Abstractions/   # Contracts for DAW inspection and capability detection
-  DawVcs.Adapters.FLStudio/       # Read-only FL Studio (.flp) bounded parser and metadata extractor
-  DawVcs.Cli/                     # CLI entry point (System.CommandLine + Spectre.Console)
-
-tests/
-  DawVcs.Domain.Tests/            # Unit tests & Architectural boundary enforcement tests
-  DawVcs.Application.Tests/       # Use case tests using test doubles
-  DawVcs.Infrastructure.Tests/   # Object store, envelope corruption, and atomic I/O fault-injection tests
-  DawVcs.Adapters.FLStudio.Tests/ # FLP fixture parsing and regression tests
-  DawVcs.IntegrationTests/        # Cross-component integration tests
-  DawVcs.EndToEndTests/           # CLI acceptance tests (AC-001 through AC-014)
-
-docs/
-  Technical Design.md            # Normative system architecture v1.1
-  MVP Requirements.md            # Requirements specification baseline v1.0
-  Implementation plan.md         # Milestone phases and work packages (WP-00 through WP-10)
-  adr/                           # Architecture Decision Records
-```
-
 ---
 
-## 6. Development & Building
+## 7. Development, Building & Packaging
 
 ### Prerequisites
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (version `10.0.301` or later)
 - Windows 11 x64 (recommended for FL Studio adapter validation) or Linux/macOS for core domain development.
-- Git
+- Git & PowerShell
 
 ### Build
 ```powershell
-# Restore and build all projects in Release configuration
+# Restore and build all projects in Release configuration (TreatWarningsAsErrors enabled)
 dotnet build -c Release
 ```
 
-> **Note:** The build is configured with `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>` and strict code analysis rules.
-
 ### Test
 ```powershell
-# Run unit, architecture, infrastructure, and adapter tests
+# Run unit, architecture, infrastructure, adapter, performance, and smoke tests
 dotnet test -c Release --logger "console;verbosity=normal"
 ```
 
-### Code Formatting
+### Package Distribution
 ```powershell
-# Verify code formatting against .editorconfig rules
-dotnet format --verify-no-changes
+# Produces self-contained win-x64 ZIP and SHA256SUMS.txt
+pwsh -File ./scripts/package.ps1
 ```
 
 ---
 
-## 7. Documentation & Specifications
+## 8. Documentation & Specifications
 
-- [Technical Design](Docs/Technical%20Design.md) — Comprehensive technical architecture, object models, envelope specs, and error taxonomies.
-- [MVP Requirements Specification](Docs/MVP%20Requirements.md) — Normative functional and non-functional requirements including acceptance criteria.
-- [Implementation Plan](Docs/Implementation%20plan.md) — Milestone roadmaps, risk spikes, and Definition of Done.
-- [Architecture Decision Records](Docs/adr/README.md) — Formally documented architectural choices.
+### Guides & References
+- **[Installation & Setup Guide](Docs/Installation.md)** — Self-contained setup, verification, and uninstall.
+- **[Quick Start Guide](Docs/QuickStart.md)** — Step-by-step tutorial on project versioning.
+- **[CLI Command Reference](Docs/CLI_Reference.md)** — Full command arguments, flags, and exit code reference.
+- **[FL Studio Search Paths & Relinking](Docs/FLStudio_Search_Paths_Relinking.md)** — Resolving audio assets across systems without modifying project files.
+- **[Disaster Recovery & Workspace Safety](Docs/Recovery_Guide.md)** — Uncommitted change guards, forced checkout backups, and `fsck`.
+- **[Known Limitations & Scope](Docs/Known_Limitations.md)** — v0.1 boundaries, plugin bundling policy, and privacy redactions.
+
+### Architecture & Security
+- **[Technical Design](Docs/Technical%20Design.md)** — Normative architecture v1.1, BLAKE3 models, and envelopes.
+- **[MVP Requirements Specification](Docs/MVP%20Requirements.md)** — Normative requirements and acceptance criteria.
+- **[Implementation Plan](Docs/Implementation%20plan.md)** — Work packages (WP-00 through WP-10) and release gate criteria.
+- **[Security Threat Model & Dependency Audit](Docs/SecurityThreatModelReview.md)** — Vulnerability analysis and mitigations.
+- **[Software Bill of Materials (SBOM)](Docs/SBOM.md)** — NuGet runtime inventory and license validation.
+- **[Architecture Decision Records](Docs/adr/README.md)** — Formally documented architectural decisions.
 
 ---
 
-## 8. License
+## 9. License
 
 This project is licensed under the **[MIT License](LICENSE)**.
 
 Copyright (c) 2026 DAWVC Contributors.
+
