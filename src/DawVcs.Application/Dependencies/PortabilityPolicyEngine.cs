@@ -36,10 +36,14 @@ public static class PortabilityPolicyEngine
         ArgumentException.ThrowIfNullOrWhiteSpace(assetPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(workingDirectory);
 
+        var normAsset = NormalizePath(assetPath);
+        var normWork = NormalizePath(workingDirectory);
+
         // 1. Controleer op systeempaden -> Forbidden of ReferenceOnly
         foreach (var sys in SystemPathPrefixes)
         {
-            if (assetPath.StartsWith(sys, StringComparison.OrdinalIgnoreCase))
+            var normSys = NormalizePath(sys);
+            if (normAsset.StartsWith(normSys, StringComparison.OrdinalIgnoreCase))
             {
                 return new PortabilityPolicy(
                     PortabilityMode.ReferenceOnly,
@@ -49,24 +53,22 @@ public static class PortabilityPolicyEngine
         }
 
         // 2. Relatieve paden binnen de werkdirectory -> Bundle
-        if (!Path.IsPathRooted(assetPath))
+        if (!IsRootedPath(normAsset))
         {
             return PortabilityPolicy.BundleDefault;
         }
 
-        var fullWorkingDir = Path.GetFullPath(workingDirectory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var fullAssetPath = Path.GetFullPath(assetPath);
-
-        if (fullAssetPath.StartsWith(fullWorkingDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        if (normAsset.StartsWith(normWork + "/", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(normAsset, normWork, StringComparison.OrdinalIgnoreCase))
         {
             return PortabilityPolicy.BundleDefault;
         }
 
         // 3. Externe paden: controleer op bekende commerciële trefwoorden -> UserChoice / ReferenceOnly
-        var lower = fullAssetPath.ToLowerInvariant();
+        var lower = normAsset.ToLowerInvariant();
         foreach (var keyword in CommercialLibraryKeywords)
         {
-            if (lower.Contains(keyword))
+            if (lower.Contains(keyword, StringComparison.Ordinal))
             {
                 return new PortabilityPolicy(
                     PortabilityMode.UserChoice,
@@ -80,6 +82,29 @@ public static class PortabilityPolicyEngine
             PortabilityMode.ReferenceOnly,
             "Externe locatie buiten werkdirectory. Standaard ReferenceOnly.",
             IsRedistributable: false);
+    }
+
+    private static string NormalizePath(string path) =>
+        path.Replace('\\', '/').TrimEnd('/');
+
+    private static bool IsRootedPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        if (Path.IsPathRooted(path))
+        {
+            return true;
+        }
+
+        if (path.Length >= 2 && char.IsAsciiLetter(path[0]) && path[1] == ':')
+        {
+            return true;
+        }
+
+        return path.StartsWith('/') || path.StartsWith('\\');
     }
 
     /// <summary>
