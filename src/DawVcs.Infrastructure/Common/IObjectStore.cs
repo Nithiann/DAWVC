@@ -1,9 +1,9 @@
 namespace DawVcs.Infrastructure.Common;
 
 /// <summary>
-/// Basiscontract voor interactie met de content-addressed object store.
+/// Legacy interface. Use <see cref="DawVcs.Domain.Storage.IObjectStore"/> instead.
 /// </summary>
-public interface IObjectStore
+[Obsolete("Use DawVcs.Domain.Storage.IObjectStore instead.")]
+public interface IObjectStore : DawVcs.Domain.Storage.IObjectStore
 {
-    bool Exists(string contentHash);
 }

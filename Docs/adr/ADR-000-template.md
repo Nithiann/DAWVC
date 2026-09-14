@@ -1,37 +1,38 @@
-# ADR-000: [Titel van architectuurbesluit]
+# ADR-000: [Architecture Decision Title]
 
-- **Status:** [Voorgesteld | Geaccepteerd | Vervangen door ADR-xxx | Afgewezen]
-- **Datum:** 2026-xx-xx
-- **Auteurs:** [Naam / Team]
-- **Gerelateerde Requirements:** [bv. FR-OBJ-001, NFR-INT-003]
-- **Werkpakket:** [bv. WP-01]
+- **Status:** [Proposed | Accepted | Superseded by ADR-xxx | Rejected]
+- **Date:** 2026-xx-xx
+- **Authors:** [Name / Team]
+- **Related Requirements:** [e.g. FR-OBJ-001, NFR-INT-003]
+- **Work Package:** [e.g. WP-01]
 
 ---
 
-## Context & Probleemdefinitie
+## Context & Problem Statement
 
-[Beschrijf de context, het probleem en de randvoorwaarden die aanleiding gaven voor dit besluit.]
+[Describe the context, problem, and constraints that motivated this decision.]
 
-## Overwogen Opties
+## Considered Options
 
-1. **Optie 1:** [Beschrijving, voordelen, nadelen]
-2. **Optie 2:** [Beschrijving, voordelen, nadelen]
-3. **Optie 3:** [Beschrijving, voordelen, nadelen]
+1. **Option 1:** [Description, pros, cons]
+2. **Option 2:** [Description, pros, cons]
+3. **Option 3:** [Description, pros, cons]
 
-## Besluit
+## Decision Outcome
 
-[Welke optie is gekozen en wat is de inhoudelijke rationale hiervan?]
+[Which option was chosen and what is the technical rationale for this choice?]
 
-## Gevolgen
+## Consequences
 
-### Positieve gevolgen
-- [Voordeel 1]
-- [Voordeel 2]
+### Positive Consequences
+- [Advantage 1]
+- [Advantage 2]
 
-### Negatieve gevolgen of risico's
+### Negative Consequences or Risks
 - [Trade-off 1]
-- [Mitigatie voor risico 2]
+- [Mitigation for risk 2]
 
-## Verificatie & Bewijslast
+## Verification & Validation Evidence
 
-[Welke tests, spikes of benchmarks bewijzen dat dit besluit juist functioneert?]
+[Which tests, spikes, or benchmarks prove that this decision functions correctly?]
+

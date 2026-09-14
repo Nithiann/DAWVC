@@ -1,15 +1,16 @@
 # Test Fixtures
 
-Deze map bevat synthetische, rechtenvrije testbestanden die worden gebruikt door unit-, integratie- en end-to-endtests.
+This directory contains synthetic, royalty-free test fixtures utilized by unit, integration, and end-to-end tests.
 
-## Beleid & Richtlijnen
+## Policy & Guidelines
 
-1. **GEEN Commerciële Content (DEC-MVP-014)**:
-   Er mogen GEEN gelicenseerde sample packs (zoals Splice, Vengeance, Cymatics), commerciële FL Studio projects van derden of beschermde VST-presets worden toegevoegd.
-2. **Uitsluitend Zelfgemaakte of Vrije Bestanden**:
-   Alle audio (`.wav`, `.flac`) en `.flp` bestanden moeten minimaal, zelf gegenereerd of publiek domein zijn.
+1. **NO Commercial Content (`DEC-MVP-014`)**:
+   DO NOT add licensed sample packs (such as Splice, Vengeance, Cymatics), third-party commercial FL Studio projects, or copyrighted VST presets.
+2. **Exclusively Custom or Public Domain Files**:
+   All audio (`.wav`, `.flac`) and `.flp` files must be minimal, programmatically generated, or in the public domain.
 
-## Mappenstructuur
+## Directory Structure
 
-- `flstudio/`: Minimale en synthetische `.flp` projecten (bv. empty, single sample, missing sample, corrupt header).
-- `repositories/`: Voorbereide DAWVC repositories voor migratie- en integrity-tests.
+- `flstudio/`: Minimal and synthetic `.flp` projects (e.g., empty, single sample, missing sample, corrupt header).
+- `repositories/`: Pre-configured DAWVC repositories for migration and integrity testing.
+
