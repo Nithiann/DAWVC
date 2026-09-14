@@ -125,6 +125,16 @@ public sealed class DoctorUseCase
                 var isResolved = binding.Status == BindingStatus.Verified;
                 var isBlocking = dep.Requirement == DependencyRequirement.Required && !isResolved;
 
+                string? expectedVersion = null;
+                string? detectedVersion = null;
+
+                if (dep is PluginDependency p)
+                {
+                    expectedVersion = p.VersionRequirement;
+                    var (_, _, ver) = DependencyResolverPipeline.CheckPluginInstalled(p);
+                    detectedVersion = ver;
+                }
+
                 dependencyHealthList.Add(new DependencyHealth(
                     Id: dep.Id.Value,
                     Name: dep.Name,
@@ -133,7 +143,9 @@ public sealed class DoctorUseCase
                     Status: binding.Status,
                     IsBlocking: isBlocking,
                     Locator: binding.Locator,
-                    Details: binding.Notes));
+                    Details: binding.Notes,
+                    ExpectedVersion: expectedVersion,
+                    DetectedVersion: detectedVersion));
             }
         }
 

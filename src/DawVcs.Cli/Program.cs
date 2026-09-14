@@ -670,7 +670,8 @@ public static class Program
                         table.Border(TableBorder.Rounded);
                         table.AddColumn("Type");
                         table.AddColumn("Name");
-                        table.AddColumn("Requirement");
+                        table.AddColumn("Required");
+                        table.AddColumn("Installed");
                         table.AddColumn("Status");
 
                         foreach (var dep in report.DependencyHealth)
@@ -682,9 +683,34 @@ public static class Program
                                 Domain.Dependencies.BindingStatus.Missing => "[red]Missing[/]",
                                 _ => "[yellow]Unresolved[/]"
                             };
-                            table.AddRow(dep.Category, Markup.Escape(dep.Name), dep.Requirement.ToString(), statusMarkup);
+
+                            var requiredText = dep.Category == "Plugin" && !string.IsNullOrWhiteSpace(dep.ExpectedVersion)
+                                ? $">= {Markup.Escape(dep.ExpectedVersion)}"
+                                : (dep.Requirement == Domain.Dependencies.DependencyRequirement.Required ? "Required" : "Optional");
+
+                            var installedText = dep.Category == "Plugin"
+                                ? (dep.DetectedVersion != null
+                                    ? (dep.Status == Domain.Dependencies.BindingStatus.Mismatch
+                                        ? $"[red]{Markup.Escape(dep.DetectedVersion)} (older)[/]"
+                                        : $"[green]{Markup.Escape(dep.DetectedVersion)}[/]")
+                                    : (dep.Status == Domain.Dependencies.BindingStatus.Missing ? "[dim]Not found[/]" : "[dim]Present[/]"))
+                                : (dep.Status == Domain.Dependencies.BindingStatus.Verified ? "[dim]Verified[/]" : "[dim]-[/]");
+
+                            table.AddRow(dep.Category, Markup.Escape(dep.Name), requiredText, installedText, statusMarkup);
                         }
                         AnsiConsole.Write(table);
+
+                        var mismatches = report.DependencyHealth
+                            .Where(d => d.Status == Domain.Dependencies.BindingStatus.Mismatch && !string.IsNullOrWhiteSpace(d.Details))
+                            .ToList();
+                        if (mismatches.Count > 0)
+                        {
+                            AnsiConsole.WriteLine();
+                            foreach (var mis in mismatches)
+                            {
+                                AnsiConsole.MarkupLine($"  [yellow]![/] [bold]{Markup.Escape(mis.Name)}:[/] {Markup.Escape(mis.Details!)}");
+                            }
+                        }
                     }
                     else
                     {

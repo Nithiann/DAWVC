@@ -171,7 +171,7 @@ dawvc bind <asset-id> <local-path> [--dir <path>]
 ---
 
 ### 11. `dawvc doctor`
-Inspects workspace and host system health, checking for missing audio assets or unregistered plugins.
+Inspects workspace and host system health, verifying that all referenced audio assets exist and that required plugins are installed with compatible versions.
 
 ```powershell
 dawvc doctor [--json] [--dir <path>]
@@ -182,7 +182,38 @@ dawvc doctor [--json] [--dir <path>]
 | `--json` | Flag | Emits doctor diagnostic report as structured JSON. |
 | `--dir` | Path | Target repository directory. |
 
-*Exits with code `6` if missing dependencies or unregistered plugins are detected.*
+#### Diagnostic Checks Performed:
+1. **Asset Dependencies**: Checks that all tracked bundled samples, project recordings, and external sound libraries are present on disk.
+2. **Plugin Dependencies & Version Compatibility**:
+   - Checks that required VST3/native plugins are installed in standard host directories (e.g. `C:\Program Files\Common Files\VST3`).
+   - **Version Compatibility Rule (`installed >= required`)**: Audio plugins must be backward compatible with older projects. If the plugin installed on the current machine is an older version than recorded in the project snapshot, `dawvc doctor` flags a `Mismatch` status and recommends updating the plugin.
+   - If the plugin version cannot be extracted or no requirement was recorded, presence verification succeeds.
+3. **Primary Project File**: Validates that the active DAW project file (e.g. `.flp`) exists and is accessible.
+
+#### Terminal Output Columns:
+- **Dependency**: Name or logical ID of the asset / plugin.
+- **Type**: `Plugin` or `Asset`.
+- **Required**: Project required version (or `—` for assets / unversioned plugins).
+- **Installed**: Currently detected version on this machine.
+- **Status**: `Verified` (green), `Missing` (red), or `Mismatch` (red/yellow).
+- **Details**: Local filesystem path or diagnostic notes.
+
+#### Structured JSON Schema:
+When run with `--json`, each item in the `dependencies` array includes:
+```json
+{
+  "name": "Serum",
+  "kind": "Plugin",
+  "status": "Mismatch",
+  "isHealthy": false,
+  "expectedVersion": "1.3.6",
+  "detectedVersion": "1.2.0",
+  "resolvedPath": "C:\\Program Files\\Common Files\\VST3\\Serum.vst3",
+  "notes": "Installed version 1.2.0 is older than project version 1.3.6. Plugins must be the same or higher version."
+}
+```
+
+*Exits with code `0` if all dependencies are verified and healthy. Exits with code `6` (`DiagnosticFailure`) if any dependencies are missing, unregistered, or version-incompatible.*
 
 ---
 

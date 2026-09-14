@@ -10,4 +10,6 @@ public sealed record DependencyHealth(
     BindingStatus Status,
     bool IsBlocking,
     string? Locator,
-    string? Details);
+    string? Details,
+    string? ExpectedVersion = null,
+    string? DetectedVersion = null);

@@ -10,7 +10,7 @@
 > [!IMPORTANT]
 > **DAWVC does NOT bundle commercial plugin binaries (`.dll`, `.vst3`, `.aax`), license keys, or commercial sample packs.**
 
-- **Plugin Tracking**: DAWVC inspects and records plugin requirements (plugin name, format, vendor, version, and architecture) inside the immutable project snapshot. It does **not** package plugin binaries. Collaborators must have their own licensed copies of third-party plugins installed on their systems.
+- **Plugin Tracking & Version Verification**: DAWVC inspects and records plugin requirements (plugin name, format, vendor, version, and architecture) inside the immutable project snapshot. It does **not** package plugin binaries. Collaborators must have their own licensed copies of third-party plugins installed on their systems. When moving across workstations, `dawvc doctor` validates that installed plugins are equal to or newer than the project's recorded version (`installedVersion >= requiredVersion`), flagging older versions as mismatches because DAW projects are generally backward compatible but not forward compatible.
 - **Sample Bundling Policy**: Only project-specific recordings, stems, and explicitly staged samples (`dawvc add <path>`) are bundled into repository storage. Large commercial sample libraries (e.g. Kontakt libraries, multi-gigabyte orchestral packages) should remain on local storage drives and are referenced logically by content hash.
 
 ---

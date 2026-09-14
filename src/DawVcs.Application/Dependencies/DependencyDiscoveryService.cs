@@ -107,12 +107,13 @@ public static class DependencyDiscoveryService
                 var identity = NormalizePluginIdentity(rawPlugin);
                 var role = DeterminePluginRole(rawPlugin);
                 var policy = PortabilityPolicyEngine.DeterminePluginPolicy(identity);
+                var localVersion = DependencyResolverPipeline.DetectLocalPluginVersion(identity);
 
                 var pluginDep = new PluginDependency(
                     DependencyId.ForPlugin(identity.Vendor, identity.Product, identity.Format.ToString()),
                     identity,
                     role,
-                    versionRequirement: null,
+                    versionRequirement: localVersion,
                     requirement: DependencyRequirement.Required,
                     source: DependencySource.NativeProjectParser,
                     portability: policy);

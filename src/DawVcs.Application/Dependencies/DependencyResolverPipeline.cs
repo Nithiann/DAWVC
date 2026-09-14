@@ -146,17 +146,21 @@ public static class DependencyResolverPipeline
         }
         else if (dependency is PluginDependency plugin)
         {
-            // STAP 5: Library mapping / Plugin detection
-            var (found, pluginPath) = CheckPluginInstalled(plugin);
+            // STAP 5: Library mapping / Plugin detection with Version Compatibility Check
+            var (found, pluginPath, detectedVersion) = CheckPluginInstalled(plugin);
             if (found && pluginPath is not null)
             {
+                var isCompatible = IsVersionCompatible(plugin.VersionRequirement, detectedVersion, out var explanation);
+                var status = isCompatible ? BindingStatus.Verified : BindingStatus.Mismatch;
+
                 return new DependencyBinding(
                     plugin.Id,
                     pluginPath,
                     BindingMethod.LibraryMapping,
-                    BindingStatus.Verified,
+                    status,
                     null,
-                    DateTimeOffset.UtcNow);
+                    DateTimeOffset.UtcNow,
+                    explanation);
             }
         }
 
@@ -224,12 +228,14 @@ public static class DependencyResolverPipeline
         return null;
     }
 
-    private static (bool Found, string? Path) CheckPluginInstalled(PluginDependency plugin)
+    public static (bool Found, string? Path, string? DetectedVersion) CheckPluginInstalled(PluginDependency plugin)
     {
+        ArgumentNullException.ThrowIfNull(plugin);
+
         // Native Image-Line plugins are considered available with the DAW
         if (plugin.Plugin.Format == PluginFormat.Native || plugin.Plugin.Vendor.Equals("Image-Line", StringComparison.OrdinalIgnoreCase))
         {
-            return (true, "Native FL Studio Plugin");
+            return (true, "Native FL Studio Plugin", null);
         }
 
         // Check common VST3 paths on Windows
@@ -240,7 +246,9 @@ public static class DependencyResolverPipeline
 
         if (Directory.Exists(commonVst3) || File.Exists(commonVst3))
         {
-            return (true, commonVst3);
+            var binPath = FindBinaryPath(commonVst3);
+            var version = binPath is not null ? GetFileVersion(binPath) : null;
+            return (true, commonVst3, version);
         }
 
         var userVst3 = Path.Combine(
@@ -252,9 +260,164 @@ public static class DependencyResolverPipeline
 
         if (Directory.Exists(userVst3) || File.Exists(userVst3))
         {
-            return (true, userVst3);
+            var binPath = FindBinaryPath(userVst3);
+            var version = binPath is not null ? GetFileVersion(binPath) : null;
+            return (true, userVst3, version);
         }
 
-        return (false, null);
+        return (false, null, null);
+    }
+
+    public static string? DetectLocalPluginVersion(PluginIdentity plugin)
+    {
+        ArgumentNullException.ThrowIfNull(plugin);
+        var dummy = new PluginDependency(
+            DependencyId.ForPlugin(plugin.Vendor, plugin.Product, plugin.Format.ToString()),
+            plugin);
+
+        var (found, _, version) = CheckPluginInstalled(dummy);
+        return found ? version : null;
+    }
+
+    private static string? FindBinaryPath(string path)
+    {
+        if (File.Exists(path))
+        {
+            return path;
+        }
+
+        if (Directory.Exists(path))
+        {
+            var winArch = Path.Combine(path, "Contents", "x86_64-win");
+            if (Directory.Exists(winArch))
+            {
+                var match = Directory.EnumerateFiles(winArch, "*.vst3").FirstOrDefault()
+                    ?? Directory.EnumerateFiles(winArch, "*.dll").FirstOrDefault();
+                if (match is not null)
+                {
+                    return match;
+                }
+            }
+
+            return Directory.EnumerateFiles(path, "*.vst3", SearchOption.AllDirectories).FirstOrDefault()
+                ?? Directory.EnumerateFiles(path, "*.dll", SearchOption.AllDirectories).FirstOrDefault();
+        }
+
+        return null;
+    }
+
+    public static string? GetFileVersion(string binaryPath)
+    {
+        try
+        {
+            var info = System.Diagnostics.FileVersionInfo.GetVersionInfo(binaryPath);
+            if (!string.IsNullOrWhiteSpace(info.ProductVersion))
+            {
+                return CleanVersion(info.ProductVersion);
+            }
+            if (!string.IsNullOrWhiteSpace(info.FileVersion))
+            {
+                return CleanVersion(info.FileVersion);
+            }
+        }
+        catch
+        {
+            // Best effort
+        }
+
+        return null;
+    }
+
+    private static string CleanVersion(string v)
+    {
+        var trimmed = v.Trim();
+        if (trimmed.Contains(',', StringComparison.Ordinal))
+        {
+            trimmed = trimmed.Replace(',', '.').Replace(" ", "", StringComparison.Ordinal);
+        }
+        return trimmed;
+    }
+
+    public static bool IsVersionCompatible(string? required, string? installed, out string explanation)
+    {
+        if (string.IsNullOrWhiteSpace(required))
+        {
+            explanation = installed is not null
+                ? $"Installed version {installed}."
+                : "Installed (unversioned).";
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(installed))
+        {
+            explanation = $"Required version is {required}, but installed version could not be determined.";
+            return true;
+        }
+
+        if (TryParseVersion(required, out var reqVer) && TryParseVersion(installed, out var instVer))
+        {
+            if (instVer >= reqVer)
+            {
+                explanation = $"Installed version {installed} satisfies requirement >={required}.";
+                return true;
+            }
+            else
+            {
+                explanation = $"Installed version {installed} is older than project version {required}. Plugins must be the same or higher version.";
+                return false;
+            }
+        }
+
+        if (string.Equals(required, installed, StringComparison.OrdinalIgnoreCase))
+        {
+            explanation = $"Installed version matches required version {required}.";
+            return true;
+        }
+
+        explanation = $"Installed version {installed}, required version {required}.";
+        return true;
+    }
+
+    public static bool TryParseVersion(string v, out Version version)
+    {
+        var clean = v.TrimStart('v', 'V', '>', '=', ' ');
+        var parts = clean.Split(['.', '-', '+', ' '], StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0)
+        {
+            version = new Version(0, 0);
+            return false;
+        }
+
+        var numbers = new List<int>();
+        foreach (var part in parts)
+        {
+            if (int.TryParse(part, out var num))
+            {
+                numbers.Add(num);
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        if (numbers.Count == 0)
+        {
+            version = new Version(0, 0);
+            return false;
+        }
+
+        if (numbers.Count == 1)
+        {
+            numbers.Add(0);
+        }
+
+        version = numbers.Count switch
+        {
+            2 => new Version(numbers[0], numbers[1]),
+            3 => new Version(numbers[0], numbers[1], numbers[2]),
+            _ => new Version(numbers[0], numbers[1], numbers[2], numbers[3])
+        };
+        return true;
     }
 }
