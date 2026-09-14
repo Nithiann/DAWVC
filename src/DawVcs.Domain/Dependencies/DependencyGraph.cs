@@ -10,6 +10,7 @@ public sealed record DependencyGraph
     private readonly List<Dependency> _dependencies;
 
     public IReadOnlyList<Dependency> Dependencies => _dependencies.AsReadOnly();
+    public IReadOnlyList<Dependency> All => Dependencies;
 
     public DependencyGraph(IEnumerable<Dependency>? dependencies = null)
     {

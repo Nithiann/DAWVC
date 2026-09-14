@@ -1,5 +1,6 @@
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Configuration;
+using DawVcs.Domain.Dependencies;
 using DawVcs.Domain.Entities;
 using DawVcs.Domain.Storage;
 
@@ -13,6 +14,7 @@ public interface IRepositoryContext : IDisposable
     string RootPath { get; }
     IObjectStore ObjectStore { get; }
     IStagingIndex StagingIndex { get; }
+    ILocalBindingStore LocalBindings { get; }
 
     RepositoryConfig LoadConfig();
     void SaveConfig(RepositoryConfig config);

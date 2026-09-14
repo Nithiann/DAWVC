@@ -5,6 +5,7 @@ using DawVcs.Adapters.FLStudio;
 using DawVcs.Application.Adapters;
 using DawVcs.Application.Checkouts;
 using DawVcs.Application.Commits;
+using DawVcs.Application.Dependencies;
 using DawVcs.Application.Exceptions;
 using DawVcs.Application.Repositories;
 using DawVcs.Application.Scanning;
@@ -35,6 +36,8 @@ public static class Program
             sp.GetRequiredService<IDawAdapterRegistry>()));
         services.AddTransient<LogUseCase>();
         services.AddTransient<CheckoutRestoreUseCase>();
+        services.AddTransient<CheckoutUseCase>();
+        services.AddTransient<BindDependencyUseCase>();
         services.AddTransient<StatusUseCase>();
         services.AddTransient<AddUseCase>();
         services.AddTransient<ScanUseCase>();
@@ -166,26 +169,93 @@ public static class Program
         }, logLimitOption, logDirOption);
 
         // --- dawvc checkout ---
-        var checkoutCommand = new Command("checkout", "Restore project artifacts from a commit or branch");
-        var checkoutRefArg = new Argument<string>("reference", "Commit hash or branch name to restore");
-        var checkoutRestoreToOption = new Option<string>("--restore-to", "Target directory to restore project artifacts into") { IsRequired = true };
+        var checkoutCommand = new Command("checkout", "Checkout a commit or branch into the workspace or an external directory (FR-CHK-001..015)");
+        var checkoutRefArg = new Argument<string>("reference", "Commit hash or branch name to checkout");
+        var checkoutRestoreToOption = new Option<string?>("--restore-to", "Target directory to restore project artifacts into without touching active workspace");
+        var checkoutForceOption = new Option<bool>("--force", "Force checkout on a dirty workspace after creating a full recovery copy");
         var checkoutDirOption = new Option<string?>("--dir", "Repository directory");
         checkoutCommand.AddArgument(checkoutRefArg);
         checkoutCommand.AddOption(checkoutRestoreToOption);
+        checkoutCommand.AddOption(checkoutForceOption);
         checkoutCommand.AddOption(checkoutDirOption);
 
-        checkoutCommand.SetHandler(async (reference, restoreTo, dir) =>
+        checkoutCommand.SetHandler(async (reference, restoreTo, force, dir) =>
         {
             try
             {
                 var repoDir = ResolveRepoDirectory(dir);
-                var useCase = serviceProvider.GetRequiredService<CheckoutRestoreUseCase>();
-                var result = await useCase.ExecuteAsync(new CheckoutRestoreRequest(repoDir, reference, restoreTo));
+                var useCase = serviceProvider.GetRequiredService<CheckoutUseCase>();
+                var result = await useCase.ExecuteAsync(new CheckoutRequest(repoDir, reference, restoreTo, force));
 
-                AnsiConsole.MarkupLine($"[green]✓[/] Successfully restored snapshot [dim]{result.SnapshotId.ToString()[..8]}[/] to [cyan]{Markup.Escape(result.TargetDirectory)}[/]");
+                if (!string.IsNullOrEmpty(result.RecoveryDirectory))
+                {
+                    AnsiConsole.MarkupLine($"[yellow]⚠ Recovery copy created:[/] [dim]{Markup.Escape(result.RecoveryDirectory)}[/]");
+                }
+
+                AnsiConsole.MarkupLine($"[green]✓[/] Successfully checked out snapshot [dim]{result.SnapshotId.ToString()[..8]}[/] to [cyan]{Markup.Escape(result.TargetDirectory)}[/]");
                 foreach (var file in result.RestoredFiles)
                 {
                     AnsiConsole.MarkupLine($"  [green]+[/] {Markup.Escape(file)}");
+                }
+
+                if (result.ManualInstructions is not null && result.ManualInstructions.Count > 0)
+                {
+                    AnsiConsole.MarkupLine("\n[bold yellow]Instructions & Next Steps:[/]");
+                    foreach (var instruction in result.ManualInstructions)
+                    {
+                        AnsiConsole.MarkupLine($"  [dim]•[/] {Markup.Escape(instruction)}");
+                    }
+                }
+            }
+            catch (DirtyWorkspaceException ex)
+            {
+                AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
+                Environment.ExitCode = 7;
+            }
+            catch (IncompleteDependencyException ex)
+            {
+                AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
+                Environment.ExitCode = 5;
+            }
+            catch (Exception ex)
+            {
+                AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
+                Environment.ExitCode = 1;
+            }
+        }, checkoutRefArg, checkoutRestoreToOption, checkoutForceOption, checkoutDirOption);
+
+        // --- dawvc bind ---
+        var bindCommand = new Command("bind", "Bind a dependency to a local file or directory (FR-BND-006)");
+        var bindDepIdArg = new Argument<string>("dependency-id", "The ID of the dependency to bind");
+        var bindPathArg = new Argument<string>("path", "The local filesystem path to bind to");
+        var bindDirOption = new Option<string?>("--dir", "Repository directory");
+        bindCommand.AddArgument(bindDepIdArg);
+        bindCommand.AddArgument(bindPathArg);
+        bindCommand.AddOption(bindDirOption);
+
+        bindCommand.SetHandler(async (depId, path, dir) =>
+        {
+            try
+            {
+                var repoDir = ResolveRepoDirectory(dir);
+                var useCase = serviceProvider.GetRequiredService<BindDependencyUseCase>();
+                var result = await useCase.ExecuteAsync(new BindDependencyRequest(repoDir, depId, path));
+                var b = result.Binding;
+
+                switch (b.Status)
+                {
+                    case Domain.Dependencies.BindingStatus.Verified:
+                        AnsiConsole.MarkupLine($"[green]✓[/] Bound [cyan]{Markup.Escape(b.DependencyId.Value)}[/] to [cyan]{Markup.Escape(b.Locator)}[/] ([green]Verified[/])");
+                        break;
+                    case Domain.Dependencies.BindingStatus.Mismatch:
+                        AnsiConsole.MarkupLine($"[yellow]⚠[/] Bound [cyan]{Markup.Escape(b.DependencyId.Value)}[/] to [cyan]{Markup.Escape(b.Locator)}[/] ([red]Mismatch[/] - content hash differs!)");
+                        break;
+                    case Domain.Dependencies.BindingStatus.Missing:
+                        AnsiConsole.MarkupLine($"[red]✗[/] Bound [cyan]{Markup.Escape(b.DependencyId.Value)}[/] to [cyan]{Markup.Escape(b.Locator)}[/] ([red]Missing[/] - file not found!)");
+                        break;
+                    default:
+                        AnsiConsole.MarkupLine($"[dim]?[/] Bound [cyan]{Markup.Escape(b.DependencyId.Value)}[/] to [cyan]{Markup.Escape(b.Locator)}[/] ([yellow]{b.Status}[/])");
+                        break;
                 }
             }
             catch (Exception ex)
@@ -193,7 +263,7 @@ public static class Program
                 AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
                 Environment.ExitCode = 1;
             }
-        }, checkoutRefArg, checkoutRestoreToOption, checkoutDirOption);
+        }, bindDepIdArg, bindPathArg, bindDirOption);
 
         // --- dawvc status ---
         var statusCommand = new Command("status", "Show the working tree status");
@@ -418,6 +488,7 @@ public static class Program
         rootCommand.AddCommand(commitCommand);
         rootCommand.AddCommand(logCommand);
         rootCommand.AddCommand(checkoutCommand);
+        rootCommand.AddCommand(bindCommand);
         rootCommand.AddCommand(statusCommand);
         rootCommand.AddCommand(addCommand);
 

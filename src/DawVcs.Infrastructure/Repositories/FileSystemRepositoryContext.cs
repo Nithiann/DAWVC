@@ -10,6 +10,7 @@ using DawVcs.Domain.Repositories;
 using DawVcs.Domain.Serialization;
 using DawVcs.Domain.Storage;
 using DawVcs.Infrastructure.Configuration;
+using DawVcs.Infrastructure.Dependencies;
 using DawVcs.Infrastructure.FileSystem;
 using DawVcs.Infrastructure.Storage;
 
@@ -27,10 +28,12 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
     private readonly string _objectsPath;
     private readonly LooseObjectStore _objectStore;
     private readonly SqliteStagingIndex _stagingIndex;
+    private readonly JsonLocalBindingStore _localBindings;
 
     public string RootPath => _rootPath;
     public IObjectStore ObjectStore => _objectStore;
     public IStagingIndex StagingIndex => _stagingIndex;
+    public ILocalBindingStore LocalBindings => _localBindings;
 
     public FileSystemRepositoryContext(string rootPath)
     {
@@ -44,6 +47,7 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
 
         _objectStore = new LooseObjectStore(_rootPath);
         _stagingIndex = new SqliteStagingIndex(_rootPath);
+        _localBindings = new JsonLocalBindingStore(_dotDawvcPath);
     }
 
     /// <summary>
@@ -316,5 +320,6 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
     public void Dispose()
     {
         _stagingIndex.Dispose();
+        _localBindings.Dispose();
     }
 }

@@ -26,7 +26,9 @@ public sealed class CheckoutRestoreUseCaseTests : IDisposable
         Directory.CreateDirectory(_testRestoreDir);
 
         _objectStore = Substitute.For<IObjectStore>();
+        _objectStore.Exists(Arg.Any<ContentHash>()).Returns(true);
         _context = Substitute.For<IRepositoryContext>();
+        _context.RootPath.Returns(_testRestoreDir);
         _context.ObjectStore.Returns(_objectStore);
     }
 
