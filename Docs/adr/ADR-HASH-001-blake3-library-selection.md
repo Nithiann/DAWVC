@@ -1,50 +1,51 @@
-# ADR-HASH-001: BLAKE3 Library Selectie & Streaming API
+# ADR-HASH-001: BLAKE3 Library Selection & Streaming API
 
-- **Status:** Geaccepteerd
-- **Datum:** 2026-09-13
-- **Auteurs:** DAWVC Contributors
-- **Gerelateerde Requirements:** FR-OBJ-001, FR-OBJ-003, NFR-INT-003, NFR-PERF-001
-- **Werkpakket:** WP-01 (Spike B) / WP-02
+- **Status:** Accepted
+- **Date:** 2026-09-13
+- **Authors:** DAWVC Contributors
+- **Related Requirements:** FR-OBJ-001, FR-OBJ-003, NFR-INT-003, NFR-PERF-001
+- **Work Package:** WP-01 (Spike B) / WP-02
 
 ---
 
-## Context & Probleemdefinitie
+## Context & Problem Statement
 
-DAWVC gebruikt content-addressing om blobs, projectbestanden en dependencies cryptografisch te identificeren. Conform de MVP-requirements (`FR-OBJ-001`) is BLAKE3 gekozen als de standaard hashing-algoritme. De hashing-laag moet voldoen aan de volgende criteria:
-1. Volledig deterministische 32-byte (256-bit) hashes;
-2. Streaming I/O ondersteuning zonder volledige audio- en projectbestanden in het RAM-geheugen te bufferen (`FR-OBJ-003`);
-3. Hoge verwerkingssnelheid op grote multi-gigabyte audio-assets via SIMD (AVX2/AVX-512/NEON);
-4. Geschiktheid voor zowel Windows x64 als Linux x64 CI-omgevingen onder .NET 10.
+DAWVC utilizes content-addressing to cryptographically identify blobs, project files, and dependencies. In accordance with the MVP requirements (`FR-OBJ-001`), BLAKE3 was chosen as the standard hashing algorithm. The hashing subsystem must satisfy the following criteria:
+1. Fully deterministic 32-byte (256-bit) hashes;
+2. Streaming I/O support without buffering entire audio and project files in RAM (`FR-OBJ-003`);
+3. High throughput on multi-gigabyte audio assets leveraging SIMD hardware acceleration (AVX2/AVX-512/NEON);
+4. Seamless execution across both Windows 11 x64 and Linux x64 CI environments under .NET 10.
 
-## Overwogen Opties
+## Considered Options
 
-1. **`Blake3` (door Alexandre Mutel / xoofx):**
-   - Officiële C/Rust SIMD bindings verpakt in een veilige C# P/Invoke wrapper.
-   - Ondersteunt `Span<byte>`, `ReadOnlySpan<byte>` en streaming state via `Blake3.Hasher`.
-   - Zeer hoge adoptie (>5,4M downloads), actieve maintenance en cross-platform native binaries meegeleverd in het NuGet-pakket.
+1. **`Blake3` (by Alexandre Mutel / xoofx):**
+   - Official C/Rust SIMD bindings wrapped in a safe C# P/Invoke layer.
+   - Supports `Span<byte>`, `ReadOnlySpan<byte>`, and streaming state via `Blake3.Hasher`.
+   - Very high adoption (>5.4M downloads), active maintenance, and cross-platform native binaries packaged inside the NuGet package.
 2. **`Data.HashFunction.Blake3`:**
-   - Managed port van BLAKE3.
-   - Aanzienlijk lagere throughput op grote bestanden doordat geavanceerde SIMD-instructies van de C/Rust core ontbreken.
-   - Lage downloadactiviteit (~14k).
-3. **Eigen P/Invoke binding naar custom gecompileerde `blake3.dll`:**
-   - Geeft maximale controle maar introduceert onderhoudslast voor cross-platform compilatie en native toolchains.
+   - Managed C# port of BLAKE3.
+   - Significantly lower throughput on large files due to absence of specialized SIMD instructions from the C/Rust core.
+   - Low download volume (~14k).
+3. **Custom P/Invoke Binding to In-house Compiled `blake3.dll`:**
+   - Provides maximum low-level control but introduces maintenance overhead for cross-platform builds and native toolchains.
 
-## Besluit
+## Decision Outcome
 
-We kiezen voor **`Blake3` v3.0.2** (xoofx) als de primaire hashing-engine voor DAWVC.
-In de domeinlaag wordt dit ontsloten via een generieke `IContentHasher` interface en een strongly typed, immutable `ContentHash` struct.
+We choose **`Blake3` v3.0.2** (xoofx) as the primary hashing engine for DAWVC.
+In the domain layer, this is exposed via a generic `IContentHasher` port and a strongly typed, immutable `ContentHash` struct.
 
-## Gevolgen
+## Consequences
 
-### Positieve gevolgen
-- **Prestaties:** Door de hardware-geaccelereerde C/Rust core haalt BLAKE3 multi-gigabyte/sec throughput op SSD's.
-- **Streaming:** `Blake3ContentHasher` verwerkt data in 64 KB streaming buffers, waardoor het geheugengebruik constant en ruim onder de 512 MB MVP-grens blijft.
-- **Platformonafhankelijkheid:** Werkt direct in zowel Windows 11 x64 als Linux x64 (CI).
+### Positive Consequences
+- **Performance:** Hardware-accelerated C/Rust core enables BLAKE3 to achieve multi-gigabyte/sec throughput on modern SSDs.
+- **Streaming:** `Blake3ContentHasher` processes data in 64 KB streaming buffers, maintaining constant memory utilization well below the 512 MB MVP ceiling.
+- **Cross-Platform:** Runs out-of-the-box on Windows 11 x64 and Linux x64 (GitHub Actions CI).
 
-### Negatieve gevolgen of risico's
-- Native dependency (`blake3.dll` / `libblake3.so`) wordt via het NuGet-pakket ingeladen. Dit is geverifieerd en werkt out-of-the-box in de .NET 10 runtime.
+### Negative Consequences or Risks
+- Native dependencies (`blake3.dll` / `libblake3.so`) are loaded via the NuGet package. This has been validated and runs out-of-the-box in the .NET 10 runtime.
 
-## Verificatie & Bewijslast
+## Verification & Validation Evidence
 
-- De implementatie is getest tegen de officiële BLAKE3 testvectoren (waaronder de lege string hash: `af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262`).
-- De streaming tests in `Blake3HasherTests` bewijzen dat data gevoed in variërende brokjes (1 tot 256 KB) exact dezelfde hash oplevert als een in-memory buffer.
+- Tested against official BLAKE3 test vectors (including empty string hash: `af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262`).
+- Streaming tests in `Blake3HasherTests` verify that data chunked in varying block sizes (1 to 256 KB) produces the exact same hash as an in-memory buffer.
+

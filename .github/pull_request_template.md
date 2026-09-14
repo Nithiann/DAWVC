@@ -1,27 +1,29 @@
-## Samenvatting van de wijziging
+## Summary of Changes
 
-<!-- Geef een korte beschrijving van wat deze PR toevoegt, fixt of wijzigt. -->
+<!-- Provide a brief description of what this PR introduces, fixes, or refactors. -->
 
-## Gekoppelde Requirements & Issues
+## Linked Requirements & Issues
 
 - Requirements: `FR-...`, `NFR-...`, `INV-...`, `AC-...`
-- Werkpakket: `WP-...` (bv. WP-02)
-- Issue / Taak: `IMP-...`
+- Work Package: `WP-...` (e.g. WP-02)
+- Issue / Task: `IMP-...`
 
-## Type Wijziging
+## Type of Change
 
-- [ ] Nieuwe functionaliteit (`feat`)
-- [ ] Bugfix (`fix`)
+- [ ] New feature (`feat`)
+- [ ] Bug fix (`fix`)
 - [ ] Refactoring / Architecture (`refactor`)
-- [ ] Testsuite uitbreiding (`test`)
-- [ ] Documentatie of ADR (`docs`)
+- [ ] Test suite extension (`test`)
+- [ ] Documentation or ADR (`docs`)
+- [ ] Continuous Integration / Maintenance (`ci`, `chore`)
 
-## Checklist Kwaliteit & DoD
+## Quality Checklist & Definition of Done
 
-- [ ] Build slaagt zonder warnings (`dotnet build -c Release`)
-- [ ] Alle tests slagen (`dotnet test -c Release`)
-- [ ] Formatter controleert zonder wijzigingen (`dotnet format --verify-no-changes`)
-- [ ] Geen commerciële of niet-herdistribueerbare audio/VST assets toegevoegd
-- [ ] Typed errors gebruikt voor failure cases
-- [ ] Geen architectuurgrenzen overschreden (gevalideerd via architecture tests)
-- [ ] ADR bijgewerkt indien persisted dataformat of hashschema is gewijzigd
+- [ ] Build passes without warnings (`dotnet build -c Release`)
+- [ ] All unit, integration, and architecture tests pass (`dotnet test -c Release`)
+- [ ] Formatter verifies without changes (`dotnet format --verify-no-changes`)
+- [ ] No commercial or proprietary audio/VST assets added
+- [ ] Typed errors used for all failure cases
+- [ ] Architectural boundaries strictly preserved (validated by architecture tests)
+- [ ] ADR updated if persisted data format or hash schema was modified
+

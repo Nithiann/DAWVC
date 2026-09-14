@@ -1,187 +1,187 @@
 # DAWVC — MVP Requirements Specification
 
-> **Documentversie:** 1.0  
+> **Document Version:** 1.0  
 > **Status:** Approved baseline for implementation  
-> **Productversie:** MVP v0.1  
-> **Normatieve architectuur:** `DAWVC_Technical_Design.md` v1.1  
-> **Primaire implementatie:** C# / .NET 10  
-> **Doelplatform:** Windows 11 x64  
-> **Eerste DAW-adapter:** FL Studio 2026.x  
-> **Releasevorm:** Public technical preview
+> **Product Version:** MVP v0.1  
+> **Normative Architecture:** `DAWVC_Technical_Design.md` v1.1  
+> **Primary Implementation:** C# / .NET 10  
+> **Target Platform:** Windows 11 x64  
+> **Initial DAW Adapter:** FL Studio 2026.x  
+> **Release Format:** Public technical preview
 
 ---
 
-# 1. Doel van dit document
+# 1. Purpose of this Document
 
-Dit document specificeert het vereiste gedrag van DAWVC MVP v0.1. Het Technical Design beschrijft de architectuur en interne modellen; dit document bepaalt wat de MVP functioneel en niet-functioneel moet leveren en hoe dat objectief wordt geaccepteerd.
+This document specifies the required behavior of DAWVC MVP v0.1. The Technical Design describes the architecture and internal models; this document establishes what the MVP functionally and non-functionally delivers and how it is objectively accepted.
 
-De termen **MOET**, **MAG NIET**, **BEHOORT** en **MAG** zijn normatief:
+The keywords **MUST**, **MUST NOT**, **SHOULD**, and **MAY** are normative:
 
-- **MOET / MAG NIET:** harde MVP-eis;
-- **BEHOORT:** gewenst gedrag waarvan afwijking expliciet moet worden gemotiveerd;
-- **MAG:** optioneel gedrag dat de MVP-acceptatie niet blokkeert.
+- **MUST / MUST NOT:** Hard MVP requirement;
+- **SHOULD:** Desired behavior; any deviation requires explicit technical justification;
+- **MAY:** Optional behavior that does not block MVP acceptance.
 
-Alle requirements hebben een stabiele identifier. Het Implementation Plan en de tests verwijzen naar deze identifiers.
-
----
-
-# 2. Productdoel
-
-DAWVC is een lokaal version-control- en dependency-managementsysteem voor DAW-projecten. MVP v0.1 moet één FL Studio-project veilig kunnen registreren, inspecteren, versioneren, herstellen en op een andere Windows-machine reproduceerbaar voorbereiden.
-
-De MVP bewijst vijf kernproposities:
-
-1. Een native `.flp` kan immutable en byte-exact worden geversioneerd.
-2. Projectassets kunnen op inhoud worden geïdentificeerd in plaats van op lokaal pad.
-3. Lokale folderstructuren en plugininstallaties lekken niet naar gedeelde identities.
-4. Een checkout publiceert nooit een gedeeltelijk of ongeverifieerd projectartifact.
-5. FL Studio-specifieke inspectie blijft geïsoleerd achter een DAW-onafhankelijk adaptercontract.
+All requirements possess a stable identifier. The Implementation Plan and test suites link directly to these identifiers.
 
 ---
 
-# 3. Goedgekeurde productbesluiten
+# 2. Product Goal
 
-De volgende eerder open keuzes zijn voor MVP v0.1 bindend vastgesteld.
+DAWVC is a local version control and dependency management system tailored for DAW projects. MVP v0.1 must safely register, inspect, version, restore, and reproducibly prepare a single FL Studio project across different Windows workstations.
 
-| ID | Besluit |
+The MVP proves five core propositions:
+
+1. A native `.flp` project file can be versioned immutably and byte-identically.
+2. Project assets can be identified by content hash rather than fragile local file paths.
+3. Local directory layouts and host plugin installations do not leak into shared identities.
+4. Workspace checkout never publishes a partial or unverified project artifact.
+5. FL Studio-specific inspection remains isolated behind a DAW-independent adapter contract.
+
+---
+
+# 3. Approved Product Decisions
+
+The following architectural and product choices are binding for MVP v0.1:
+
+| ID | Decision |
 |---|---|
-| DEC-MVP-001 | MVP v0.1 wordt een publieke technical preview en portfolio-waardige release. |
-| DEC-MVP-002 | Eén repository vertegenwoordigt één logisch muziekproject met precies één primaire `.flp` per snapshot. |
-| DEC-MVP-003 | Windows 11 x64 en FL Studio 2026.x worden officieel getest. Andere FLP-versies mogen opaque worden behandeld. |
-| DEC-MVP-004 | DAWVC gebruikt hybride staging: de primaire `.flp` en reeds gevolgde assets worden automatisch meegenomen; nieuwe assets vereisen `dawvc add`. |
-| DEC-MVP-005 | Samples, recordings en plugin-identiteiten worden best-effort gedetecteerd. Third-party plugincontent is best-effort of user-assisted. |
-| DEC-MVP-006 | DAWVC herstelt assets en bindings, maar wijzigt in v0.1 geen FL Studio-instellingen en herschrijft geen `.flp`. Handmatige search-pathconfiguratie of relinking mag nodig zijn. |
-| DEC-MVP-007 | Ontbrekende verplichte `Bundle`-dependencies blokkeren een normale commit; `--allow-incomplete` kan bewust overrulen. `ReferenceOnly`-requirements blokkeren niet. |
-| DEC-MVP-008 | De v0.1-commandoset bestaat uit `init`, `scan`, `status`, `add`, `commit`, `log`, `checkout`, `branch`, `switch`, `doctor` en `fsck`. |
-| DEC-MVP-009 | Checkout stopt bij lokale wijzigingen. `--force` maakt eerst een recovery copy; `--restore-to` herstelt zonder de actieve workspace te overschrijven. |
-| DEC-MVP-010 | Objecten gebruiken een versieerbaar envelope. Canonical JSON-manifests en blobs worden in v0.1 ongecomprimeerd opgeslagen. |
-| DEC-MVP-011 | De release wordt geleverd als self-contained Windows x64 executable/ZIP. |
-| DEC-MVP-012 | De performancebaseline is 5.000 gevolgde assets en 100 GB bundled content, met streaming I/O en maximaal circa 512 MB normaal geheugengebruik. |
-| DEC-MVP-013 | Het plan gaat uit van één ontwikkelaar en gebruikt ideale werkdagen zonder kalenderdeadline. |
-| DEC-MVP-014 | De broncode wordt publiek op GitHub gepubliceerd onder de MIT-licentie; fixtures bevatten uitsluitend zelfgemaakte of vrij distribueerbare content. |
+| DEC-MVP-001 | MVP v0.1 is a public technical preview and portfolio-grade open-source release. |
+| DEC-MVP-002 | One repository represents one logical musical project with exactly one primary `.flp` per snapshot. |
+| DEC-MVP-003 | Windows 11 x64 and FL Studio 2026.x are officially supported and tested. Other FLP versions may be tracked opaquely. |
+| DEC-MVP-004 | DAWVC utilizes hybrid staging: the primary `.flp` and tracked assets are staged automatically; new assets require `dawvc add`. |
+| DEC-MVP-005 | Audio samples, recordings, and plugin identities are detected best-effort. Third-party plugin content is best-effort or user-assisted. |
+| DEC-MVP-006 | DAWVC materializes assets and bindings, but never mutates FL Studio settings or rewrites `.flp` files. Manual search path configuration or relinking may be required. |
+| DEC-MVP-007 | Missing mandatory `Bundle` dependencies block a normal commit; `--allow-incomplete` permits an explicit override. `ReferenceOnly` requirements do not block commits. |
+| DEC-MVP-008 | The v0.1 command suite comprises `init`, `scan`, `status`, `add`, `commit`, `log`, `checkout`, `branch`, `switch`, `doctor`, and `fsck`. |
+| DEC-MVP-009 | Checkout aborts when uncommitted changes exist. `--force` creates a recovery backup first; `--restore-to` restores cleanly without touching the active workspace. |
+| DEC-MVP-010 | Objects utilize a versioned binary envelope. Canonical JSON manifests and blobs are stored uncompressed in v0.1. |
+| DEC-MVP-011 | Distribution is delivered as a self-contained Windows x64 executable and ZIP archive. |
+| DEC-MVP-012 | Performance baseline targets 5,000 tracked assets and 100 GB bundled content, with streaming I/O and peak memory under 512 MB. |
+| DEC-MVP-013 | Development plan assumes a single engineer using ideal working days without artificial calendar deadlines. |
+| DEC-MVP-014 | Source code is published on GitHub under the MIT license; test fixtures contain strictly custom or royalty-free public domain content. |
 
 ---
 
 # 4. Scope
 
-## 4.1 In scope
+## 4.1 In Scope
 
-MVP v0.1 bevat:
+MVP v0.1 includes:
 
-- één lokale repository per logisch muziekproject;
-- één primaire FL Studio `.flp` per snapshot;
-- een DAW-onafhankelijk core-domein;
-- `.flp` als `SingleFileArtifact`;
-- immutable content-addressed object storage met BLAKE3;
-- hybride staging;
-- commits, log, branches en branch switching;
-- read-only FLP-detectie, inspectie en validatie;
-- opaque fallback voor onbekende of niet-ondersteunde FLP-versies;
-- discovery van samples, recordings en pluginrequirements;
-- assetbundling volgens portability policies;
-- lokale dependencybindings;
-- staged en geverifieerde checkout;
-- recovery bij geforceerde checkout;
-- project- en environmentdiagnose via `doctor`;
-- repository- en artifactintegriteit via `fsck`;
-- self-contained Windows x64-distributie;
-- geautomatiseerde unit-, fixture-, integration- en end-to-endtests.
+- One local repository per logical musical project;
+- Exactly one primary FL Studio `.flp` per snapshot;
+- DAW-independent core domain model;
+- `.flp` treated as a `SingleFileArtifact`;
+- Immutable content-addressed object store leveraging BLAKE3;
+- Hybrid staging workflow;
+- Commits, log history, branching, and branch switching;
+- Read-only FLP detection, inspection, and format validation;
+- Opaque fallback for unknown or newer FLP versions;
+- Discovery of audio samples, recordings, and plugin requirements;
+- Asset bundling governed by portability policies;
+- Local machine-specific dependency bindings;
+- Staged and verified workspace checkout;
+- Automated recovery copies during forced checkout;
+- Project and environment diagnostics via `dawvc doctor`;
+- Repository and artifact integrity checks via `dawvc fsck`;
+- Self-contained Windows x64 binary distribution;
+- Automated unit, fixture, integration, and end-to-end tests.
 
-## 4.2 Out of scope
+## 4.2 Out of Scope
 
-MVP v0.1 bevat nadrukkelijk niet:
+MVP v0.1 explicitly excludes:
 
-- remotes, clone, fetch, pull of push;
-- server, accounts, authenticatie of authorization;
-- desktop- of webinterface;
-- projectlocking tussen gebruikers;
-- tagcommando’s;
-- automatische merge van native DAW-projectbestanden;
-- semantische diff of merge;
-- native FLP-writing of path rewriting;
-- automatische wijziging van FL Studio Browser/search folders;
-- automatische installatie van plugins of plugincontent;
-- volledige detectie van content die intern door third-party plugins wordt beheerd;
-- FL Studio zipped-projectsupport als volwaardige artifactvorm;
-- functionele ondersteuning voor Ableton, Logic, REAPER of andere DAWs;
-- cross-DAW collaboration snapshots;
-- objectcompressie, delta-compressie of content-defined chunking;
-- telemetry, auto-update of een managed crash-reportingplatform.
+- Remote repositories, `clone`, `fetch`, `pull`, or `push`;
+- Central server, user accounts, authentication, or access control;
+- Desktop GUI or web dashboard;
+- Project locking between concurrent users;
+- Tag commands;
+- Automated semantic merging of native DAW project files;
+- Semantic project diffing;
+- Native FLP rewriting or binary path patching;
+- Automated modification of FL Studio configuration or Extra Search Folders;
+- Automated installation of plugins or proprietary library content;
+- Full internal asset discovery managed inside closed third-party plugin engines;
+- FL Studio zipped project archives (`.zip`) as primary artifacts;
+- Functional support for Ableton Live, Logic Pro, Studio One, REAPER, or other DAWs;
+- Cross-DAW collaboration snapshots;
+- Object compression, delta compression, or content-defined chunking (CDC);
+- Telemetry, automatic updates, or hosted crash reporting.
 
 ---
 
-# 5. Gebruikers en systeemactoren
+# 5. Users and System Actors
 
-## 5.1 Primaire gebruiker
+## 5.1 Primary User
 
-Een producer/developer die lokaal via de CLI werkt en basiskennis heeft van bestanden, terminals en FL Studio-projecten.
+Music producers and audio engineers working locally via the command-line interface with standard knowledge of terminals, file systems, and FL Studio projects.
 
-## 5.2 Externe actoren
+## 5.2 External Actors
 
-| Actor | Rol in MVP |
+| Actor | Role in MVP |
 |---|---|
-| Windows filesystem | Opslag van workspace, object store, staging en recovery copies. |
-| FL Studio | Opent het door DAWVC herstelde native project; wordt niet door DAWVC aangestuurd of gewijzigd. |
-| FL Studio-adapter | Detecteert, inspecteert en valideert `.flp` read-only. |
-| Pluginfilesystem | Wordt gescand om lokale plugininstallaties te inventariseren; binaries worden niet geladen of uitgevoerd. |
-| Gebruiker | Bevestigt uitzonderingen, kiest bindings en configureert zo nodig FL Studio search folders. |
+| Windows Filesystem | Storage of active workspace, object store, staging cache, and recovery backups. |
+| FL Studio | Launches the restored native project; never spawned, driven, or modified by DAWVC. |
+| FL Studio Adapter | Inspects, parses, and validates `.flp` binaries in a strictly read-only manner. |
+| Host Plugin Filesystem | Scanned to verify local plugin installations and versions; binaries are never executed. |
+| User | Confirms policy overrides, specifies bindings, and configures FL Studio search folders as guided. |
 
 ---
 
-# 6. Begrippen
+# 6. Glossary
 
-| Term | Betekenis |
+| Term | Definition |
 |---|---|
-| Repository | Version-control-eenheid voor één logisch muziekproject. |
-| Workspace | Lokale working tree plus machine-specifieke bindings en caches. |
-| Primary artifact | De actieve `.flp` die door een snapshot wordt gerepresenteerd. |
-| Blob | Immutable contentobject met BLAKE3-identiteit. |
-| Snapshot | Immutable toestand van projectartifact, dependencies en environmentrequirements. |
-| Bundle dependency | Dependency waarvan de bytes in de repository mogen en moeten worden opgeslagen. |
-| ReferenceOnly dependency | Requirement dat wordt geregistreerd maar niet wordt gebundeld, zoals een pluginbinary. |
-| Binding | Lokale koppeling van een gedeelde dependencyidentity aan een machine-specifieke locator. |
-| Opaque artifact | Artifact dat byte-exact wordt opgeslagen zonder betrouwbare semantische interpretatie. |
-| Recovery copy | Veilige kopie van lokale wijzigingen die vóór een geforceerde checkout wordt gemaakt. |
-| Required dependency | Dependency die nodig is om het project correct te reconstrueren. |
-| Optional dependency | Dependency waarvan afwezigheid het kernproject niet blokkeert. |
+| Repository | Version control boundary for one logical musical project. |
+| Workspace | Active working directory containing live files, local bindings, and caches. |
+| Primary Artifact | The active `.flp` project file represented by a snapshot. |
+| Blob | Immutable content object addressed cryptographically by its BLAKE3 hash. |
+| Snapshot | Immutable representation of project artifacts, dependencies, and environment requirements. |
+| Bundle Dependency | Asset whose binary content is packaged into repository object storage. |
+| ReferenceOnly Dependency | Requirement recorded in project metadata but not bundled (e.g. plugin binaries). |
+| Binding | Machine-specific mapping linking a shared dependency ID to a local filesystem path. |
+| Opaque Artifact | Artifact stored byte-identically without semantic interpretation or format decoding. |
+| Recovery Copy | Complete backup of uncommitted local modifications created before a forced checkout. |
+| Required Dependency | Dependency strictly required to reconstruct the project environment. |
+| Optional Dependency | Supplementary dependency whose absence does not block project playback. |
 
 ---
 
-# 7. Globale invariants
+# 7. Global Invariants
 
-- **INV-001:** De originele native artifactbytes zijn de primaire waarheid.
-- **INV-002:** DAWVC MAG een `.flp` in MVP nooit herschrijven.
-- **INV-003:** Dependencyidentity MAG niet afhankelijk zijn van een absoluut lokaal pad.
-- **INV-004:** Commits, snapshots, manifests en blobs zijn immutable.
-- **INV-005:** Een branchref MAG alleen naar een volledig geschreven en geverifieerde commit verwijzen.
-- **INV-006:** Een checkout MAG nooit een gedeeltelijk artifact als succesvol publiceren.
-- **INV-007:** Gedeelde metadata MAG geen credentials of lokale bindings bevatten.
-- **INV-008:** Pluginbinaries en commerciële libraries worden standaard niet gebundeld.
-- **INV-009:** Een parserfout is niet automatisch bewijs van repositorycorruptie.
-- **INV-010:** Onbekende FLP-versies blijven byte-exact versioneerbaar.
-- **INV-011:** De core MAG niet refereren aan FL Studio-specifieke implementatiecode.
-- **INV-012:** Iedere destructive workspacehandeling vereist een veilige recoveryroute.
+- **INV-001:** Original native artifact bytes represent primary ground truth.
+- **INV-002:** DAWVC MUST NOT rewrite or binary-patch `.flp` project files in v0.1.
+- **INV-003:** Dependency identity MUST NOT rely upon absolute local filesystem paths.
+- **INV-004:** Commits, snapshots, manifests, and blobs are strictly immutable.
+- **INV-005:** Branch references MUST point only to fully written and verified commits.
+- **INV-006:** Checkout MUST NOT publish a partial or unverified artifact to the workspace.
+- **INV-007:** Shared metadata MUST NOT contain credentials or machine-local path bindings.
+- **INV-008:** Plugin binaries and commercial sound libraries MUST NOT be bundled by default.
+- **INV-009:** Adapter inspection errors MUST NOT be classified as repository object corruption.
+- **INV-010:** Unknown or future FLP formats MUST remain byte-identically versionable.
+- **INV-011:** The core engine MUST NOT depend upon FL Studio-specific implementation code.
+- **INV-012:** Every destructive workspace operation MUST provide an automated recovery path.
 
 ---
 
-# 8. Functionele requirements — repository en configuratie
+# 8. Functional Requirements — Repository & Configuration
 
-| ID | Prioriteit | Requirement |
+| ID | Priority | Requirement |
 |---|---|---|
-| FR-REP-001 | Must | `dawvc init` MOET een nieuwe repository initialiseren in de huidige of expliciet opgegeven directory. |
-| FR-REP-002 | Must | Initialisatie MOET `.dawvc/` en een versieerbare `dawvc.yaml` aanmaken. |
-| FR-REP-003 | Must | Initialisatie MOET weigeren wanneer een bovenliggende of huidige repository ambiguïteit veroorzaakt, tenzij de gebruiker een expliciete root opgeeft. |
-| FR-REP-004 | Must | Eén repository MOET exact één logisch project-ID bevatten. |
-| FR-REP-005 | Must | De configuratie MOET precies één primaire artifactlocator ondersteunen. |
-| FR-REP-006 | Must | De repository MOET een default branch `main` aanmaken. |
-| FR-REP-007 | Must | Een herhaalde `init` in dezelfde geldige repository MOET idempotent zijn en bestaande history behouden. |
-| FR-REP-008 | Must | DAWVC MOET repositories met een nieuwere onbekende repositorieschemaversie read-only weigeren in plaats van ze stil te wijzigen. |
-| FR-REP-009 | Should | `init` BEHOORT de gevonden `.flp` automatisch voor te stellen wanneer exact één kandidaat aanwezig is. |
-| FR-REP-010 | Must | Bij nul of meerdere `.flp`-kandidaten MOET de gebruiker de primaire artifactlocator expliciet kiezen. |
+| FR-REP-001 | Must | `dawvc init` MUST initialize a new repository in the current or specified directory. |
+| FR-REP-002 | Must | Initialization MUST create `.dawvc/` and a versioned `dawvc.yaml` manifest. |
+| FR-REP-003 | Must | Initialization MUST abort if parent or target directories introduce repository ambiguity, unless overridden. |
+| FR-REP-004 | Must | A repository MUST contain exactly one unique logical repository ID. |
+| FR-REP-005 | Must | The configuration MUST designate exactly one primary artifact locator. |
+| FR-REP-006 | Must | Initialization MUST establish `main` as the default branch reference. |
+| FR-REP-007 | Must | Re-running `init` inside an existing valid repository MUST be idempotent and preserve history. |
+| FR-REP-008 | Must | Repositories with an unrecognized newer schema version MUST be rejected read-only without silent modification. |
+| FR-REP-009 | Should | `init` SHOULD automatically suggest the discovered `.flp` if exactly one candidate exists. |
+| FR-REP-010 | Must | If zero or multiple `.flp` files exist, the user MUST explicitly designate the primary artifact. |
 
-## 8.1 Configuratieschema v1
+## 8.1 Configuration Schema v1
 
-`dawvc.yaml` MOET minimaal de volgende logische velden ondersteunen:
+`dawvc.yaml` MUST support the following canonical fields:
 
 ```yaml
 schemaVersion: 1
@@ -196,565 +196,522 @@ policies:
   invalidProjectArtifact: require-confirmation
 ```
 
-- **FR-CFG-001:** Paden in `dawvc.yaml` MOETEN relatief aan de repositoryroot zijn.
-- **FR-CFG-002:** Absolute projectpaden in gedeelde configuratie zijn verboden.
-- **FR-CFG-003:** Onbekende configuratievelden MOETEN bij lezen behouden blijven wanneer DAWVC de configuratie opnieuw schrijft.
-- **FR-CFG-004:** Ongeldige of ontbrekende vereiste configuratie MOET een typed configuration error opleveren.
+- **FR-CFG-001:** Paths in `dawvc.yaml` MUST be relative to the repository root.
+- **FR-CFG-002:** Absolute local filesystem paths in shared configuration are strictly forbidden.
+- **FR-CFG-003:** Unrecognized configuration keys MUST be preserved when rewriting the manifest.
+- **FR-CFG-004:** Missing or corrupted mandatory configuration keys MUST yield typed configuration errors.
 
 ---
 
-# 9. Functionele requirements — scan en projectdetectie
+# 9. Functional Requirements — Scan & Project Detection
 
-| ID | Prioriteit | Requirement |
+| ID | Priority | Requirement |
 |---|---|---|
-| FR-SCAN-001 | Must | `dawvc scan` MOET de primaire artifactlocator, working tree en bekende dependencies inspecteren zonder native bestanden te wijzigen. |
-| FR-SCAN-002 | Must | Scan MOET FLP-detectie baseren op extensie plus herkenbare signature/structuur waar beschikbaar. |
-| FR-SCAN-003 | Must | Scan MOET een detection status, confidence, adapterversie en bevindingen rapporteren. |
-| FR-SCAN-004 | Must | Een herkende maar niet-ondersteunde FLP-versie MOET als `Unsupported` worden gerapporteerd en als opaque artifact bruikbaar blijven. |
-| FR-SCAN-005 | Must | Onvoldoende detectieconfidence MOET `Unknown` opleveren; DAWVC MAG niet speculatief gaan parsen. |
-| FR-SCAN-006 | Must | Concrete schending van bekende formatinvariants MOET `Invalid` opleveren. |
-| FR-SCAN-007 | Must | Parserexceptions MOETEN worden vertaald naar typed adaptererrors en mogen het proces niet met een ongestructureerde stacktrace beëindigen. |
-| FR-SCAN-008 | Must | De scan MOET nieuwe, gewijzigde, verwijderde en unresolved dependencies onderscheiden. |
-| FR-SCAN-009 | Must | Scan MOET dezelfde bytes bij herhaling dezelfde identities geven. |
-| FR-SCAN-010 | Must | Scan MAG geen pluginbinary laden of uitvoeren. |
-| FR-SCAN-011 | Should | Ongewijzigde files BEHOREN via de lokale index zonder volledige rehash te worden herkend. |
-| FR-SCAN-012 | Must | Een cancellation request MOET de scan gecontroleerd stoppen zonder repository- of workspacewijziging. |
+| FR-SCAN-001 | Must | `dawvc scan` MUST inspect primary artifacts, working tree, and dependencies without modifying files. |
+| FR-SCAN-002 | Must | Scan MUST identify FLP formats via file extensions and magic headers where available. |
+| FR-SCAN-003 | Must | Scan MUST report detection status, confidence score, adapter version, and findings. |
+| FR-SCAN-004 | Must | Unrecognized FLP versions MUST be marked `Unsupported` and tracked opaquely. |
+| FR-SCAN-005 | Must | Low detection confidence MUST report `Unknown`; DAWVC MUST NOT parse speculatively. |
+| FR-SCAN-006 | Must | Violations of known binary format invariants MUST report `Invalid`. |
+| FR-SCAN-007 | Must | Parser exceptions MUST be mapped to typed adapter errors without crashing with unhandled stack traces. |
+| FR-SCAN-008 | Must | Scan MUST distinguish newly discovered, modified, deleted, and unresolved dependencies. |
+| FR-SCAN-009 | Must | Identical file bytes MUST yield identical content-addressed identities across scans. |
+| FR-SCAN-010 | Must | Scan MUST NOT load or execute plugin binaries. |
+| FR-SCAN-011 | Should | Unchanged files SHOULD be identified via local index metadata without recomputing full BLAKE3 hashes. |
+| FR-SCAN-012 | Must | Cancellation requests (Ctrl+C) MUST cleanly terminate scanning without modifying repository state. |
 
 ---
 
-# 10. Functionele requirements — staging en status
+# 10. Functional Requirements — Staging & Status
 
-| ID | Prioriteit | Requirement |
+| ID | Priority | Requirement |
 |---|---|---|
-| FR-STG-001 | Must | DAWVC MOET een lokale staging index onderhouden die niet als gedeelde projectstate wordt behandeld. |
-| FR-STG-002 | Must | De primaire `.flp` en reeds gevolgde assets MOETEN bij commit hun actuele toestand automatisch meenemen. |
-| FR-STG-003 | Must | Nieuwe ontdekte assets MOGEN niet stil aan een commit worden toegevoegd. |
-| FR-STG-004 | Must | `dawvc add <path-or-dependency>` MOET nieuwe assets expliciet registreren en stagen. |
-| FR-STG-005 | Must | `dawvc add --all` MOET alle bundelbare nieuwe dependencies stagen, maar Forbidden en ReferenceOnly content overslaan. |
-| FR-STG-006 | Must | Voor `UserChoice`-content MOET `add` expliciete toestemming vragen of een non-interactieve policyflag vereisen. |
-| FR-STG-007 | Must | `dawvc status` MOET wijzigingen groeperen als modified, added, removed, unresolved en policy-blocked. |
-| FR-STG-008 | Must | Status MOET staged en unstaged/new discoveries afzonderlijk tonen. |
-| FR-STG-009 | Must | Status MOET aangeven of een commit volledig reproduceerbaar, incomplete of opaque zal zijn. |
-| FR-STG-010 | Should | Renames BEHOREN op contentidentity te worden herkend en niet als inhoudswijziging te worden gepresenteerd. |
+| FR-STG-001 | Must | DAWVC MUST maintain a local staging index (`.dawvc/index.db`) excluded from shared state. |
+| FR-STG-002 | Must | The primary `.flp` and tracked assets MUST automatically stage their active disk state upon commit. |
+| FR-STG-003 | Must | Newly discovered external assets MUST NOT be committed silently without explicit staging. |
+| FR-STG-004 | Must | `dawvc add <path>` MUST register and stage newly discovered assets. |
+| FR-STG-005 | Must | `dawvc add --all` MUST stage all bundlable assets while skipping `Forbidden` and `ReferenceOnly` assets. |
+| FR-STG-006 | Must | `UserChoice` assets MUST prompt for confirmation or require an explicit non-interactive flag. |
+| FR-STG-007 | Must | `dawvc status` MUST categorize changes into staged, modified, added, removed, unresolved, and policy-blocked. |
+| FR-STG-008 | Must | Status output MUST display staged assets and untracked discoveries in separate sections. |
+| FR-STG-009 | Must | Status MUST report whether the upcoming commit will be fully reproducible, incomplete, or opaque. |
+| FR-STG-010 | Should | File renames SHOULD be identified via content identity and presented as renames rather than deletion/addition. |
 
 ---
 
-# 11. Functionele requirements — object store
+# 11. Functional Requirements — Content-Addressed Object Store
 
-| ID | Prioriteit | Requirement |
+| ID | Priority | Requirement |
 |---|---|---|
-| FR-OBJ-001 | Must | Iedere blob MOET worden geïdentificeerd met BLAKE3 over de oorspronkelijke payloadbytes. |
-| FR-OBJ-002 | Must | Identieke bytes MOETEN binnen een repository naar dezelfde blobidentity verwijzen. |
-| FR-OBJ-003 | Must | Blobs MOETEN streaming worden geschreven en gehasht. |
-| FR-OBJ-004 | Must | Een object MOET eerst volledig tijdelijk worden geschreven, geverifieerd en daarna atomisch worden gepubliceerd. |
-| FR-OBJ-005 | Must | Een bestaand object met dezelfde identity MAG nooit worden overschreven met afwijkende bytes. |
-| FR-OBJ-006 | Must | Objecten MOETEN een versieerbaar envelope bevatten met magic bytes, objecttype, envelopeversie, payloadlengte, compressiemode en payloadhash. |
-| FR-OBJ-007 | Must | Compressiemode is in v0.1 altijd `None`. Readers MOETEN onbekende compressiemodes gecontroleerd weigeren. |
-| FR-OBJ-008 | Must | Metadataobjecten MOETEN canonical UTF-8 JSON gebruiken met expliciete `schemaVersion`. |
-| FR-OBJ-009 | Must | Tijdstempels, mtimes en lokale file IDs MOGEN niet meetellen in contentidentity. |
-| FR-OBJ-010 | Must | Een crash tijdens objectwriting MAG alleen unreachable temporary/orphan objects achterlaten en geen bereikbare corrupte history. |
+| FR-OBJ-001 | Must | Every blob MUST be identified by the BLAKE3 hash computed over its raw payload bytes. |
+| FR-OBJ-002 | Must | Identical bytes MUST resolve to the identical blob identity within the repository. |
+| FR-OBJ-003 | Must | Blobs MUST be streamed during hashing and disk writes without full in-memory buffering. |
+| FR-OBJ-004 | Must | Objects MUST be written to temporary storage, validated, and published atomically. |
+| FR-OBJ-005 | Must | An existing object with a given identity MUST NEVER be overwritten with differing bytes. |
+| FR-OBJ-006 | Must | Objects MUST contain a 56-byte binary envelope storing magic bytes, version, type, lengths, and payload hash. |
+| FR-OBJ-007 | Must | Compression mode is `None` in v0.1; readers MUST reject unknown compression modes safely. |
+| FR-OBJ-008 | Must | Metadata objects MUST use canonical UTF-8 JSON with explicit `schemaVersion`. |
+| FR-OBJ-009 | Must | Timestamps, file attributes, and local file IDs MUST NOT factor into content identity. |
+| FR-OBJ-010 | Must | Process termination during object writes MUST leave at most orphaned temporary files and never corrupt history. |
 
-## 11.1 Minimale object-envelopevelden
+## 11.1 Canonical Object Envelope Layout
 
 ```text
-Magic
-EnvelopeVersion
-ObjectType
-CompressionMode
-Flags
-PayloadLength
-PayloadHash (BLAKE3)
-Payload
+Magic (4 bytes: 'DWVC')
+EnvelopeVersion (uint16)
+ObjectType (uint16: Blob=1, Tree=2, Snapshot=3, Commit=4)
+CompressionMode (uint8: 0=None)
+Flags (uint8)
+Reserved (6 bytes padding)
+PayloadLength (uint64)
+PayloadHash (32 bytes BLAKE3)
+Payload (N bytes raw stream)
 ```
 
-De precieze byte-offsets worden in ADR-OBJ-001 tijdens de eerste implementatiefase vastgelegd. Deze keuze mag bovenstaande velden en invariants niet veranderen.
+Detailed byte offsets are codified in `ADR-OBJ-001`.
 
 ---
 
-# 12. Functionele requirements — dependencies en portability
+# 12. Functional Requirements — Dependencies & Portability
 
-| ID | Prioriteit | Requirement |
+| ID | Priority | Requirement |
 |---|---|---|
-| FR-DEP-001 | Must | De dependencygraph MOET assets, plugins, plugincontent en environmentrequirements als afzonderlijke dependencysoorten modelleren. |
-| FR-DEP-002 | Must | Iedere dependency MOET een stabiele identity, requirementstatus, source, provenance en portability policy bevatten. |
-| FR-DEP-003 | Must | Samples en recordings MOETEN waar mogelijk via contenthash worden geïdentificeerd. |
-| FR-DEP-004 | Must | Pluginidentity MOET minimaal vendor, product, pluginformat en eventueel native identifier bevatten. |
-| FR-DEP-005 | Must | Een plugin-installatiepad MAG geen onderdeel zijn van pluginidentity. |
-| FR-DEP-006 | Must | Pluginbinaries zijn standaard `ReferenceOnly`. |
-| FR-DEP-007 | Must | Commerciële of onbekend gelicentieerde libraries zijn standaard `ReferenceOnly` of `UserChoice`. |
-| FR-DEP-008 | Must | Eigen samples en recordings MOGEN `Bundle` zijn. |
-| FR-DEP-009 | Must | Third-party plugincontent MOET `Unknown` of user-assisted kunnen blijven wanneer betrouwbare detectie ontbreekt. |
-| FR-DEP-010 | Must | Iedere inferred dependency MOET metadata-provenance en confidence bevatten. |
-| FR-DEP-011 | Must | Een nieuwe `Bundle`-dependency MOET expliciet via `add` worden geaccepteerd. |
-| FR-DEP-012 | Must | Een verplichte gebundelde dependency waarvan de bytes ontbreken MOET de normale commit blokkeren. |
-| FR-DEP-013 | Must | `--allow-incomplete` MOET een bewuste incomplete commit toestaan en de snapshot als incomplete markeren. |
-| FR-DEP-014 | Must | Ontbrekende `ReferenceOnly`-requirements MOGEN een commit niet blokkeren, maar MOETEN in `doctor` zichtbaar zijn. |
-| FR-DEP-015 | Must | De CLI MOET vóór bundling de portability policy en verwachte byteomvang tonen. |
+| FR-DEP-001 | Must | The dependency graph MUST model assets, plugins, plugin content, and environment requirements distinctly. |
+| FR-DEP-002 | Must | Every dependency MUST define identity, requirement level, source locator, provenance, and portability policy. |
+| FR-DEP-003 | Must | Audio samples and recordings MUST be addressed via cryptographic content hash where possible. |
+| FR-DEP-004 | Must | Plugin identity MUST include vendor, product name, format (VST3/Native), and recorded version requirement. |
+| FR-DEP-005 | Must | Local plugin installation directories MUST NOT form part of plugin identity. |
+| FR-DEP-006 | Must | Plugin binaries MUST default to `ReferenceOnly` portability mode. |
+| FR-DEP-007 | Must | Commercial sound libraries MUST default to `ReferenceOnly` or `UserChoice`. |
+| FR-DEP-008 | Must | Project recordings and custom samples MAY be designated as `Bundle`. |
+| FR-DEP-009 | Must | Third-party plugin preset content MUST remain `Unknown` or user-assisted when discovery is inconclusive. |
+| FR-DEP-010 | Must | Inferred dependencies MUST track inspection provenance and confidence scores. |
+| FR-DEP-011 | Must | New `Bundle` dependencies MUST require explicit acceptance via `dawvc add`. |
+| FR-DEP-012 | Must | Missing required `Bundle` dependencies MUST block a normal commit. |
+| FR-DEP-013 | Must | `--allow-incomplete` MUST permit an intentional incomplete commit, tagging the snapshot as incomplete. |
+| FR-DEP-014 | Must | Missing `ReferenceOnly` requirements MUST NOT block commits, but MUST be highlighted in `dawvc doctor`. |
+| FR-DEP-015 | Must | The CLI MUST display policy decisions and prospective payload byte volume prior to bundling. |
 
 ---
 
-# 13. Functionele requirements — commits en history
+# 13. Functional Requirements — Commits & Project History
 
-| ID | Prioriteit | Requirement |
+| ID | Priority | Requirement |
 |---|---|---|
-| FR-COM-001 | Must | `dawvc commit -m <message>` MOET een immutable snapshot en commit maken. |
-| FR-COM-002 | Must | Een commit MOET de actuele primaire `.flp`, gevolgde assets, dependencygraph en environmentrequirements vastleggen. |
-| FR-COM-003 | Must | Een commit zonder inhoudelijke wijziging MOET worden geweigerd, tenzij een expliciete toekomstige allow-emptyoptie wordt toegevoegd. |
-| FR-COM-004 | Must | Een commitmessage MOET na trim minimaal één zichtbaar teken bevatten. |
-| FR-COM-005 | Must | De commit-ID MOET deterministisch uit de canonieke commitinhoud worden afgeleid. |
-| FR-COM-006 | Must | De branchref MOET pas na volledige object- en referencevalidatie atomisch worden verplaatst. |
-| FR-COM-007 | Must | Een opaque artifact MOET kunnen worden gecommit zonder semantic manifest. |
-| FR-COM-008 | Must | Een `Invalid` of `Suspicious` artifact MOET confirmation of `--allow-invalid-artifact` vereisen. |
-| FR-COM-009 | Must | Non-interactieve uitvoering zonder benodigde override MOET met een voorspelbare non-zero exitcode stoppen. |
-| FR-COM-010 | Must | `dawvc log` MOET ten minste commit-ID, parents, auteur, timestamp en message tonen. |
-| FR-COM-011 | Must | History MOET bruikbaar blijven als een nieuwere adapter afgeleide metadata anders interpreteert. |
+| FR-COM-001 | Must | `dawvc commit -m <msg>` MUST construct an immutable snapshot and commit object. |
+| FR-COM-002 | Must | A commit MUST capture the active `.flp`, tracked assets, dependency graph, and environment metadata. |
+| FR-COM-003 | Must | Commits with zero substantive changes MUST be rejected unless empty commits are explicitly permitted. |
+| FR-COM-004 | Must | Commit messages MUST contain at least one non-whitespace character. |
+| FR-COM-005 | Must | Commit IDs MUST be derived deterministically from canonical commit contents. |
+| FR-COM-006 | Must | Branch references MUST be updated atomically only after all objects are safely written and verified. |
+| FR-COM-007 | Must | Opaque artifacts MUST be committable without semantic manifests. |
+| FR-COM-008 | Must | `Invalid` or `Suspicious` project artifacts MUST require explicit confirmation or `--allow-invalid-artifact`. |
+| FR-COM-009 | Must | Non-interactive execution requiring an unsupplied override MUST terminate with a non-zero exit code. |
+| FR-COM-010 | Must | `dawvc log` MUST output commit ID, parent hashes, author, timestamp, and message. |
+| FR-COM-011 | Must | Repository history MUST remain navigable even if future adapters interpret metadata differently. |
 
 ---
 
-# 14. Functionele requirements — branches en switch
+# 14. Functional Requirements — Branches & Branch Switching
 
-| ID | Prioriteit | Requirement |
+| ID | Priority | Requirement |
 |---|---|---|
-| FR-BRA-001 | Must | Een nieuwe repository MOET een branch `main` bevatten. |
-| FR-BRA-002 | Must | `dawvc branch <name>` MOET een branch op de huidige commit maken. |
-| FR-BRA-003 | Must | Branchnamen MOETEN worden gevalideerd tegen lege namen, traversal en ref-collisions. |
-| FR-BRA-004 | Must | `dawvc switch <name>` MOET de gekozen branch en bijbehorende snapshot veilig uitchecken. |
-| FR-BRA-005 | Must | Switch MOET dezelfde dirty-workspacebeveiliging als checkout toepassen. |
-| FR-BRA-006 | Must | De MVP MAG geen native auto-merge aanbieden. |
-| FR-BRA-007 | Must | Divergerende branches blijven onafhankelijk; combineren is buiten scope. |
+| FR-BRA-001 | Must | A newly initialized repository MUST include a default branch named `main`. |
+| FR-BRA-002 | Must | `dawvc branch <name>` MUST create a new branch pointer referencing current HEAD. |
+| FR-BRA-003 | Must | Branch names MUST be validated against empty strings, path traversal, and ref collisions. |
+| FR-BRA-004 | Must | `dawvc switch <name>` MUST check out the target branch snapshot safely. |
+| FR-BRA-005 | Must | Switch MUST enforce identical dirty workspace guards as checkout. |
+| FR-BRA-006 | Must | MVP v0.1 MUST NOT attempt automated semantic project merging. |
+| FR-BRA-007 | Must | Diverging branches remain distinct lines of history; merging is deferred post-MVP. |
 
 ---
 
-# 15. Functionele requirements — bindings en cross-machine recovery
+# 15. Functional Requirements — Local Bindings & Multi-Machine Portability
 
-| ID | Prioriteit | Requirement |
+| ID | Priority | Requirement |
 |---|---|---|
-| FR-BND-001 | Must | Bindings MOETEN lokaal en buiten commits worden opgeslagen. |
-| FR-BND-002 | Must | Een binding MOET dependency-ID, locator, methode, status en optionele verified hash bevatten. |
-| FR-BND-003 | Must | Een assetbinding MAG alleen `Verified` zijn nadat de bytes tegen de verwachte hash zijn gecontroleerd. |
-| FR-BND-004 | Must | Resolvervolgorde MOET deterministisch zijn: repository asset, verified binding, relative path, original path, library mapping, asset index, hash discovery, user selection, unresolved. |
-| FR-BND-005 | Must | Een locatie met dezelfde filename maar afwijkende hash MOET `Mismatch` zijn. |
-| FR-BND-006 | Must | De gebruiker MOET een dependency handmatig aan een lokaal bestand kunnen binden. |
-| FR-BND-007 | Must | Een bestaande identieke asset op een ander pad MOET via hash als dezelfde dependency kunnen worden herkend. |
-| FR-BND-008 | Must | Originele source paths MOGEN uitsluitend als diagnostische locator worden opgeslagen en niet als identity. |
-| FR-BND-009 | Must | Lokale bindings MOGEN niet in gedeelde manifests of objectidentities lekken. |
+| FR-BND-001 | Must | Bindings MUST be persisted locally and strictly excluded from shared commits. |
+| FR-BND-002 | Must | Bindings MUST store dependency ID, local path locator, resolution method, status, and verified hash. |
+| FR-BND-003 | Must | An asset binding MUST ONLY be marked `Verified` after verifying file bytes against expected hash. |
+| FR-BND-004 | Must | Resolver pipeline MUST follow deterministic precedence: repository asset, verified binding, relative path, original path, library mapping, asset index, hash discovery, user selection, unresolved. |
+| FR-BND-005 | Must | Files matching the expected name but differing in content hash MUST be tagged `Mismatch`. |
+| FR-BND-006 | Must | Users MUST be able to manually bind dependencies to local filesystem paths (`dawvc bind`). |
+| FR-BND-007 | Must | An identical asset located at a different path MUST be recognized via content hash. |
+| FR-BND-008 | Must | Original host paths MAY only be retained as diagnostic locators, never as dependency identities. |
+| FR-BND-009 | Must | Local path bindings MUST NOT leak into shared manifests or commit snapshots. |
 
 ---
 
-# 16. Functionele requirements — checkout en recovery
+# 16. Functional Requirements — Safe Checkout & Disaster Recovery
 
-| ID | Prioriteit | Requirement |
+| ID | Priority | Requirement |
 |---|---|---|
-| FR-CHK-001 | Must | `dawvc checkout <commit-or-branch>` MOET alle vereiste bereikbare objecten vóór materialisatie controleren. |
-| FR-CHK-002 | Must | Checkout MOET objecthashes, artifacttree en aggregate hash verifiëren. |
-| FR-CHK-003 | Must | Checkout MOET weigeren bij ontbrekende of corrupte vereiste repositoryobjecten. |
-| FR-CHK-004 | Must | Checkout MOET het project eerst volledig in een staginglocatie op hetzelfde filesystem materialiseren. |
-| FR-CHK-005 | Must | De stagingcandidate MOET opnieuw byte- en tree-exact worden geverifieerd. |
-| FR-CHK-006 | Must | Alleen een volledig geverifieerde candidate MAG atomisch in de workspace worden geïnstalleerd. |
-| FR-CHK-007 | Must | Een failure vóór publicatie MAG de bestaande workspace niet wijzigen. |
-| FR-CHK-008 | Must | Een checkout met lokale wijzigingen MOET standaard worden geweigerd. |
-| FR-CHK-009 | Must | `--restore-to <path>` MOET een snapshot naar een afzonderlijke lege of expliciet geaccepteerde bestemming herstellen. |
-| FR-CHK-010 | Must | `--force` MOET vóór wijziging een complete recovery copy van conflicterende lokale projectdata maken. |
-| FR-CHK-011 | Must | De recoverylocatie MOET in de CLI-output worden gemeld en mag niet door dezelfde operatie worden verwijderd. |
-| FR-CHK-012 | Must | Path traversal, absolute manifestpaden, duplicate normalized paths en onverwachte symlinks MOETEN vóór writing worden geweigerd. |
-| FR-CHK-013 | Must | DAWVC MAG tijdens checkout de `.flp` niet herschrijven. |
-| FR-CHK-014 | Must | Bundled assets MOETEN naar een door DAWVC beheerde projectassetroot worden gematerialiseerd. |
-| FR-CHK-015 | Must | Checkout MOET een post-checkout report geven met artifacthealth, unresolved requirements en eventuele handmatige FL Studio-stappen. |
+| FR-CHK-001 | Must | `dawvc checkout <ref>` MUST verify all reachable repository objects prior to workspace materialization. |
+| FR-CHK-002 | Must | Checkout MUST verify object hashes, artifact trees, and aggregate hashes. |
+| FR-CHK-003 | Must | Checkout MUST abort if any required repository objects are missing or corrupt. |
+| FR-CHK-004 | Must | Checkout MUST stage the entire project snapshot into an isolated directory on the same filesystem volume. |
+| FR-CHK-005 | Must | The staged candidate MUST be re-verified byte-identically prior to workspace replacement. |
+| FR-CHK-006 | Must | ONLY a fully verified candidate directory MAY be installed atomically into the workspace. |
+| FR-CHK-007 | Must | Failures prior to publication MUST leave the existing workspace unmodified. |
+| FR-CHK-008 | Must | Checkouts targeting a dirty workspace MUST abort by default with exit code 7. |
+| FR-CHK-009 | Must | `--restore-to <dir>` MUST materialize snapshots cleanly into an external target directory. |
+| FR-CHK-010 | Must | `--force` MUST create a complete recovery copy of local files prior to workspace mutation. |
+| FR-CHK-011 | Must | Recovery copy locations MUST be printed to stdout and never deleted by the triggering operation. |
+| FR-CHK-012 | Must | Traversal sequences (`..`), absolute paths, duplicate normalized paths, and symlinks MUST be rejected prior to writes. |
+| FR-CHK-013 | Must | DAWVC MUST NOT modify or binary-patch the native `.flp` during checkout. |
+| FR-CHK-014 | Must | Bundled assets MUST materialize into a managed project asset root. |
+| FR-CHK-015 | Must | Checkout MUST emit a summary report displaying artifact health, unresolved bindings, and manual FL Studio steps. |
 
 ---
 
-# 17. Functionele requirements — FL Studio-integratie
+# 17. Functional Requirements — FL Studio Integration
 
-| ID | Prioriteit | Requirement |
+| ID | Priority | Requirement |
 |---|---|---|
-| FR-FLP-001 | Must | De v0.1-adapter MOET FL Studio 2026.x `.flp`-bestanden als `SingleFileArtifact` kunnen identificeren. |
-| FR-FLP-002 | Must | De adapter MOET read-only werken en MAG geen writehandle naar de bron ontvangen. |
-| FR-FLP-003 | Must | De adapter MOET projectformat/version metadata extraheren wanneer betrouwbaar beschikbaar. |
-| FR-FLP-004 | Must | De adapter MOET sample- en recordingreferences best-effort extraheren. |
-| FR-FLP-005 | Must | De adapter MOET plugin-identiteiten best-effort extraheren zonder plugins te laden. |
-| FR-FLP-006 | Must | Niet-detecteerbare plugincontent MOET als `Unknown` of via user input kunnen worden geregistreerd. |
-| FR-FLP-007 | Must | Iedere extractie MOET source, confidence, timestamp en adapterversie vastleggen. |
-| FR-FLP-008 | Must | Onbekende nieuwere FLP-versies MOETEN zonder semantische parsing opaque kunnen worden opgeslagen en hersteld. |
-| FR-FLP-009 | Must | `NativeWrite`, `NativeRoundTripValidation` en `NativeMerge` MOETEN voor de v0.1-adapter uitgeschakeld zijn. |
-| FR-FLP-010 | Must | De adapter MAG FL Studio niet starten voor normale detectie, scan of validatie. |
-| FR-FLP-011 | Must | De adapter MAG third-party plugins niet initialiseren. |
-| FR-FLP-012 | Must | De feasibility spike MOET vóór definitieve adapterbouw een ondersteunde fixturematrix en aantoonbare parsergrenzen opleveren. |
+| FR-FLP-001 | Must | The v0.1 adapter MUST identify FL Studio 2026.x `.flp` files as `SingleFileArtifact`. |
+| FR-FLP-002 | Must | The adapter MUST operate read-only and never open write handles to project files. |
+| FR-FLP-003 | Must | The adapter MUST extract project format and version metadata where reliably available. |
+| FR-FLP-004 | Must | The adapter MUST extract sample and recording references best-effort. |
+| FR-FLP-005 | Must | The adapter MUST extract plugin identities best-effort without initializing binaries. |
+| FR-FLP-006 | Must | Indeterminate plugin presets MUST be recorded as `Unknown` or user-assisted. |
+| FR-FLP-007 | Must | Extractions MUST document source locator, confidence score, timestamp, and adapter version. |
+| FR-FLP-008 | Must | Unknown or newer FLP formats MUST degrade safely to opaque snapshotting and byte-exact restoration. |
+| FR-FLP-009 | Must | Capabilities `NativeWrite`, `NativeRoundTripValidation`, and `NativeMerge` MUST be disabled in v0.1. |
+| FR-FLP-010 | Must | The adapter MUST NOT spawn or drive FL Studio for scanning or validation. |
+| FR-FLP-011 | Must | The adapter MUST NOT load or execute third-party plugin binaries. |
+| FR-FLP-012 | Must | Feasibility spikes MUST establish supported fixture matrices and parser boundaries before implementation. |
 
-## 17.1 Sample-resolutiongrens
+## 17.1 Asset Relinking Boundaries
 
-FL Studio zoekt tijdens projectloading onder andere in geconfigureerde Browser extra search folders. DAWVC v0.1 wijzigt deze instellingen niet automatisch. Zie de officiële [FL Studio File Search & Browser Settings](https://www.image-line.com/fl-studio-learning/fl-studio-online-manual/html/envsettings_files.htm).
+FL Studio resolves missing samples via configured Browser *Extra Search Folders*. DAWVC v0.1 does not mutate user DAW preferences automatically (see [FL Studio Search Paths & Relinking Guide](../FLStudio_Search_Paths_Relinking.md)).
 
-- **FR-FLP-013:** `doctor` MOET de lokale managed assetroot tonen die de gebruiker aan FL Studio kan toevoegen.
-- **FR-FLP-014:** `doctor` MOET duidelijk aangeven wanneer handmatige relinking waarschijnlijk nodig is.
-- **FR-FLP-015:** MVP-acceptatie vereist dat alle gebundelde bytes aanwezig en verifieerbaar zijn; automatisch path-resolven door FL Studio is geen harde v0.1-garantie.
+- **FR-FLP-013:** `dawvc doctor` MUST report the local managed asset root for users to register in FL Studio.
+- **FR-FLP-014:** `dawvc doctor` MUST explicitly notify users when manual relinking is expected.
+- **FR-FLP-015:** MVP acceptance requires all bundled bytes to be present and verified; automated path binding inside FL Studio is outside v0.1 scope.
 
 ---
 
-# 18. Functionele requirements — doctor
+# 18. Functional Requirements — Diagnostics (`dawvc doctor`)
 
-| ID | Prioriteit | Requirement |
+| ID | Priority | Requirement |
 |---|---|---|
-| FR-DOC-001 | Must | `dawvc doctor` MOET artifact-, dependency- en environmenthealth afzonderlijk evalueren. |
-| FR-DOC-002 | Must | Doctor MOET de geïnstalleerde FL Studio-versie vergelijken met de requirement wanneer detecteerbaar. |
-| FR-DOC-003 | Must | Doctor MOET pluginrequirements als satisfied, version-mismatch, missing of unknown rapporteren. |
-| FR-DOC-004 | Must | Doctor MOET assetbindings als verified, unresolved of mismatch rapporteren. |
-| FR-DOC-005 | Must | Doctor MOET `Bundle`, `ReferenceOnly`, `UserChoice`, `Forbidden` en `Unknown` zichtbaar onderscheiden. |
-| FR-DOC-006 | Must | Doctor MOET blocking issues en warnings afzonderlijk tonen. |
-| FR-DOC-007 | Must | Doctor MOET concrete herstelacties geven waar die veilig bekend zijn. |
-| FR-DOC-008 | Must | Doctor MAG geen reproductie garanderen wanneer ReferenceOnly of Unknown requirements niet volledig verifieerbaar zijn. |
-| FR-DOC-009 | Must | Doctor MOET een machineleesbare JSON-output kunnen produceren via `--json`. |
-| FR-DOC-010 | Must | De exitcode MOET aangeven of blocking issues bestaan. |
+| FR-DOC-001 | Must | `dawvc doctor` MUST evaluate artifact health, dependency health, and environment health independently. |
+| FR-DOC-002 | Must | Doctor MUST compare installed FL Studio versions with recorded project requirements when discoverable. |
+| FR-DOC-003 | Must | Doctor MUST verify that installed plugins satisfy minimum version compatibility (`installed >= required`). |
+| FR-DOC-004 | Must | Doctor MUST report asset bindings as `Verified`, `Unresolved`, or `Mismatch`. |
+| FR-DOC-005 | Must | Doctor MUST clearly distinguish `Bundle`, `ReferenceOnly`, `UserChoice`, `Forbidden`, and `Unknown` modes. |
+| FR-DOC-006 | Must | Doctor MUST separate blocking errors from non-blocking diagnostic warnings. |
+| FR-DOC-007 | Must | Doctor MUST provide actionable remediation instructions for identified mismatches or missing assets. |
+| FR-DOC-008 | Must | Doctor MUST NOT certify reproducibility when `ReferenceOnly` or `Unknown` dependencies are unresolved. |
+| FR-DOC-009 | Must | Doctor MUST emit machine-readable JSON reports when run with `--json`. |
+| FR-DOC-010 | Must | Process exit code MUST reflect whether blocking diagnostic errors were detected (code 6). |
 
 ---
 
-# 19. Functionele requirements — fsck
+# 19. Functional Requirements — Integrity Verification (`dawvc fsck`)
 
-| ID | Prioriteit | Requirement |
+| ID | Priority | Requirement |
 |---|---|---|
-| FR-FSC-001 | Must | `dawvc fsck` MOET standaard alle bereikbare repositoryobjecten en references controleren. |
-| FR-FSC-002 | Must | `fsck` MOET objecthashes, commitparents, snapshotrefs, manifests, artifacttrees en refs controleren. |
-| FR-FSC-003 | Must | `fsck --artifacts` MOET aanvullende native artifactvalidatie uitvoeren wanneer de adapter die ondersteunt. |
-| FR-FSC-004 | Must | Repositorycorruptie en native artifact-invaliditeit MOETEN als verschillende health domains worden gerapporteerd. |
-| FR-FSC-005 | Must | Een adapterparsefout MAG niet als `ObjectHashMismatch` worden gerapporteerd. |
-| FR-FSC-006 | Must | `fsck` MOET machineleesbare JSON-output ondersteunen. |
-| FR-FSC-007 | Must | `fsck` MAG in MVP geen automatische reparatie uitvoeren. |
-| FR-FSC-008 | Must | Onreachable objects MOGEN als warning worden gerapporteerd maar zijn niet automatisch corruptie. |
+| FR-FSC-001 | Must | `dawvc fsck` MUST inspect all reachable repository objects and references. |
+| FR-FSC-002 | Must | `fsck` MUST verify object hashes, commit parent links, snapshot refs, manifests, and artifact trees. |
+| FR-FSC-003 | Must | `fsck --artifacts` MUST perform deep validation of physical workspace files against stored hashes. |
+| FR-FSC-004 | Must | Repository corruption and invalid native project bytes MUST be reported in separate health domains. |
+| FR-FSC-005 | Must | Adapter parsing failures MUST NOT be misclassified as object store hash corruption. |
+| FR-FSC-006 | Must | `fsck` MUST support machine-readable JSON output via `--json`. |
+| FR-FSC-007 | Must | `fsck` MUST NOT perform automated destructive repairs in v0.1. |
+| FR-FSC-008 | Must | Unreachable objects MAY be reported as warnings without being treated as repository corruption. |
 
 ---
 
-# 20. CLI- en foutgedrag
+# 20. CLI Architecture & Error Handling
 
-## 20.1 Algemene CLI-requirements
+## 20.1 General CLI Requirements
 
-- **FR-CLI-001:** Ieder commando MOET `--help` ondersteunen.
-- **FR-CLI-002:** De rootcommand MOET `--version` ondersteunen.
-- **FR-CLI-003:** Interactieve prompts MOGEN alleen worden gebruikt wanneer stdin interactief is.
-- **FR-CLI-004:** Iedere promptbare actie MOET een non-interactieve flag of gecontroleerde failuremode hebben.
-- **FR-CLI-005:** Normale output MOET menselijk leesbaar zijn; relevante diagnosecommando’s ondersteunen `--json`.
-- **FR-CLI-006:** Secrets, volledige credentials en potentieel gevoelige content MOGEN niet in logs verschijnen.
-- **FR-CLI-007:** `--verbose` MOET provenance en beslissingen kunnen tonen zonder stacktraces als standaardgebruikersoutput.
-- **FR-CLI-008:** `--no-color` MOET kleurcodes uitschakelen.
-- **FR-CLI-009:** Cancellation via Ctrl+C MOET gecontroleerd afhandelen en tijdelijke state opruimen of recovery-informatie tonen.
+- **FR-CLI-001:** Every command MUST support `--help`.
+- **FR-CLI-002:** The root CLI executable MUST support `--version`.
+- **FR-CLI-003:** Interactive prompts MUST ONLY be displayed when stdin is attached to an interactive terminal.
+- **FR-CLI-004:** Every interactive prompt MUST provide a non-interactive flag or deterministic failure path.
+- **FR-CLI-005:** Terminal output MUST be human-readable by default; diagnostic commands MUST support `--json`.
+- **FR-CLI-006:** Credentials, passwords, and sensitive directories MUST be redacted in logs and error output.
+- **FR-CLI-007:** `--verbose` MUST display resolution provenance without dumping raw unhandled stack traces.
+- **FR-CLI-008:** `--no-color` MUST disable ANSI terminal styling.
+- **FR-CLI-009:** Cancellation via Ctrl+C MUST terminate gracefully, cleaning up staging files.
 
-## 20.2 Exitcodecategorieën
+## 20.2 Exit Code Mapping
 
-| Exitcode | Categorie |
+| Exit Code | Category |
 |---:|---|
-| 0 | Succes; geen blocking issues. |
-| 1 | Onverwachte algemene applicatiefout. |
-| 2 | Ongeldige CLI-input of configuratie. |
-| 3 | Repository/workspace niet gevonden of ongeldig. |
-| 4 | Repository/object-integriteitsfout. |
-| 5 | Incomplete of unresolved required dependencies. |
-| 6 | Adapter-, format- of native validation failure. |
-| 7 | Checkout/switch conflict of dirty workspace. |
-| 8 | Filesystem-, permission- of atomic-installfout. |
-| 9 | Operatie geannuleerd. |
+| 0 | Success; no blocking issues. |
+| 1 | General unexpected application error. |
+| 2 | Invalid CLI arguments or repository not found. |
+| 3 | Corrupt repository integrity. |
+| 4 | Dirty working tree preventing operation. |
+| 5 | Missing required bundle dependencies. |
+| 6 | Diagnostic failure (`doctor` or `fsck` errors). |
+| 7 | Invalid arguments or syntax error. |
+| 8 | Filesystem or atomic install failure. |
+| 9 | Operation cancelled by user. |
 
-- **FR-ERR-001:** Typed application errors MOETEN deterministisch naar één exitcodecategorie mappen.
-- **FR-ERR-002:** Een bekende fout MOET een korte summary, oorzaak en mogelijke actie tonen.
-- **FR-ERR-003:** Onverwachte fouten MOETEN een correlation ID krijgen voor lokale logs.
-- **FR-ERR-004:** JSON-output MOET stable error codes bevatten en niet afhankelijk zijn van gelokaliseerde tekst.
+- **FR-ERR-001:** Typed domain errors MUST deterministically map to standard exit codes.
+- **FR-ERR-002:** Known errors MUST print a brief summary, root cause, and remediation guidance.
+- **FR-ERR-003:** Unexpected errors MUST log a unique correlation ID.
+- **FR-ERR-004:** JSON output MUST use stable string error codes independent of localized text.
 
 ---
 
-# 21. Niet-functionele requirements — integriteit en betrouwbaarheid
+# 21. Non-Functional Requirements — Integrity & Reliability
 
 | ID | Requirement |
 |---|---|
-| NFR-INT-001 | Een uitgecheckte `.flp` MOET byte-identiek zijn aan de gecommitte payload. |
-| NFR-INT-002 | Een directory/package artifact MOET door de core deterministisch representabel zijn, ook al wordt het in v0.1 niet functioneel gebruikt. |
-| NFR-INT-003 | Iedere branchrefupdate MOET atomisch plaatsvinden. |
-| NFR-INT-004 | Iedere checkoutinstallatie MOET staged en atomic of aantoonbaar rollback-safe zijn. |
-| NFR-INT-005 | Fault injection vóór publicatie MAG de vorige bereikbare state niet beschadigen. |
-| NFR-INT-006 | Herhaald committen van dezelfde canonieke state MOET dezelfde snapshotcontent opleveren. |
-| NFR-INT-007 | Repositoryobjects MOETEN bij read opnieuw op lengte en hash worden gevalideerd wanneer integrity verification is aangevraagd. |
-| NFR-INT-008 | Opaque versioning MOET zonder adapter beschikbaar blijven. |
+| NFR-INT-001 | Checked-out `.flp` files MUST be cryptographically byte-identical to committed payloads. |
+| NFR-INT-002 | Directory/package artifacts MUST be representable deterministically by the core model. |
+| NFR-INT-003 | Branch reference updates MUST occur atomically. |
+| NFR-INT-004 | Workspace checkout installations MUST be staged and atomic or demonstrably rollback-safe. |
+| NFR-INT-005 | Fault injection immediately prior to publication MUST NOT corrupt previously reachable state. |
+| NFR-INT-006 | Repeated commits of identical canonical state MUST generate identical snapshot identities. |
+| NFR-INT-007 | Repository objects MUST be verified for length and payload hash upon read during integrity scans. |
+| NFR-INT-008 | Opaque versioning MUST remain functional when no DAW adapter is registered. |
 
 ---
 
-# 22. Niet-functionele requirements — performance en schaal
+# 22. Non-Functional Requirements — Performance & Scale
 
 | ID | Requirement |
 |---|---|
-| NFR-PERF-001 | MVP MOET repositories met 5.000 gevolgde assets ondersteunen. |
-| NFR-PERF-002 | MVP MOET ten minste 100 GB gebundelde content kunnen verwerken zonder volledige datasets in memory te laden. |
-| NFR-PERF-003 | Normaal piekgeheugengebruik BEHOORT onder circa 512 MB te blijven bij de referentiefixture. |
-| NFR-PERF-004 | Een unchanged `status` BEHOORT binnen 2 seconden te voltooien op een lokale SSD na een warme eerste scan. |
-| NFR-PERF-005 | Initiële hashing MOET streaming en disk-throughput-bound zijn; er geldt geen vaste wall-clockgarantie. |
-| NFR-PERF-006 | Hashing MOET bounded concurrency gebruiken en de machine responsief houden. |
-| NFR-PERF-007 | Reeds bekende ongewijzigde content BEHOORT via file identity, size, timestamps en cache zonder rehash te worden geaccepteerd. Verdachte wijzigingen MOETEN worden gehasht. |
-| NFR-PERF-008 | CLI-startup zonder repositoryscan BEHOORT binnen 500 ms op de referentiemachine te liggen. |
+| NFR-PERF-001 | MVP MUST support repositories tracking up to 5,000 assets. |
+| NFR-PERF-002 | MVP MUST process up to 100 GB bundled content using streaming I/O without buffering entire files in memory. |
+| NFR-PERF-003 | Peak memory utilization SHOULD remain comfortably below 512 MB on reference fixtures. |
+| NFR-PERF-004 | Unchanged warm `status` SHOULD complete within 2 seconds on local SSDs. |
+| NFR-PERF-005 | Initial hashing MUST stream data and be bound strictly by disk throughput. |
+| NFR-PERF-006 | Hashing MUST utilize bounded concurrency to keep the system responsive. |
+| NFR-PERF-007 | Unchanged assets SHOULD be accepted via cached metadata without full re-hashing. |
+| NFR-PERF-008 | CLI startup without full repository scans SHOULD complete within 500 ms. |
 
 ---
 
-# 23. Niet-functionele requirements — security en privacy
+# 23. Non-Functional Requirements — Security & Privacy
 
 | ID | Requirement |
 |---|---|
-| NFR-SEC-001 | Native projectdata en manifests MOETEN als onbetrouwbare input worden behandeld. |
-| NFR-SEC-002 | Parsers MOETEN bounds checks, cancellation en resource limits toepassen. |
-| NFR-SEC-003 | Path traversal en symlink escape MOETEN vóór materialisatie worden geblokkeerd. |
-| NFR-SEC-004 | DAWVC MAG geen pluginbinary uitvoeren, laden of installeren. |
-| NFR-SEC-005 | DAWVC MAG geen netwerkverbinding vereisen voor v0.1-functionaliteit. |
-| NFR-SEC-006 | MVP MAG geen telemetry verzenden. |
-| NFR-SEC-007 | Logs MOGEN geen credentials bevatten en BEHOREN lokale origin paths op normaal loglevel te redacteren. |
-| NFR-SEC-008 | Temp- en recoverydirectories MOETEN uitsluitend onder gecontroleerde projectlocaties worden aangemaakt. |
-| NFR-SEC-009 | Archive-extractioncode MAG niet bereikbaar zijn vanuit v0.1 `.flp`-flows, tenzij de archivefeature later expliciet wordt geactiveerd en beveiligd. |
+| NFR-SEC-001 | Native project data and manifests MUST be handled as untrusted adversarial input. |
+| NFR-SEC-002 | Parsers MUST enforce byte bounds checks, timeouts, and resource limits. |
+| NFR-SEC-003 | Path traversal (`..`) and symlink escapes MUST be rejected before materialization. |
+| NFR-SEC-004 | DAWVC MUST NOT execute, load, or install third-party plugin binaries. |
+| NFR-SEC-005 | DAWVC MUST operate 100% offline without requiring network connectivity in v0.1. |
+| NFR-SEC-006 | MVP MUST NOT transmit telemetry or analytics. |
+| NFR-SEC-007 | Logs MUST NOT contain credentials and SHOULD redact user profile directories. |
+| NFR-SEC-008 | Temporary and recovery files MUST only be created in project-bound folders. |
+| NFR-SEC-009 | Archive extraction routines MUST NOT be exposed in `.flp` workflows unless explicitly secured. |
 
 ---
 
-# 24. Niet-functionele requirements — compatibility en maintainability
+# 24. Non-Functional Requirements — Compatibility & Maintainability
 
 | ID | Requirement |
 |---|---|
-| NFR-CMP-001 | De public technical preview ondersteunt officieel Windows 11 x64. |
-| NFR-CMP-002 | De FL Studio-adapter wordt gevalideerd tegen FL Studio 2026.x-fixtures. |
-| NFR-CMP-003 | Oudere, nieuwere of onbekende FLP-versies BEHOREN opaque versioneerbaar te blijven. |
-| NFR-CMP-004 | Persistente JSON-objecten MOETEN vanaf de eerste release een `schemaVersion` bevatten. |
-| NFR-CMP-005 | Onbekende toekomstige velden BEHOREN bij read/write round-trips behouden te blijven waar het model herschrijfbaar is. |
-| NFR-MNT-001 | Domain MAG niet refereren aan Infrastructure, CLI of FL Studio-adapterprojecten. |
-| NFR-MNT-002 | CLI en toekomstige UI MOETEN dezelfde Application use-cases kunnen gebruiken. |
-| NFR-MNT-003 | Iedere adaptercapability MOET afzonderlijk testbaar en expliciet gedeclareerd zijn. |
-| NFR-MNT-004 | Publieke JSON-output en persisted schemas vereisen compatibilitytests. |
-| NFR-MNT-005 | Belangrijke format- en persistencebesluiten MOETEN als ADR worden vastgelegd. |
+| NFR-CMP-001 | Public technical preview officially supports Windows 11 x64. |
+| NFR-CMP-002 | FL Studio adapter is validated against FL Studio 2026.x fixtures. |
+| NFR-CMP-003 | Older, newer, or unsupported FLP versions SHOULD remain opaquely versionable. |
+| NFR-CMP-004 | Persisted JSON objects MUST include a `schemaVersion` starting from v1. |
+| NFR-CMP-005 | Unrecognized future fields SHOULD be preserved during round-trip deserialization. |
+| NFR-MNT-001 | `DawVcs.Domain` MUST NOT reference Infrastructure, CLI, or Adapter projects. |
+| NFR-MNT-002 | CLI and future GUI clients MUST invoke identical Application use cases. |
+| NFR-MNT-003 | Every adapter capability MUST be independently testable and explicitly declared. |
+| NFR-MNT-004 | Public JSON schemas and diagnostic reports require golden compatibility tests. |
+| NFR-MNT-005 | Architectural decisions MUST be codified in Architecture Decision Records (ADRs). |
 
 ---
 
-# 25. Packaging, licentie en documentatie
+# 25. Packaging, Licensing & Distribution
 
 | ID | Requirement |
 |---|---|
-| NFR-REL-001 | De release MOET als self-contained `win-x64` executable/ZIP beschikbaar zijn. |
-| NFR-REL-002 | Een gebruiker MAG geen aparte .NET-runtime hoeven installeren. |
-| NFR-REL-003 | De repository MOET een MIT-licentiebestand bevatten. |
-| NFR-REL-004 | De publieke repository MOET een README met installatie, quick start, beperkingen en recoveryinstructies bevatten. |
-| NFR-REL-005 | De release MOET checksums bevatten voor distributieartefacts. |
-| NFR-REL-006 | Testfixtures MOGEN alleen zelfgemaakte of vrij distribueerbare projectcontent bevatten. |
-| NFR-REL-007 | De documentatie MOET expliciet vermelden dat pluginbinaries en commerciële libraries niet worden gebundeld. |
-| NFR-REL-008 | De documentatie MOET expliciet vermelden dat handmatige FL Studio search-pathconfiguratie of relinking nodig kan zijn. |
+| NFR-REL-001 | Release MUST be distributed as a self-contained `win-x64` executable and ZIP archive. |
+| NFR-REL-002 | Users MUST NOT be required to install a separate .NET runtime. |
+| NFR-REL-003 | The repository MUST include an MIT license file. |
+| NFR-REL-004 | The repository MUST provide a comprehensive README with setup, quick start, and recovery guides. |
+| NFR-REL-005 | The release MUST publish cryptographic SHA-256 checksums for distribution artifacts. |
+| NFR-REL-006 | Test fixtures MUST contain only custom or royalty-free public domain audio. |
+| NFR-REL-007 | Documentation MUST explicitly state that plugin binaries and sound libraries are not bundled. |
+| NFR-REL-008 | Documentation MUST explicitly state that manual FL Studio search path setup may be required. |
 
 ---
 
-# 26. Acceptatiescenario’s
+# 26. Acceptance Criteria
 
-## AC-001 — Walking skeleton
-
-**Gerelateerde requirements:** FR-REP-001, FR-OBJ-001, FR-COM-001, FR-COM-010, FR-CHK-001, NFR-INT-001.
-
+## AC-001 — Walking Skeleton
 ```gherkin
-Given een geldige nieuwe repository met één primaire .flp
-When de gebruiker init, commit en log uitvoert
-And de commit naar een lege restore-directory uitcheckt
-Then bevat log de nieuwe commit
-And is de herstelde .flp byte-identiek aan het origineel
-And is het originele projectbestand nooit door DAWVC gewijzigd
+Given a valid repository tracking one primary .flp project
+When the user executes init, commit, and log
+And checks out the commit into an empty target directory
+Then log displays the recorded commit
+And the restored .flp is byte-identical to the original file
+And the source project file was never modified by DAWVC
 ```
 
-## AC-002 — Deduplicatie
-
-**Gerelateerde requirements:** FR-OBJ-001, FR-OBJ-002, FR-BND-007.
-
+## AC-002 — Content Deduplication
 ```gherkin
-Given twee lokale paden met exact dezelfde assetbytes
-When beide als dependency worden geregistreerd
-Then verwijzen zij naar dezelfde blobidentity
-And worden de bytes slechts eenmaal in de object store opgeslagen
+Given two local paths referencing identical audio sample bytes
+When both are registered as project dependencies
+Then both point to the same content-addressed blob identity
+And the audio bytes are stored only once in the object store
 ```
 
-## AC-003 — Gewijzigde content met dezelfde naam
-
-**Gerelateerde requirements:** FR-DEP-003, FR-BND-005.
-
+## AC-003 — Modified Content with Identical Name
 ```gherkin
-Given een gevolgde asset kick.wav
-When de bytes veranderen maar de filename gelijk blijft
-Then wordt een nieuwe contentidentity gemaakt
-And wordt de oude binding niet als verified hergebruikt
+Given a tracked asset named kick.wav
+When the audio bytes change while the filename remains identical
+Then a new content-addressed identity is generated
+And the old local binding is not reused as verified
 ```
 
-## AC-004 — Nieuwe dependency vereist add
-
-**Gerelateerde requirements:** FR-STG-003, FR-STG-004, FR-DEP-011.
-
+## AC-004 — Explicit Staging Required for New Dependencies
 ```gherkin
-Given een scan die een nieuwe bundelbare sample ontdekt
-When de gebruiker direct commit uitvoert
-Then wordt de sample niet stil toegevoegd
-And rapporteert commit dat expliciete staging nodig is
-When de gebruiker dawvc add uitvoert en opnieuw commit
-Then wordt de sample gebundeld
+Given a scan that discovers a new bundlable audio sample
+When the user runs commit directly
+Then the sample is not silently committed
+And commit reports that explicit staging is required
+When the user executes dawvc add and commits again
+Then the sample is safely bundled into the snapshot
 ```
 
-## AC-005 — Incomplete dependency
-
-**Gerelateerde requirements:** FR-DEP-012, FR-DEP-013, FR-COM-009.
-
+## AC-005 — Missing Required Bundle Dependency
 ```gherkin
-Given een ontbrekende verplichte Bundle dependency
-When de gebruiker een normale commit uitvoert
-Then stopt het commando met exitcode 5
-When de gebruiker commit --allow-incomplete uitvoert
-Then wordt een incomplete snapshot gemaakt
-And toont doctor de ontbrekende dependency als blocking issue
+Given a missing required Bundle dependency
+When the user executes a normal commit
+Then the command aborts with exit code 5
+When the user commits with --allow-incomplete
+Then an incomplete snapshot is recorded
+And dawvc doctor highlights the missing dependency as a blocking issue
 ```
 
-## AC-006 — ReferenceOnly plugin ontbreekt
-
-**Gerelateerde requirements:** FR-DEP-006, FR-DEP-014, FR-DOC-003.
-
+## AC-006 — Missing ReferenceOnly Plugin
 ```gherkin
-Given een project dat een niet-geïnstalleerde commerciële plugin vereist
-When de gebruiker commit uitvoert
-Then wordt de pluginbinary niet gebundeld
-And slaagt de commit
-And rapporteert doctor de plugin als missing ReferenceOnly requirement
+Given a project referencing an uninstalled commercial plugin
+When the user executes commit
+Then the plugin binary is not bundled
+And the commit succeeds
+And dawvc doctor reports the plugin as a missing ReferenceOnly requirement
 ```
 
-## AC-007 — Onbekende FLP-versie
-
-**Gerelateerde requirements:** FR-SCAN-004, FR-COM-007, FR-FLP-008, NFR-INT-008.
-
+## AC-007 — Unknown FLP Version Fallback
 ```gherkin
-Given een herkenbare maar niet-ondersteunde FLP-versie
-When de gebruiker scan en commit uitvoert
-Then wordt geen semantische parsing afgedwongen
-And kan het artifact opaque worden gecommit
-And kan het later byte-identiek worden hersteld
+Given an unrecognized or future FL Studio project version
+When the user runs scan and commit
+Then semantic parsing is bypassed
+And the project artifact is committed opaquely
+And can subsequently be restored byte-identically
 ```
 
-## AC-008 — Ongeldige FLP
-
-**Gerelateerde requirements:** FR-SCAN-006, FR-COM-008, FR-FSC-004.
-
+## AC-008 — Invalid FLP Project
 ```gherkin
-Given een truncated FLP die een bekende harde formatinvariant schendt
-When de gebruiker een normale commit uitvoert
-Then vereist DAWVC expliciete bevestiging of --allow-invalid-artifact
-And blijft repository-integriteit afzonderlijk van native artifacthealth
+Given a truncated FLP file violating core binary header invariants
+When the user runs commit
+Then DAWVC requires confirmation or --allow-invalid-artifact
+And repository integrity remains separate from native artifact health
 ```
 
-## AC-009 — Dirty checkout
-
-**Gerelateerde requirements:** FR-CHK-008, FR-CHK-009, FR-CHK-010.
-
+## AC-009 — Dirty Workspace Checkout Guard
 ```gherkin
-Given een workspace met niet-gecommitte wijzigingen
-When de gebruiker een normale checkout uitvoert
-Then stopt checkout met exitcode 7
-And blijven alle lokale bytes onaangeraakt
-When de gebruiker --restore-to gebruikt
-Then wordt de snapshot in de gekozen aparte directory hersteld
+Given a workspace with uncommitted modifications
+When the user runs checkout
+Then checkout aborts with exit code 7
+And local workspace bytes remain completely untouched
+When the user runs checkout with --restore-to <dir>
+Then the snapshot is cleanly restored into the designated folder
 ```
 
-## AC-010 — Geforceerde checkout en recovery
-
-**Gerelateerde requirements:** FR-CHK-010, FR-CHK-011, INV-012.
-
+## AC-010 — Forced Checkout with Recovery Copy
 ```gherkin
-Given een dirty workspace
-When de gebruiker checkout --force uitvoert
-Then wordt eerst een volledige recovery copy gemaakt
-And wordt de recoverylocatie gerapporteerd
-And wordt pas daarna de geverifieerde checkout gepubliceerd
+Given a workspace with uncommitted modifications
+When the user executes checkout --force
+Then a complete recovery backup of local files is generated first
+And the recovery backup directory path is printed to stdout
+And only then is the verified snapshot installed
 ```
 
-## AC-011 — Crash tijdens checkout
-
-**Gerelateerde requirements:** FR-CHK-004 tot en met FR-CHK-007, NFR-INT-005.
-
+## AC-011 — Process Interruption During Checkout
 ```gherkin
-Given een bestaande geldige workspace
-When het proces tijdens staged materialization wordt afgebroken
-Then blijft de bestaande workspace byte-exact onaangeraakt
-And wordt de candidate niet als succesvolle checkout beschouwd
+Given an active valid workspace
+When the checkout process is terminated mid-staging
+Then the active workspace remains byte-identically untouched
+And the incomplete candidate is discarded
 ```
 
-## AC-012 — Repositorycorruptie versus parserfout
-
-**Gerelateerde requirements:** FR-FSC-004, FR-FSC-005.
-
+## AC-012 — Repository Integrity vs. Adapter Failure
 ```gherkin
-Given een blob met geldige opgeslagen bytes die de adapter niet kan parsen
-When fsck wordt uitgevoerd
-Then rapporteert repository integrity de blob als intact
-And rapporteert artifact integrity de adapterfailure afzonderlijk
-And wordt geen ObjectHashMismatch gerapporteerd
+Given a valid stored blob that the adapter cannot parse
+When dawvc fsck is executed
+Then repository integrity reports the blob as intact
+And artifact health reports the adapter parsing issue separately
+And zero ObjectHashMismatch errors are reported
 ```
 
-## AC-013 — Cross-machine binding
-
-**Gerelateerde requirements:** FR-BND-003, FR-BND-007, FR-FLP-013 tot en met FR-FLP-015.
-
+## AC-013 — Cross-Machine Portability
 ```gherkin
-Given een repository die op machine A is gemaakt
-And machine B heeft een andere samplefolderstructuur
-When machine B checkout en doctor uitvoert
-Then zijn alle gebundelde bytes aanwezig
-And worden lokale identieke assets via hash herkend
-And toont doctor de managed assetroot en eventuele handmatige FL Studio-stappen
+Given a repository authored on Machine A
+And Machine B features a different local folder structure
+When Machine B runs checkout and doctor
+Then all bundled audio samples are materialized
+And identical local assets are discovered by hash
+And doctor presents the managed asset root with FL Studio instructions
 ```
 
-## AC-014 — Performancebaseline
-
-**Gerelateerde requirements:** NFR-PERF-001 tot en met NFR-PERF-007.
-
+## AC-014 — Performance Baseline
 ```gherkin
-Given de referentierepository met 5.000 ongewijzigde assets op een lokale SSD
-And een warme geldige index
-When dawvc status wordt uitgevoerd
-Then voltooit het commando bij voorkeur binnen 2 seconden
-And blijft normaal geheugengebruik onder circa 512 MB
+Given a reference repository containing 5,000 tracked assets on a local SSD
+And a warm valid local index
+When dawvc status is executed
+Then the command completes within 2 seconds
+And memory usage remains below 512 MB
 ```
 
 ---
 
-# 27. MVP release gate
+# 27. MVP Release Gate
 
-MVP v0.1 mag als public technical preview worden uitgebracht wanneer:
+MVP v0.1 may be released as a public technical preview when:
 
-- alle Must-requirements zijn geïmplementeerd en aantoonbaar getest;
-- AC-001 tot en met AC-013 volledig automatisch of reproduceerbaar handmatig slagen;
-- AC-014 is gemeten en eventuele afwijking openbaar is gedocumenteerd;
-- alle supported FL Studio 2026.x-fixtures slagen;
-- unknown en invalid fixtures gecontroleerd degraderen;
-- fault-injectiontests aantonen dat commit en checkout geen bereikbare corrupte state publiceren;
-- de publicatie self-contained op een schone Windows 11 x64-machine start zonder geïnstalleerde .NET-runtime;
-- README, MIT-licentie, securitybeperkingen en known limitations aanwezig zijn;
-- de distributiechecksums kloppen;
-- er geen commerciële of niet-herdistribueerbare bytes in testfixtures of releaseartefacts zitten.
+- All Must requirements are implemented and verified by automated tests;
+- Acceptance criteria AC-001 through AC-013 pass reproducibly;
+- AC-014 performance metrics are measured and documented;
+- All FL Studio 2026.x test fixtures pass;
+- Unknown and invalid fixtures degrade safely;
+- Fault injection validates that aborted operations never publish corrupt repository state;
+- Distribution package runs self-contained on a clean Windows 11 VM without .NET runtime pre-installed;
+- README, MIT license, security disclosures, and known limitations are published;
+- Cryptographic SHA-256 checksums are verified;
+- Zero copyrighted or non-distributable assets reside in fixtures or releases.
 
 ---
 
-# 28. Traceability naar Technical Design
+# 28. Traceability to Technical Design
 
-| Requirementgroep | Belangrijkste Technical Design-secties |
+| Requirement Group | Technical Design Reference Sections |
 |---|---|
-| Repository/config | 5, 9, 10, 22–26 |
-| Artifact/object store | 11, 23–26, 42–46 |
-| Dependencies/bindings | 12–14, 21, 29–30 |
-| Adapter/FLP | 17–18, 53–54, 60 |
-| Checkout/recovery | 27, 45–46 |
-| Branching | 31–33 |
-| Security/licensing | 48–50 |
-| Errors/observability | 51–52 |
-| Testing/acceptance | 53–56, 64 |
+| Repository & Config | Sections 5, 9, 10, 22–26 |
+| Artifacts & Object Store | Sections 11, 23–26, 42–46 |
+| Dependencies & Bindings | Sections 12–14, 21, 29–30 |
+| Adapter & FLP Inspection | Sections 17–18, 53–54, 60 |
+| Checkout & Recovery | Sections 27, 45–46 |
+| Branching | Sections 31–33 |
+| Security & Licensing | Sections 48–50 |
+| Errors & Diagnostics | Sections 51–52 |
+| Testing & Verification | Sections 53–56, 64 |
 
 ---
 
-# 29. Uitgestelde requirements
+# 29. Deferred Requirements
 
-De volgende onderwerpen worden pas in een latere requirementsversie normatief gemaakt:
+The following capabilities are formally deferred to post-MVP releases:
 
-- remotes en netwerkprotocol;
-- multi-user authorization en locking;
-- desktopinterface;
-- native semantic diff/merge;
-- adapter-native writing;
-- tweede DAW-adapter;
-- directory-, package- en archive-artifacts in productflows;
-- collaboration snapshots en cross-DAW exchange;
-- objectcompressie, chunking en partial checkout;
-- telemetry, crash reporting en auto-update.
-
-Deze onderwerpen mogen de implementatie van MVP v0.1 niet blokkeren en mogen niet via impliciete scope-uitbreiding worden toegevoegd.
+- Remote server, synchronization protocol, and authentication;
+- Multi-user project locking;
+- Desktop GUI client (Avalonia UI);
+- Semantic project diffing and merging;
+- Native project writing via adapters;
+- Secondary DAW adapters (Ableton Live, Logic Pro, Studio One, REAPER);
+- Directory, package, and archive artifacts in primary workflows;
+- Collaboration snapshots and cross-DAW project exchange;
+- Object compression, CDC chunking, and partial checkout;
+- Automated telemetry and crash reporting.

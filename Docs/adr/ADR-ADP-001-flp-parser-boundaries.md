@@ -1,73 +1,74 @@
 # ADR-ADP-001: FLP Parser Boundaries & Fallback Behavior
 
-- **Status:** Geaccepteerd
-- **Datum:** 2026-09-13
-- **Auteurs:** DAWVC Contributors
-- **Gerelateerde Requirements:** FR-FLP-001, FR-FLP-002, FR-FLP-003, FR-FLP-004, FR-FLP-005, FR-FLP-008, FR-FLP-009, NFR-SEC-001, NFR-SEC-004
-- **Werkpakket:** WP-01 (Spike A) / WP-05
+- **Status:** Accepted
+- **Date:** 2026-09-13
+- **Authors:** DAWVC Contributors
+- **Related Requirements:** FR-FLP-001, FR-FLP-002, FR-FLP-003, FR-FLP-004, FR-FLP-005, FR-FLP-008, FR-FLP-009, NFR-SEC-001, NFR-SEC-004
+- **Work Package:** WP-01 (Spike A) / WP-05
 
 ---
 
-## Context & Probleemdefinitie
+## Context & Problem Statement
 
-DAWVC moet native FL Studio-projectbestanden (`.flp`) kunnen herkennen, inspecteren en valideren zonder risico op beschadiging van de bronbestanden en zonder onbeperkte geheugenallocaties bij corrupte of gigantische projecten (`FR-FLP-001` t/m `FR-FLP-012`).
-Belangrijke randvoorwaarden:
-1. **Strikt read-only:** De adapter mag de bronbestanden onder geen beding muteren (`FR-FLP-002`, `FR-FLP-009`).
-2. **Begrensde executie (Bounded Parser):** De parser mag niet vastlopen, crashen of oneindig geheugen alloceren bij corrupte chunks of malafide input.
-3. **Graceful Fallback:** Als een project een onbekende of toekomstige FL Studio-versie heeft, moet DAWVC het bestand niet weigeren of kapot parsen, maar veilig degraderen naar een *opaque project artifact* (`FR-FLP-008`).
+DAWVC must be able to detect, inspect, and validate native FL Studio project files (`.flp`) without risking corruption of source files and without unbounded memory allocations when handling corrupted or giant projects (`FR-FLP-001` through `FR-FLP-012`).
+Key constraints:
+1. **Strictly Read-Only:** The adapter must under no circumstances mutate source project files (`FR-FLP-002`, `FR-FLP-009`).
+2. **Bounded Execution (Bounded Parser):** The parser must not hang, crash, or allocate unbounded memory when encountering corrupted chunks or adversarial input.
+3. **Graceful Fallback:** If a project uses an unknown or future FL Studio version, DAWVC must not reject or fail parsing, but instead safely degrade to an *opaque project artifact* (`FR-FLP-008`).
 
-## Overwogen Opties
+## Considered Options
 
-1. **Volledige reverse-engineered AST-parser (in-memory DOM van alle events):**
-   - Bouwt een compleet objectmodel op van alle patronen, noten, automations en plugins.
-   - Hoog risico: FL Studio-versie-updates wijzigen interne event-structuren; binaire formaatwijzigingen leiden direct tot parser-crashes.
+1. **Full Reverse-Engineered AST Parser (In-memory DOM of all events):**
+   - Builds a complete object model of all patterns, notes, automations, and plugins.
+   - High risk: FL Studio version updates alter internal event structures; binary format changes cause immediate parser crashes.
 2. **Native FL Studio COM / Scripting Automation:**
-   - Vereist dat FL Studio geïnstalleerd is en op de achtergrond gestart wordt.
-   - Schendt `FR-FLP-010` (adapter mag FL Studio niet starten voor detectie) en werkt niet in headless CI of op machines zonder FL Studio licentie.
-3. **Bounded Chunk Streamer met Heuristische Metadata-Extractie:**
-   - Valideert de vaste `FLhd` header (14 bytes: magic, format, channel count, PPQ).
-   - Scant uitsluitend de stream van de `FLdt` data-chunk via een bounded lezer (max. 2 MB scanlimiet voor headers/metadata).
-   - Leest selectief betrouwbare variabele events (o.a. event 199 = versie string, event 201 = titel, event 203 = samples, event 214 = plugins) met LEB128 lengtevalidatie.
-   - Degradeert bij onbekende versies gecontroleerd naar `ProjectDetectionStatus.Unsupported` (opaque snapshotting).
+   - Requires FL Studio to be installed and spawned in the background.
+   - Violates `FR-FLP-010` (adapter must not launch FL Studio for detection) and cannot run in headless CI environments or systems without an FL Studio license.
+3. **Bounded Chunk Streamer with Heuristic Metadata Extraction:**
+   - Validates the fixed `FLhd` header (14 bytes: magic, format, channel count, PPQ).
+   - Scans only the stream of the `FLdt` data chunk via a bounded reader (max 2 MB scan limit for headers/metadata).
+   - Selectively reads reliable variable events (e.g., event 199 = version string, event 201 = title, event 203 = sample paths, event 214 = plugin names) with LEB128 length validation.
+   - Controlled fallback to `ProjectDetectionStatus.Unsupported` (opaque snapshotting) for unknown versions.
 
-## Besluit
+## Decision Outcome
 
-We kiezen voor optie 3: **Bounded Chunk Streamer met Opaque Fallback**.
+We choose Option 3: **Bounded Chunk Streamer with Opaque Fallback**.
 
-### Binaire Formaatgrenzen
+### Binary Format Boundaries
 
 1. **Header Chunk (`FLhd` - 14 bytes):**
    - Offset `0..3`: `FLhd` (`0x46 0x4C 0x68 0x64`).
-   - Offset `4..7`: Chunk payloadlengte (`uint32 = 6`).
+   - Offset `4..7`: Chunk payload length (`uint32 = 6`).
    - Offset `8..9`: Format (`uint16`).
-   - Offset `10..11`: Kanaalaantal (`uint16`).
+   - Offset `10..11`: Channel count (`uint16`).
    - Offset `12..13`: Time division / PPQ (`uint16`).
 2. **Data Chunk (`FLdt`):**
    - Offset `0..3`: `FLdt` (`0x46 0x4C 0x64 0x74`).
-   - Offset `4..7`: Totale datagrootte (`uint32`).
+   - Offset `4..7`: Total data size (`uint32`).
    - Event loop:
      - Events `0..63`: 1-byte data.
      - Events `64..127`: 2-byte data.
      - Events `128..191`: 4-byte data.
      - Events `192..255`: Variable-length quantity (LEB128) + payload bytes.
-3. **Versiedetectie:**
-   - Event `199` (`0xC7`) bevat de FL Studio-versie (bv. `25.2.5.5319` voor FL Studio 2026.x).
-   - Versies `25.x`, `24.x`, `21.x` en `20.x` worden geaccepteerd met status `Valid`.
-   - Onbekende of toekomstige versies krijgen de status `Unsupported` met opaciteit en worden als `SingleFileArtifact` byte-exact opgeslagen zonder dat commits worden geblokkeerd.
+3. **Version Detection:**
+   - Event `199` (`0xC7`) contains the FL Studio version string (e.g., `25.2.5.5319` for FL Studio 2026.x).
+   - Versions `25.x`, `24.x`, `21.x`, and `20.x` are accepted with status `Valid`.
+   - Unknown or future versions are assigned status `Unsupported` with opacity and stored byte-identically as `SingleFileArtifact` without blocking commits.
 
-## Gevolgen
+## Consequences
 
-### Positieve gevolgen
-- **Aantoonbare Read-Only Integriteit:** De bronstream wordt uitsluitend geopend met `FileAccess.Read` en `FileShare.Read`. Tests tonen via BLAKE3-hashing aan dat inspectie 0 bytes wijzigt.
-- **Geen externe afhankelijkheden:** Geen FL Studio installatie, COM API of native DLL's vereist om een project te detecteren.
-- **Veilig tegen corruptie:** Truncated streams, corrupte signatures en buitensporige eventlengtes worden gecontroleerd opgevangen als `ProjectDetectionStatus.Invalid` zonder onbehandelde exceptions.
+### Positive Consequences
+- **Proven Read-Only Integrity:** Source streams are opened strictly with `FileAccess.Read` and `FileShare.Read`. Tests verify via BLAKE3 hashing that inspection modifies 0 bytes.
+- **Zero External Dependencies:** No FL Studio installation, COM API, or native DLLs are required to detect projects.
+- **Corruption Resilience:** Truncated streams, corrupted signatures, and out-of-bounds event lengths are safely handled as `ProjectDetectionStatus.Invalid` without unhandled exceptions.
 
-### Negatieve gevolgen of risico's
-- Derdepartij pluginparameters en diep geneste preset-blobs worden in v0.1 niet semantisch gedecodificeerd (valt onder best-effort discovery conform `DEC-MVP-005`).
+### Negative Consequences or Risks
+- Third-party plugin parameters and deeply nested preset blobs are not semantically decoded in v0.1 (treated as best-effort discovery per `DEC-MVP-005`).
 
-## Verificatie & Bewijslast
+## Verification & Validation Evidence
 
-Geverifieerd in `tests/DawVcs.Adapters.FLStudio.Tests/FLStudioAdapterFixtureTests.cs`:
-- Reële FL Studio 2026.x fixture (`Nithiann & Mr. Unit - ID.flp`) met succes geïnspecteerd (versie `25.2.5.5319`, 37 kanalen, 96 PPQ);
-- BLAKE3 voor/na-hashcontrole bewijst dat de fixture-bytes 100% ongewijzigd blijven;
-- Negatieve tests: truncated FLP (<14 bytes), ongeldige magic bytes (`RIFF`), en toekomstige versie (`99.0.0` met correcte opaque fallback).
+Verified in `tests/DawVcs.Adapters.FLStudio.Tests/FLStudioAdapterFixtureTests.cs`:
+- Real FL Studio 2026.x fixture (`Nithiann & Mr. Unit - ID.flp`) successfully inspected (version `25.2.5.5319`, 37 channels, 96 PPQ).
+- BLAKE3 pre/post hash verification proves that fixture bytes remain 100% untouched.
+- Negative tests: truncated FLP (<14 bytes), invalid magic bytes (`RIFF`), and future version (`99.0.0` with proper opaque fallback).
+
