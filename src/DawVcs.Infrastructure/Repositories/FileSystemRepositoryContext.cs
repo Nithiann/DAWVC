@@ -35,7 +35,7 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
     public IStagingIndex StagingIndex => _stagingIndex;
     public ILocalBindingStore LocalBindings => _localBindings;
 
-    public FileSystemRepositoryContext(string rootPath)
+    public FileSystemRepositoryContext(string rootPath, Action<string>? onBeforeAtomicPublish = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
 
@@ -45,7 +45,7 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
         _headFilePath = Path.Combine(_dotDawvcPath, "HEAD");
         _objectsPath = Path.Combine(_dotDawvcPath, "objects");
 
-        _objectStore = new LooseObjectStore(_rootPath);
+        _objectStore = new LooseObjectStore(_rootPath, onBeforeAtomicPublish);
         _stagingIndex = new SqliteStagingIndex(_rootPath);
         _localBindings = new JsonLocalBindingStore(_dotDawvcPath);
     }

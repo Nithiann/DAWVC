@@ -99,11 +99,23 @@ public static class FlpBinaryReader
                 // 1-byte data
                 if (stream.CanSeek)
                 {
+                    if (stream.Position + 1 > stream.Length)
+                    {
+                        isSuspicious = true;
+                        suspiciousReason = "Premature end of stream while reading 1-byte event.";
+                        break;
+                    }
                     stream.Seek(1, SeekOrigin.Current);
                 }
                 else
                 {
-                    await stream.ReadAsync(byteBuffer.AsMemory(0, 1), cancellationToken).ConfigureAwait(false);
+                    int r = await stream.ReadAsync(byteBuffer.AsMemory(0, 1), cancellationToken).ConfigureAwait(false);
+                    if (r == 0)
+                    {
+                        isSuspicious = true;
+                        suspiciousReason = "Premature end of stream while reading 1-byte event.";
+                        break;
+                    }
                 }
                 bytesScanned += 1;
             }
@@ -122,16 +134,34 @@ public static class FlpBinaryReader
                             detectedTempo = bpm;
                         }
                     }
+                    else
+                    {
+                        isSuspicious = true;
+                        suspiciousReason = "Premature end of stream while reading 2-byte tempo event.";
+                        break;
+                    }
                 }
                 else
                 {
                     if (stream.CanSeek)
                     {
+                        if (stream.Position + 2 > stream.Length)
+                        {
+                            isSuspicious = true;
+                            suspiciousReason = "Premature end of stream while reading 2-byte event.";
+                            break;
+                        }
                         stream.Seek(2, SeekOrigin.Current);
                     }
                     else
                     {
-                        await ReadExactAsync(stream, byteBuffer.AsMemory(0, 2), cancellationToken).ConfigureAwait(false);
+                        int r = await ReadExactAsync(stream, byteBuffer.AsMemory(0, 2), cancellationToken).ConfigureAwait(false);
+                        if (r < 2)
+                        {
+                            isSuspicious = true;
+                            suspiciousReason = "Premature end of stream while reading 2-byte event.";
+                            break;
+                        }
                     }
                     bytesScanned += 2;
                 }
@@ -152,16 +182,34 @@ public static class FlpBinaryReader
                             detectedTempo = Math.Round(bpm, 2);
                         }
                     }
+                    else
+                    {
+                        isSuspicious = true;
+                        suspiciousReason = "Premature end of stream while reading 4-byte fine tempo event.";
+                        break;
+                    }
                 }
                 else
                 {
                     if (stream.CanSeek)
                     {
+                        if (stream.Position + 4 > stream.Length)
+                        {
+                            isSuspicious = true;
+                            suspiciousReason = "Premature end of stream while reading 4-byte event.";
+                            break;
+                        }
                         stream.Seek(4, SeekOrigin.Current);
                     }
                     else
                     {
-                        await ReadExactAsync(stream, byteBuffer.AsMemory(0, 4), cancellationToken).ConfigureAwait(false);
+                        int r = await ReadExactAsync(stream, byteBuffer.AsMemory(0, 4), cancellationToken).ConfigureAwait(false);
+                        if (r < 4)
+                        {
+                            isSuspicious = true;
+                            suspiciousReason = "Premature end of stream while reading 4-byte event.";
+                            break;
+                        }
                     }
                     bytesScanned += 4;
                 }

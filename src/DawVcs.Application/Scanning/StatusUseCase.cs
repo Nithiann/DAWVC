@@ -84,8 +84,9 @@ public sealed class StatusUseCase : IUseCase<StatusRequest, StatusResult>
 
         if (Directory.Exists(repoRoot))
         {
-            var allFiles = Directory.GetFiles(repoRoot, "*", SearchOption.AllDirectories);
-            foreach (var file in allFiles)
+            var candidateList = new List<(string FilePath, ArtifactPath ArtifactPath, long FileLength, DateTime LastModified)>();
+
+            foreach (var file in Directory.EnumerateFiles(repoRoot, "*", SearchOption.AllDirectories))
             {
                 var relPath = Path.GetRelativePath(repoRoot, file);
                 var segments = relPath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -100,47 +101,68 @@ public sealed class StatusUseCase : IUseCase<StatusRequest, StatusResult>
                 }
 
                 var fileInfo = new FileInfo(file);
-                var fileLength = fileInfo.Length;
-                var lastModified = fileInfo.LastWriteTimeUtc;
+                candidateList.Add((file, artifactPath, fileInfo.Length, fileInfo.LastWriteTimeUtc));
+            }
 
-                // Cache-accelerated hash check (FR-SCAN-011, NFR-PERF-004)
-                var cachedHash = await context.StagingIndex.TryGetCachedHashAsync(artifactPath, fileLength, lastModified, cancellationToken).ConfigureAwait(false);
-                ContentHash hash;
-                if (cachedHash.HasValue)
+            // Fast cache check (FR-SCAN-011, NFR-PERF-004)
+            var uncachedList = new List<(string FilePath, ArtifactPath ArtifactPath, long FileLength, DateTime LastModified)>();
+            var resolvedHashes = new Dictionary<string, ContentHash>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var candidate in candidateList)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var cached = await context.StagingIndex.TryGetCachedHashAsync(candidate.ArtifactPath, candidate.FileLength, candidate.LastModified, cancellationToken).ConfigureAwait(false);
+                if (cached.HasValue)
                 {
-                    hash = cachedHash.Value;
+                    resolvedHashes[candidate.ArtifactPath.Value] = cached.Value;
                 }
                 else
                 {
-                    hash = await Blake3ContentHasher.HashFileAsync(file, cancellationToken).ConfigureAwait(false);
-                    await context.StagingIndex.SetCachedHashAsync(artifactPath, fileLength, lastModified, hash, cancellationToken).ConfigureAwait(false);
+                    uncachedList.Add(candidate);
                 }
+            }
 
-                onDiskFiles[artifactPath.Value] = (file, fileLength, hash);
+            // Bounded concurrency hashing for uncached files (NFR-PERF-006)
+            if (uncachedList.Count > 0)
+            {
+                var concurrentResolved = new System.Collections.Concurrent.ConcurrentDictionary<string, ContentHash>(StringComparer.OrdinalIgnoreCase);
+                await ConcurrencyLimiter.ForEachAsync(uncachedList, async (candidate, ct) =>
+                {
+                    var hash = await Blake3ContentHasher.HashFileAsync(candidate.FilePath, ct).ConfigureAwait(false);
+                    await context.StagingIndex.SetCachedHashAsync(candidate.ArtifactPath, candidate.FileLength, candidate.LastModified, hash, ct).ConfigureAwait(false);
+                    concurrentResolved[candidate.ArtifactPath.Value] = hash;
+                }, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-                // If already explicitly staged, skip further classification
-                if (stagedDict.ContainsKey(artifactPath.Value))
+                foreach (var (k, v) in concurrentResolved)
+                {
+                    resolvedHashes[k] = v;
+                }
+            }
+
+            foreach (var candidate in candidateList)
+            {
+                var hash = resolvedHashes[candidate.ArtifactPath.Value];
+                onDiskFiles[candidate.ArtifactPath.Value] = (candidate.FilePath, candidate.FileLength, hash);
+
+                if (stagedDict.ContainsKey(candidate.ArtifactPath.Value))
                 {
                     continue;
                 }
 
-                // Check against HEAD
-                if (headEntries.TryGetValue(artifactPath.Value, out var headEntry))
+                if (headEntries.TryGetValue(candidate.ArtifactPath.Value, out var headEntry))
                 {
                     if (headEntry.Hash != hash)
                     {
-                        modifiedList.Add(new WorkingTreeItem(artifactPath, WorkingTreeItemKind.Modified, fileLength, hash));
+                        modifiedList.Add(new WorkingTreeItem(candidate.ArtifactPath, WorkingTreeItemKind.Modified, candidate.FileLength, hash));
                     }
                 }
-                else if (artifactPath == config.PrimaryArtifact)
+                else if (candidate.ArtifactPath == config.PrimaryArtifact)
                 {
-                    // Primary artifact is auto-tracked: if not in HEAD, it's newly ready to commit
-                    modifiedList.Add(new WorkingTreeItem(artifactPath, WorkingTreeItemKind.Modified, fileLength, hash));
+                    modifiedList.Add(new WorkingTreeItem(candidate.ArtifactPath, WorkingTreeItemKind.Modified, candidate.FileLength, hash));
                 }
                 else
                 {
-                    // Newly discovered untracked file
-                    untrackedList.Add(new WorkingTreeItem(artifactPath, WorkingTreeItemKind.Untracked, fileLength, hash));
+                    untrackedList.Add(new WorkingTreeItem(candidate.ArtifactPath, WorkingTreeItemKind.Untracked, candidate.FileLength, hash));
                 }
             }
         }
