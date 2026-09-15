@@ -40,8 +40,31 @@ public sealed class DawAdapterRegistry : IDawAdapterRegistry
         return _extensionMap.TryGetValue(normalized, out var adapter) ? adapter : null;
     }
 
+    public IDawAdapter? FindAdapterForFile(string filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath)) return null;
+        var ext = Path.GetExtension(filePath);
+        return FindAdapterForExtension(ext);
+    }
+
     public IReadOnlyCollection<IDawAdapter> GetAllAdapters()
     {
         return _adapters.ToArray();
+    }
+
+    public IReadOnlyList<string> FindCandidateProjectFiles(string directory)
+    {
+        if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+        {
+            return Array.Empty<string>();
+        }
+
+        var results = new List<string>();
+        foreach (var adapter in _adapters)
+        {
+            results.AddRange(adapter.DiscoverProjectFiles(directory));
+        }
+
+        return results.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(p => p).ToList();
     }
 }

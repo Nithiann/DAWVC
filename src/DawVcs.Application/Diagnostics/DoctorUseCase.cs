@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 
 using DawVcs.Adapters.Abstractions;
 using DawVcs.Application.Adapters;
+using DawVcs.Application.Common;
 using DawVcs.Application.Dependencies;
 using DawVcs.Domain.Dependencies;
 using DawVcs.Domain.Repositories;
@@ -37,6 +38,7 @@ public sealed class DoctorUseCase
         var artifactHealthList = new List<ArtifactHealth>();
         var dependencyHealthList = new List<DependencyHealth>();
         ProjectDetectionResult? primaryDetection = null;
+        IDawAdapter? primaryAdapter = null;
 
         // 1. Domein 1: Artifact Integrity
         var primaryRel = config.PrimaryArtifact.Value;
@@ -56,6 +58,7 @@ public sealed class DoctorUseCase
         {
             var ext = Path.GetExtension(primaryFull);
             var adapter = _adapterRegistry?.FindAdapterForExtension(ext);
+            primaryAdapter = adapter;
 
             if (adapter == null)
             {
@@ -91,7 +94,7 @@ public sealed class DoctorUseCase
                         DetectedVersion: detectResult.DetectedVersion,
                         Status: healthStatus,
                         IsBlocking: isBlocking,
-                        Findings: detectResult.Findings));
+                        Findings: PathRedactor.RedactAll(detectResult.Findings)));
                 }
                 catch (Exception ex)
                 {
@@ -101,7 +104,7 @@ public sealed class DoctorUseCase
                         DetectedVersion: null,
                         Status: HealthStatus.Error,
                         IsBlocking: true,
-                        Findings: [$"Adapter inspection failed with error: {ex.Message}"]));
+                        Findings: [$"Adapter inspection failed with error: {PathRedactor.Redact(ex.Message)}"]));
                 }
             }
         }
@@ -112,6 +115,7 @@ public sealed class DoctorUseCase
             var depGraph = await DependencyDiscoveryService.DiscoverAsync(
                 context.RootPath,
                 primaryDetection,
+                primaryAdapter,
                 cancellationToken).ConfigureAwait(false);
 
             foreach (var dep in depGraph.Dependencies)
@@ -142,8 +146,8 @@ public sealed class DoctorUseCase
                     Requirement: dep.Requirement,
                     Status: binding.Status,
                     IsBlocking: isBlocking,
-                    Locator: binding.Locator,
-                    Details: binding.Notes,
+                    Locator: PathRedactor.Redact(binding.Locator),
+                    Details: PathRedactor.Redact(binding.Notes),
                     ExpectedVersion: expectedVersion,
                     DetectedVersion: detectedVersion));
             }
@@ -156,12 +160,31 @@ public sealed class DoctorUseCase
             reproducibilityScore = Math.Round((double)resolvedCount / dependencyHealthList.Count * 100.0, 1);
         }
 
-        // 3. Domein 3: Environment & DAW Installatie
-        var dawInstallations = FlStudioDetector.Detect();
+        // 3. Domein 3: Environment & DAW Installatie via geregistreerde DAW adapters
+        var dawInstallations = new List<DawInstallation>();
         var envFindings = new List<string>();
-        if (dawInstallations.Count == 0 && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+
+        if (_adapterRegistry != null)
         {
-            envFindings.Add("No standard FL Studio installation detected in default paths or registry.");
+            foreach (var adapter in _adapterRegistry.GetAllAdapters())
+            {
+                var findings = await adapter.ProbeEnvironmentAsync(cancellationToken).ConfigureAwait(false);
+                foreach (var f in findings)
+                {
+                    if (f.IsInstalled && !string.IsNullOrWhiteSpace(f.InstallationPath))
+                    {
+                        dawInstallations.Add(new DawInstallation(
+                            DawName: f.DawName,
+                            Version: f.Version ?? "Unknown",
+                            ExecutablePath: PathRedactor.Redact(f.InstallationPath),
+                            IsDetected: true));
+                    }
+                    else if (!string.IsNullOrWhiteSpace(f.StatusMessage))
+                    {
+                        envFindings.Add(PathRedactor.Redact(f.StatusMessage));
+                    }
+                }
+            }
         }
 
         var envHealth = new EnvironmentHealth(

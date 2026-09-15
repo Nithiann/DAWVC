@@ -1,6 +1,8 @@
 using System.Globalization;
 
 using DawVcs.Adapters.Abstractions;
+using DawVcs.Adapters.FLStudio.Diagnostics;
+using DawVcs.Domain.Dependencies;
 using DawVcs.Domain.Metadata;
 
 namespace DawVcs.Adapters.FLStudio;
@@ -190,12 +192,21 @@ public sealed class FLStudioAdapter : IDawAdapter
                     inspection.SuspiciousReason ?? "Anomalie waargenomen in FLP binaire structuur.",
                     confidence: 0.6,
                     metadata: metadata,
-                    evidence: evidenceList);
+                    evidence: evidenceList) with
+                {
+                    Completeness = inspection.Completeness,
+                    CompletenessReason = inspection.CompletenessReason
+                };
             }
 
             // 6. Policy evaluatie
             if (policyStatus == ProjectDetectionStatus.Valid)
             {
+                if (inspection.Completeness == InspectionCompleteness.Partial)
+                {
+                    findings.Add($"Partial inspection: {inspection.CompletenessReason}");
+                }
+
                 return ProjectDetectionResult.Valid(
                     DawName,
                     inspection.Version ?? "2026.x",
@@ -203,7 +214,11 @@ public sealed class FLStudioAdapter : IDawAdapter
                     metadata: metadata,
                     findings: findings,
                     evidence: evidenceList,
-                    observations: observations);
+                    observations: observations) with
+                {
+                    Completeness = inspection.Completeness,
+                    CompletenessReason = inspection.CompletenessReason
+                };
             }
 
             // 7. Unsupported (veilige fallback naar opaque)
@@ -245,5 +260,128 @@ public sealed class FLStudioAdapter : IDawAdapter
     {
         using var context = new ArtifactReadContext(stream, leaveOpen: true);
         return await DetectAsync(context, cancellationToken).ConfigureAwait(false);
+    }
+
+    public bool CanHandle(string fileNameOrPath)
+    {
+        if (string.IsNullOrWhiteSpace(fileNameOrPath)) return false;
+        return fileNameOrPath.EndsWith(".flp", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public IReadOnlyList<string> DiscoverProjectFiles(string directory)
+    {
+        if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+        {
+            return Array.Empty<string>();
+        }
+
+        return Directory.GetFiles(directory, "*.flp", SearchOption.TopDirectoryOnly);
+    }
+
+    public Task<IReadOnlyList<DawEnvironmentFinding>> ProbeEnvironmentAsync(CancellationToken cancellationToken = default)
+    {
+        return FlStudioEnvironmentProbe.ProbeAsync(cancellationToken);
+    }
+
+    private static readonly HashSet<string> NativeFlPlugins = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Sampler", "3x Osc", "Fruity Parametric EQ 2", "Fruity Reeverb 2",
+        "Fruity Limiter", "Fruity Compressor", "Sytrus", "Harmor", "Harmless",
+        "Gross Beat", "Fruity Delay 3", "Fruity Chorus", "Maximus", "Edison",
+        "Slicex", "Vocodex", "Fruity Flanger", "Fruity Phaser", "Soundgoodizer"
+    };
+
+    private static readonly Dictionary<string, (string Vendor, PluginRole Role, string CanonicalProduct)> KnownThirdPartyPlugins = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Serum"] = ("Xfer Records", PluginRole.Instrument, "Serum"),
+        ["Serum_x64"] = ("Xfer Records", PluginRole.Instrument, "Serum"),
+        ["FabFilter Pro-Q 3"] = ("FabFilter", PluginRole.Effect, "FabFilter Pro-Q 3"),
+        ["FabFilter Pro-C 2"] = ("FabFilter", PluginRole.Effect, "FabFilter Pro-C 2"),
+        ["FabFilter Pro-L 2"] = ("FabFilter", PluginRole.Effect, "FabFilter Pro-L 2"),
+        ["Sylenth1"] = ("LennarDigital", PluginRole.Instrument, "Sylenth1"),
+        ["Sylenth1_x64"] = ("LennarDigital", PluginRole.Instrument, "Sylenth1"),
+        ["Massive"] = ("Native Instruments", PluginRole.Instrument, "Massive"),
+        ["Kontakt"] = ("Native Instruments", PluginRole.Instrument, "Kontakt"),
+        ["Ozone"] = ("iZotope", PluginRole.Effect, "Ozone"),
+        ["ValhallaVintageVerb"] = ("Valhalla DSP", PluginRole.Effect, "ValhallaVintageVerb")
+    };
+
+    public bool IsNativePlugin(string pluginName)
+    {
+        if (string.IsNullOrWhiteSpace(pluginName)) return false;
+        var clean = pluginName.Trim();
+        if (clean.EndsWith(".vst3", StringComparison.OrdinalIgnoreCase)) clean = clean[..^5];
+        else if (clean.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)) clean = clean[..^4];
+        return NativeFlPlugins.Contains(clean);
+    }
+
+    public PluginIdentity NormalizePlugin(string rawName)
+    {
+        var clean = rawName.Trim();
+        var format = PluginFormat.Unknown;
+
+        if (clean.EndsWith(".vst3", StringComparison.OrdinalIgnoreCase))
+        {
+            format = PluginFormat.VST3;
+            clean = clean[..^5];
+        }
+        else if (clean.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+        {
+            format = PluginFormat.VST2;
+            clean = clean[..^4];
+        }
+
+        if (NativeFlPlugins.Contains(clean))
+        {
+            return new PluginIdentity("Image-Line", clean, PluginFormat.Native);
+        }
+
+        if (KnownThirdPartyPlugins.TryGetValue(clean, out var known))
+        {
+            return new PluginIdentity(known.Vendor, known.CanonicalProduct, format != PluginFormat.Unknown ? format : PluginFormat.VST3);
+        }
+
+        var normalizedProduct = clean;
+        if (normalizedProduct.EndsWith("_x64", StringComparison.OrdinalIgnoreCase))
+        {
+            normalizedProduct = normalizedProduct[..^4];
+        }
+        else if (normalizedProduct.EndsWith("_x86", StringComparison.OrdinalIgnoreCase))
+        {
+            normalizedProduct = normalizedProduct[..^4];
+        }
+
+        if (KnownThirdPartyPlugins.TryGetValue(normalizedProduct, out var knownNorm))
+        {
+            return new PluginIdentity(knownNorm.Vendor, knownNorm.CanonicalProduct, format != PluginFormat.Unknown ? format : PluginFormat.VST3);
+        }
+
+        return new PluginIdentity("Unknown", normalizedProduct, format);
+    }
+
+    public PluginRole DeterminePluginRole(string rawName)
+    {
+        if (KnownThirdPartyPlugins.TryGetValue(rawName, out var known))
+        {
+            return known.Role;
+        }
+
+        var clean = rawName;
+        if (clean.EndsWith(".vst3", StringComparison.OrdinalIgnoreCase)) clean = clean[..^5];
+        else if (clean.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)) clean = clean[..^4];
+
+        if (KnownThirdPartyPlugins.TryGetValue(clean, out var knownClean))
+        {
+            return knownClean.Role;
+        }
+
+        var lower = rawName.ToLowerInvariant();
+        if (lower.Contains("eq") || lower.Contains("verb") || lower.Contains("delay") ||
+            lower.Contains("filter") || lower.Contains("limiter") || lower.Contains("compressor"))
+        {
+            return PluginRole.Effect;
+        }
+
+        return PluginRole.Instrument;
     }
 }

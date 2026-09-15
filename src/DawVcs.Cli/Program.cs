@@ -7,6 +7,7 @@ using DawVcs.Application.Adapters;
 using DawVcs.Application.Branches;
 using DawVcs.Application.Checkouts;
 using DawVcs.Application.Commits;
+using DawVcs.Application.Common;
 using DawVcs.Application.Dependencies;
 using DawVcs.Application.Diagnostics;
 using DawVcs.Application.Exceptions;
@@ -81,11 +82,11 @@ public static class Program
 
                 if (result.WasAlreadyInitialized)
                 {
-                    AnsiConsole.MarkupLine($"[yellow]![/] Existing DAWVC repository reinitialized in [bold]{Markup.Escape(targetDir)}[/]");
+                    AnsiConsole.MarkupLine($"[yellow]![/] Existing DAWVC repository reinitialized in [bold]{Markup.Escape(PathRedactor.Redact(targetDir))}[/]");
                 }
                 else
                 {
-                    AnsiConsole.MarkupLine($"[green]✓[/] Initialized empty DAWVC repository in [bold]{Markup.Escape(targetDir)}[/]");
+                    AnsiConsole.MarkupLine($"[green]✓[/] Initialized empty DAWVC repository in [bold]{Markup.Escape(PathRedactor.Redact(targetDir))}[/]");
                 }
 
                 AnsiConsole.MarkupLine($"  [dim]Repository ID:[/] {result.RepositoryId}");
@@ -95,8 +96,7 @@ public static class Program
             }
             catch (Exception ex)
             {
-                AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
-                Environment.ExitCode = 1;
+                WriteError(ex.Message, 1);
             }
         }, initDirOption, initNameOption, initPrimaryOption);
 
@@ -129,19 +129,17 @@ public static class Program
             }
             catch (IncompleteDependencyException ex)
             {
-                AnsiConsole.MarkupLine($"[bold red]Error (Exit Code 5):[/] {Markup.Escape(ex.Message)}");
+                WriteError($"Incomplete dependency (Exit Code 5): {ex.Message}", 5);
                 AnsiConsole.MarkupLine("[yellow]Remediation:[/] Add the missing files to the project directory or use [bold]dawvc commit -m \"...\" --allow-incomplete[/]");
-                Environment.ExitCode = 5;
             }
             catch (InvalidOperationException ex) when (ex.Message.Contains("clean", StringComparison.OrdinalIgnoreCase))
             {
-                AnsiConsole.MarkupLine($"[yellow]{Markup.Escape(ex.Message)}[/]");
+                AnsiConsole.MarkupLine($"[yellow]{Markup.Escape(PathRedactor.Redact(ex.Message))}[/]");
                 Environment.ExitCode = 0;
             }
             catch (Exception ex)
             {
-                AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
-                Environment.ExitCode = 1;
+                WriteError(ex.Message, 1);
             }
         }, commitMessageOption, commitAuthorOption, commitDirOption, commitAllowIncompleteOption);
 
@@ -179,8 +177,7 @@ public static class Program
             }
             catch (Exception ex)
             {
-                AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
-                Environment.ExitCode = 1;
+                WriteError(ex.Message, 1);
             }
         }, logLimitOption, logDirOption);
 
@@ -205,10 +202,10 @@ public static class Program
 
                 if (!string.IsNullOrEmpty(result.RecoveryDirectory))
                 {
-                    AnsiConsole.MarkupLine($"[yellow]⚠ Recovery copy created:[/] [dim]{Markup.Escape(result.RecoveryDirectory)}[/]");
+                    AnsiConsole.MarkupLine($"[yellow]⚠ Recovery copy created:[/] [dim]{Markup.Escape(PathRedactor.Redact(result.RecoveryDirectory))}[/]");
                 }
 
-                AnsiConsole.MarkupLine($"[green]✓[/] Successfully checked out snapshot [dim]{result.SnapshotId.ToString()[..8]}[/] to [cyan]{Markup.Escape(result.TargetDirectory)}[/]");
+                AnsiConsole.MarkupLine($"[green]✓[/] Successfully checked out snapshot [dim]{result.SnapshotId.ToString()[..8]}[/] to [cyan]{Markup.Escape(PathRedactor.Redact(result.TargetDirectory))}[/]");
                 foreach (var file in result.RestoredFiles)
                 {
                     AnsiConsole.MarkupLine($"  [green]+[/] {Markup.Escape(file)}");
@@ -225,18 +222,15 @@ public static class Program
             }
             catch (DirtyWorkspaceException ex)
             {
-                AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
-                Environment.ExitCode = 7;
+                WriteError(ex.Message, 7);
             }
             catch (IncompleteDependencyException ex)
             {
-                AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
-                Environment.ExitCode = 5;
+                WriteError(ex.Message, 5);
             }
             catch (Exception ex)
             {
-                AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
-                Environment.ExitCode = 1;
+                WriteError(ex.Message, 1);
             }
         }, checkoutRefArg, checkoutRestoreToOption, checkoutForceOption, checkoutDirOption);
 
@@ -257,27 +251,27 @@ public static class Program
                 var useCase = serviceProvider.GetRequiredService<BindDependencyUseCase>();
                 var result = await useCase.ExecuteAsync(new BindDependencyRequest(repoDir, depId, path));
                 var b = result.Binding;
+                var redactedLocator = PathRedactor.Redact(b.Locator);
 
                 switch (b.Status)
                 {
                     case Domain.Dependencies.BindingStatus.Verified:
-                        AnsiConsole.MarkupLine($"[green]✓[/] Bound [cyan]{Markup.Escape(b.DependencyId.Value)}[/] to [cyan]{Markup.Escape(b.Locator)}[/] ([green]Verified[/])");
+                        AnsiConsole.MarkupLine($"[green]✓[/] Bound [cyan]{Markup.Escape(b.DependencyId.Value)}[/] to [cyan]{Markup.Escape(redactedLocator)}[/] ([green]Verified[/])");
                         break;
                     case Domain.Dependencies.BindingStatus.Mismatch:
-                        AnsiConsole.MarkupLine($"[yellow]⚠[/] Bound [cyan]{Markup.Escape(b.DependencyId.Value)}[/] to [cyan]{Markup.Escape(b.Locator)}[/] ([red]Mismatch[/] - content hash differs!)");
+                        AnsiConsole.MarkupLine($"[yellow]⚠[/] Bound [cyan]{Markup.Escape(b.DependencyId.Value)}[/] to [cyan]{Markup.Escape(redactedLocator)}[/] ([red]Mismatch[/] - content hash differs!)");
                         break;
                     case Domain.Dependencies.BindingStatus.Missing:
-                        AnsiConsole.MarkupLine($"[red]✗[/] Bound [cyan]{Markup.Escape(b.DependencyId.Value)}[/] to [cyan]{Markup.Escape(b.Locator)}[/] ([red]Missing[/] - file not found!)");
+                        AnsiConsole.MarkupLine($"[red]✗[/] Bound [cyan]{Markup.Escape(b.DependencyId.Value)}[/] to [cyan]{Markup.Escape(redactedLocator)}[/] ([red]Missing[/] - file not found!)");
                         break;
                     default:
-                        AnsiConsole.MarkupLine($"[dim]?[/] Bound [cyan]{Markup.Escape(b.DependencyId.Value)}[/] to [cyan]{Markup.Escape(b.Locator)}[/] ([yellow]{b.Status}[/])");
+                        AnsiConsole.MarkupLine($"[dim]?[/] Bound [cyan]{Markup.Escape(b.DependencyId.Value)}[/] to [cyan]{Markup.Escape(redactedLocator)}[/] ([yellow]{b.Status}[/])");
                         break;
                 }
             }
             catch (Exception ex)
             {
-                AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
-                Environment.ExitCode = 1;
+                WriteError(ex.Message, 1);
             }
         }, bindDepIdArg, bindPathArg, bindDirOption);
 
@@ -351,8 +345,7 @@ public static class Program
             }
             catch (Exception ex)
             {
-                AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
-                Environment.ExitCode = 1;
+                WriteError(ex.Message, 1);
             }
         }, statusDirOption);
 
@@ -381,8 +374,7 @@ public static class Program
             }
             catch (Exception ex)
             {
-                AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
-                Environment.ExitCode = 1;
+                WriteError(ex.Message, 1);
             }
         }, addPathsArg, addAllOption, addDirOption);
 
@@ -461,7 +453,7 @@ public static class Program
                     var tree = new Tree($"[bold]Referenced Samples ({samples.Length})[/]");
                     foreach (var s in samples)
                     {
-                        tree.AddNode(Markup.Escape(s));
+                        tree.AddNode(Markup.Escape(PathRedactor.Redact(s)));
                     }
                     AnsiConsole.Write(tree);
                 }
@@ -482,7 +474,7 @@ public static class Program
                     AnsiConsole.MarkupLine("\n[bold]Findings:[/]");
                     foreach (var finding in detection.Findings)
                     {
-                        AnsiConsole.MarkupLine($"  • {Markup.Escape(finding)}");
+                        AnsiConsole.MarkupLine($"  • {Markup.Escape(PathRedactor.Redact(finding))}");
                     }
                 }
 
@@ -494,8 +486,7 @@ public static class Program
             }
             catch (Exception ex)
             {
-                AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
-                Environment.ExitCode = 1;
+                WriteError(ex.Message, 1);
             }
         }, scanDirOption, scanFileOption, scanTimeoutOption);
 
@@ -552,8 +543,7 @@ public static class Program
             }
             catch (Exception ex)
             {
-                AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
-                Environment.ExitCode = 1;
+                WriteError(ex.Message, 1);
             }
         }, branchNameArg, branchStartArg, branchDeleteOption, branchForceDeleteOption, branchDirOption);
 
@@ -596,25 +586,22 @@ public static class Program
 
                 if (!string.IsNullOrEmpty(result.RecoveryDirectory))
                 {
-                    AnsiConsole.MarkupLine($"  [yellow]⚠ Recovery copy created:[/] [dim]{Markup.Escape(result.RecoveryDirectory)}[/]");
+                    AnsiConsole.MarkupLine($"  [yellow]⚠ Recovery copy created:[/] [dim]{Markup.Escape(PathRedactor.Redact(result.RecoveryDirectory))}[/]");
                 }
             }
             catch (DirtyWorkspaceException ex)
             {
-                AnsiConsole.MarkupLine($"[bold red]Error (Exit Code 7):[/] {Markup.Escape(ex.Message)}");
+                WriteError($"Dirty workspace (Exit Code 7): {ex.Message}", 7);
                 AnsiConsole.MarkupLine("[yellow]Remediation:[/] Commit or stage your changes, or use [bold]dawvc switch --force <branch>[/] to create a recovery copy.");
-                Environment.ExitCode = 7;
             }
             catch (CheckoutStagingException ex)
             {
-                AnsiConsole.MarkupLine($"[bold red]Error (Exit Code 7):[/] {Markup.Escape(ex.Message)}");
+                WriteError($"Staging conflict (Exit Code 7): {ex.Message}", 7);
                 AnsiConsole.MarkupLine("[yellow]Remediation:[/] Commit or stage your changes, or use [bold]dawvc switch --force <branch>[/] to create a recovery copy.");
-                Environment.ExitCode = 7;
             }
             catch (Exception ex)
             {
-                AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
-                Environment.ExitCode = 1;
+                WriteError(ex.Message, 1);
             }
         }, switchBranchArg, switchCreateOption, switchStartPointOption, switchForceOption, switchDirOption);
 
@@ -763,8 +750,7 @@ public static class Program
             }
             catch (Exception ex)
             {
-                AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
-                Environment.ExitCode = 1;
+                WriteError(ex.Message, 1);
             }
         }, doctorJsonOption, doctorDirOption);
 
@@ -862,8 +848,7 @@ public static class Program
             }
             catch (Exception ex)
             {
-                AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(ex.Message)}");
-                Environment.ExitCode = 1;
+                WriteError(ex.Message, 1);
             }
         }, fsckArtifactsOption, fsckJsonOption, fsckDirOption);
 
@@ -883,6 +868,15 @@ public static class Program
         Environment.ExitCode = 0;
         var exitCode = await rootCommand.InvokeAsync(args);
         return exitCode != 0 ? exitCode : Environment.ExitCode;
+    }
+
+    private static void WriteError(string message, int? exitCode = null)
+    {
+        AnsiConsole.MarkupLine($"[bold red]Error:[/] {Markup.Escape(PathRedactor.Redact(message))}");
+        if (exitCode.HasValue)
+        {
+            Environment.ExitCode = exitCode.Value;
+        }
     }
 
     private static string ResolveRepoDirectory(string? explicitDir)

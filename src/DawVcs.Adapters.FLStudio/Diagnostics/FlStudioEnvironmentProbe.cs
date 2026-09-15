@@ -1,12 +1,14 @@
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
-namespace DawVcs.Application.Diagnostics;
+using DawVcs.Adapters.Abstractions;
+
+namespace DawVcs.Adapters.FLStudio.Diagnostics;
 
 /// <summary>
-/// Detecteert lokale installaties van FL Studio op Windows (FR-DOC-003, TD §31).
+/// Detecteert lokale installaties en omgevingsstatus van FL Studio op de hostmachine (FR-DOC-003, TD §31).
 /// </summary>
-public static class FlStudioDetector
+public static class FlStudioEnvironmentProbe
 {
     private static readonly (string Version, string SubDir)[] StandardVersions =
     [
@@ -17,13 +19,19 @@ public static class FlStudioDetector
         ("Generic", "FL Studio")
     ];
 
-    public static IReadOnlyList<DawInstallation> Detect()
+    public static Task<IReadOnlyList<DawEnvironmentFinding>> ProbeAsync(CancellationToken cancellationToken = default)
     {
-        var installations = new List<DawInstallation>();
+        var findings = new List<DawEnvironmentFinding>();
 
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            return installations;
+            findings.Add(new DawEnvironmentFinding(
+                DawName: "FL Studio",
+                Version: null,
+                InstallationPath: null,
+                IsInstalled: false,
+                StatusMessage: "FL Studio discovery is only supported on Windows host environments."));
+            return Task.FromResult<IReadOnlyList<DawEnvironmentFinding>>(findings);
         }
 
         var candidateRoots = new List<string>();
@@ -43,6 +51,8 @@ public static class FlStudioDetector
         // Scan file system roots
         foreach (var (version, subDir) in StandardVersions)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             string? foundExe = null;
 
             foreach (var root in candidateRoots)
@@ -67,25 +77,36 @@ public static class FlStudioDetector
 
             if (foundExe != null)
             {
-                installations.Add(new DawInstallation(
+                findings.Add(new DawEnvironmentFinding(
                     DawName: "FL Studio",
                     Version: version,
-                    ExecutablePath: foundExe,
-                    IsDetected: true));
+                    InstallationPath: foundExe,
+                    IsInstalled: true,
+                    StatusMessage: $"Detected {version} at '{foundExe}'"));
             }
         }
 
         // Registry inspection if on Windows
         if (OperatingSystem.IsWindows())
         {
-            CheckRegistry(installations);
+            CheckRegistry(findings);
         }
 
-        return installations;
+        if (findings.Count == 0)
+        {
+            findings.Add(new DawEnvironmentFinding(
+                DawName: "FL Studio",
+                Version: null,
+                InstallationPath: null,
+                IsInstalled: false,
+                StatusMessage: "No standard FL Studio installation detected in default paths or registry."));
+        }
+
+        return Task.FromResult<IReadOnlyList<DawEnvironmentFinding>>(findings);
     }
 
     [SupportedOSPlatform("windows")]
-    private static void CheckRegistry(List<DawInstallation> installations)
+    private static void CheckRegistry(List<DawEnvironmentFinding> findings)
     {
         try
         {
@@ -96,20 +117,21 @@ public static class FlStudioDetector
                 if (!string.IsNullOrEmpty(appPath))
                 {
                     var exe = Path.Combine(appPath, "FL64.exe");
-                    if (File.Exists(exe) && !installations.Any(i => string.Equals(i.ExecutablePath, exe, StringComparison.OrdinalIgnoreCase)))
+                    if (File.Exists(exe) && !findings.Any(f => string.Equals(f.InstallationPath, exe, StringComparison.OrdinalIgnoreCase)))
                     {
-                        installations.Add(new DawInstallation(
+                        findings.Add(new DawEnvironmentFinding(
                             DawName: "FL Studio",
                             Version: "Registry",
-                            ExecutablePath: exe,
-                            IsDetected: true));
+                            InstallationPath: exe,
+                            IsInstalled: true,
+                            StatusMessage: $"Detected registry installation at '{exe}'"));
                     }
                 }
             }
         }
         catch
         {
-            // Best effort registry read
+            // Best-effort registry read
         }
     }
 }

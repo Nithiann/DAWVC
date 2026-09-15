@@ -37,18 +37,21 @@ public sealed class ScaleAndPerformanceTests
         var flpPath = Path.Combine(temp.Path, "Project.flp");
         await File.WriteAllBytesAsync(flpPath, CreateFlp());
 
-        // 1. Generate 5,000 synthetic sample assets in subdirectories
+        // 1. Generate 5,000 synthetic sample assets in subdirectories with varying byte content
         var sampleDir = Path.Combine(temp.Path, "Audio");
         Directory.CreateDirectory(sampleDir);
 
         const int totalAssets = 5000;
-        var sampleContent = new byte[] { 0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00, 0x57, 0x41, 0x56, 0x45 }; // minimal RIFF WAV header
+        var header = new byte[] { 0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00, 0x57, 0x41, 0x56, 0x45 }; // minimal RIFF WAV header
 
         for (int i = 0; i < totalAssets; i++)
         {
             var fileName = $"Sample_{i:D4}.wav";
             var filePath = Path.Combine(sampleDir, fileName);
-            File.WriteAllBytes(filePath, sampleContent);
+            var content = new byte[16];
+            Buffer.BlockCopy(header, 0, content, 0, 12);
+            BinaryPrimitives.WriteInt32LittleEndian(content.AsSpan(12), i);
+            File.WriteAllBytes(filePath, content);
         }
 
         // 2. Initialize repository
@@ -64,6 +67,9 @@ public sealed class ScaleAndPerformanceTests
         GC.Collect();
         GC.WaitForPendingFinalizers();
         long initialMemory = GC.GetTotalMemory(true);
+        using var currentProc = Process.GetCurrentProcess();
+        currentProc.Refresh();
+        long initialWorkingSet = currentProc.WorkingSet64;
 
         var commitUseCase = new CommitUseCase(ContextFactory, Registry);
         var commitResult = await commitUseCase.ExecuteAsync(new CommitRequest(temp.Path, "Commit 5000 synthetic assets"));
@@ -72,8 +78,12 @@ public sealed class ScaleAndPerformanceTests
         long postCommitMemory = GC.GetTotalMemory(false);
         long memoryDeltaBytes = Math.Max(0, postCommitMemory - initialMemory);
 
+        currentProc.Refresh();
+        long workingSetDelta = Math.Max(0, currentProc.WorkingSet64 - initialWorkingSet);
+
         // NFR-PERF-003: Piekgeheugengebruik behoort onder 512 MB te blijven
-        memoryDeltaBytes.Should().BeLessThan(512 * 1024 * 1024, "Peak memory for 5,000 assets must be under 512 MB");
+        memoryDeltaBytes.Should().BeLessThan(512 * 1024 * 1024, "Peak GC delta for 5,000 assets must be under 512 MB");
+        workingSetDelta.Should().BeLessThan(512 * 1024 * 1024, "Working set growth for 5,000 assets must be under 512 MB");
 
         // 5. NFR-PERF-004: Unchanged warm status behoort binnen 2 seconden te voltooien
         var statusUseCase = new StatusUseCase(ContextFactory);

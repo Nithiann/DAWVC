@@ -52,13 +52,42 @@ public sealed record ProjectSnapshot
             role = (int)e.Role
         }).ToArray();
 
-        var depEntries = Dependencies.Dependencies.Select(d => new
+        var depEntries = Dependencies.Dependencies.Select(d =>
         {
-            id = d.Id.Value,
-            kind = (int)d.Kind,
-            name = d.Name,
-            requirement = (int)d.Requirement,
-            portability = (int)d.Portability.Mode
+            var dict = new Dictionary<string, object?>
+            {
+                ["id"] = d.Id.Value,
+                ["kind"] = (int)d.Kind,
+                ["name"] = d.Name,
+                ["requirement"] = (int)d.Requirement,
+                ["source"] = (int)d.Source,
+                ["portability"] = (int)d.Portability.Mode,
+                ["provenance"] = d.Provenance?.Value
+            };
+
+            if (d is AssetDependency asset)
+            {
+                dict["hash"] = asset.Hash?.ToString();
+                dict["fileSize"] = asset.FileSize;
+                dict["originalPath"] = asset.OriginalPath;
+                dict["relativePath"] = asset.RelativePath?.Value;
+                dict["isMissing"] = asset.IsMissing;
+            }
+            else if (d is PluginDependency plugin)
+            {
+                dict["vendor"] = plugin.Plugin.Vendor;
+                dict["product"] = plugin.Plugin.Product;
+                dict["format"] = (int)plugin.Plugin.Format;
+                dict["role"] = (int)plugin.Role;
+                dict["versionRequirement"] = plugin.VersionRequirement;
+            }
+            else if (d is EnvironmentDependency env)
+            {
+                dict["envKey"] = env.Key;
+                dict["envExpectedValue"] = env.ExpectedValue;
+            }
+
+            return dict;
         }).ToArray();
 
         return CanonicalJsonSerializer.SerializeCanonical(new

@@ -13,28 +13,33 @@ public sealed class DependencyGraphTests
     [Fact]
     public void CalculateBundleByteSize_SumsOnlyNonMissingBundledAssets()
     {
+        var hash1 = Blake3ContentHasher.Hash(System.Text.Encoding.UTF8.GetBytes("kick"));
+        var hash2 = Blake3ContentHasher.Hash(System.Text.Encoding.UTF8.GetBytes("snare"));
+
         var sample1 = new AssetDependency(
-            DependencyId.ForAsset("kick.wav"),
+            DependencyId.ForAsset(hash1),
             "kick.wav",
             DependencyRequirement.Required,
             DependencySource.NativeProjectParser,
             PortabilityPolicy.BundleDefault,
             relativePath: new ArtifactPath("kick.wav"),
+            hash: hash1,
             fileSize: 1000,
             isMissing: false);
 
         var sample2 = new AssetDependency(
-            DependencyId.ForAsset("snare.wav"),
+            DependencyId.ForAsset(hash2),
             "snare.wav",
             DependencyRequirement.Required,
             DependencySource.NativeProjectParser,
             PortabilityPolicy.BundleDefault,
             relativePath: new ArtifactPath("snare.wav"),
+            hash: hash2,
             fileSize: 2500,
             isMissing: false);
 
         var missingSample = new AssetDependency(
-            DependencyId.ForAsset("vocal.wav"),
+            DependencyId.ForUnresolvedAsset("vocal.wav"),
             "vocal.wav",
             DependencyRequirement.Required,
             DependencySource.NativeProjectParser,

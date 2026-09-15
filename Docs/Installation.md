@@ -18,7 +18,7 @@
 ## 2. Installation Steps
 
 ### Step 1: Download the Release Archive
-Download the latest distribution archive and checksum file from the [GitHub Releases](https://github.com/dawvc/dawvc/releases) page:
+Download the latest distribution archive and checksum file from the [GitHub Releases](https://github.com/Nithiann/DAWVC/releases) page:
 - `dawvc-v0.1.0-preview.1-win-x64.zip`
 - `SHA256SUMS.txt`
 

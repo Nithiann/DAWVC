@@ -232,7 +232,7 @@ public sealed class CheckoutAcTests
 
         var sampleHash = DawVcs.Domain.Hashing.Blake3ContentHasher.Hash(sampleBytes);
         var dep = new AssetDependency(
-            DependencyId.ForAsset("MissingOriginal.wav"),
+            DependencyId.ForAsset(sampleHash),
             "MissingOriginal.wav",
             DependencyRequirement.Required,
             DependencySource.NativeProjectParser,

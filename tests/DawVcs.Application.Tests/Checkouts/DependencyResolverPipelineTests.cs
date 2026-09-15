@@ -45,7 +45,7 @@ public sealed class DependencyResolverPipelineTests : IDisposable
         await File.WriteAllBytesAsync(fullPath, sampleBytes);
 
         var dep = new AssetDependency(
-            DependencyId.ForAsset("Audio/Vocal.wav"),
+            DependencyId.ForAsset(sampleHash),
             "Vocal.wav",
             DependencyRequirement.Required,
             DependencySource.NativeProjectParser,
@@ -78,7 +78,7 @@ public sealed class DependencyResolverPipelineTests : IDisposable
         await File.WriteAllBytesAsync(fullPath, actualBytes);
 
         var dep = new AssetDependency(
-            DependencyId.ForAsset("Audio/Vocal.wav"),
+            DependencyId.ForAsset(expectedHash),
             "Vocal.wav",
             DependencyRequirement.Required,
             DependencySource.NativeProjectParser,
@@ -108,7 +108,7 @@ public sealed class DependencyResolverPipelineTests : IDisposable
         await File.WriteAllBytesAsync(movedPath, sampleBytes);
 
         var dep = new AssetDependency(
-            DependencyId.ForAsset("Original/OldPath.wav"),
+            DependencyId.ForAsset(sampleHash),
             "OldPath.wav",
             DependencyRequirement.Required,
             DependencySource.NativeProjectParser,
@@ -130,15 +130,16 @@ public sealed class DependencyResolverPipelineTests : IDisposable
     [Fact]
     public async Task ResolveAsync_MissingAsset_ReturnsUnresolved()
     {
+        var dummyHash = Blake3ContentHasher.Hash(new byte[] { 1 });
         var dep = new AssetDependency(
-            DependencyId.ForAsset("Missing/Sample.wav"),
+            DependencyId.ForAsset(dummyHash),
             "Sample.wav",
             DependencyRequirement.Required,
             DependencySource.NativeProjectParser,
             PortabilityPolicy.BundleDefault,
             new ArtifactPath("Missing/Sample.wav"),
             null,
-            Blake3ContentHasher.Hash(new byte[] { 1 }),
+            dummyHash,
             1,
             true);
 
