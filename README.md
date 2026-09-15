@@ -1,7 +1,7 @@
 # DAWVC — DAW Version Control & Dependency Management
 
 [![CI](https://github.com/dawvc/dawvc/actions/workflows/ci.yml/badge.svg)](https://github.com/dawvc/dawvc/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/Release-v0.1.0--preview.1-green.svg)](https://github.com/dawvc/dawvc/releases)
+[![Release](https://img.shields.io/badge/Release-v0.1.0--preview.1-green.svg)](https://github.com/dawvc/dawvc/tags)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![.NET](https://img.shields.io/badge/.NET-10.0-purple.svg)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2011%20x64-blue.svg)]()
