@@ -1,10 +1,14 @@
+using DawVcs.Application.Adapters;
 using DawVcs.Application.Common;
 using DawVcs.Application.Dependencies;
 using DawVcs.Application.Exceptions;
+using DawVcs.Application.Repositories;
 using DawVcs.Application.Scanning;
 using DawVcs.Domain.Artifacts;
+using DawVcs.Domain.Checkouts;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Dependencies;
+using DawVcs.Domain.Entities;
 using DawVcs.Domain.Hashing;
 using DawVcs.Domain.Repositories;
 
@@ -28,15 +32,17 @@ public sealed record CheckoutResult(
 
 /// <summary>
 /// Beheert veilige, getrapte (staged) checkout en herstel van snapshots (FR-CHK-001..015, AC-009..013).
-/// Past dirty-workspacebeveiliging toe, maakt een recoverykopie bij --force, en garandeert atomiciteit.
+/// Past dirty-workspacebeveiliging toe, maakt een recoverykopie bij --force, en garandeert atomiciteit via PublicationJournal.
 /// </summary>
 public sealed class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
 {
     private readonly Func<string, IRepositoryContext> _contextFactory;
+    private readonly IDawAdapterRegistry? _adapterRegistry;
 
-    public CheckoutUseCase(Func<string, IRepositoryContext> contextFactory)
+    public CheckoutUseCase(Func<string, IRepositoryContext> contextFactory, IDawAdapterRegistry? adapterRegistry = null)
     {
         _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
+        _adapterRegistry = adapterRegistry;
     }
 
     public async Task<CheckoutResult> ExecuteAsync(CheckoutRequest request, CancellationToken cancellationToken = default)
@@ -81,33 +87,51 @@ public sealed class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
         string targetDir;
         string? recoveryDir = null;
         var isExternalRestore = !string.IsNullOrWhiteSpace(request.RestoreToDirectory);
+        CheckoutPlan plan;
 
         if (isExternalRestore)
         {
             // --restore-to: herstel naar aparte directory; active workspace blijft onaangeraakt (AC-009)
             targetDir = Path.GetFullPath(request.RestoreToDirectory!);
             Directory.CreateDirectory(targetDir);
+            plan = new CheckoutPlan(entries.Select(e => new CheckoutAction(e.Path, CheckoutActionKind.Create, TargetHash: e.Hash)).ToList(), []);
         }
         else
         {
             // In-place checkout naar active workspace
             targetDir = repoRoot;
 
+            ProjectSnapshot? currentSnapshot = null;
+            var currentBranch = context.GetCurrentBranch();
+            var currentBranchCommitId = context.GetBranchCommit(currentBranch);
+            if (currentBranchCommitId.HasValue)
+            {
+                var currentCommit = await context.LoadCommitAsync(currentBranchCommitId.Value, cancellationToken).ConfigureAwait(false);
+                if (currentCommit != null)
+                {
+                    currentSnapshot = await context.LoadSnapshotAsync(currentCommit.SnapshotId, cancellationToken).ConfigureAwait(false);
+                }
+            }
+
             var statusUseCase = new StatusUseCase(_contextFactory);
             var statusResult = await statusUseCase.ExecuteAsync(new StatusRequest(repoRoot), cancellationToken).ConfigureAwait(false);
             var status = statusResult.Status;
 
-            if (status.HasStagedChanges || status.HasWorkingTreeModifications)
+            plan = await CheckoutPlanner.PlanAsync(repoRoot, currentSnapshot, snapshot, status, cancellationToken).ConfigureAwait(false);
+
+            if (plan.HasConflicts || status.HasStagedChanges || status.HasWorkingTreeModifications)
             {
                 if (!request.Force)
                 {
                     // Dirty workspace weigert met exitcode 7 (AC-009)
-                    throw new DirtyWorkspaceException(status);
+                    throw new DirtyWorkspaceException(status, plan.Conflicts);
                 }
 
                 // --force: Maak eerst een volledige recovery copy van conflicterende en lokale bestanden (FR-CHK-010, AC-010)
                 var filesToBackup = status.Staged.Select(s => s.Path.Value)
                     .Concat(status.Modified.Select(m => m.Path.Value))
+                    .Concat(status.Untracked.Select(u => u.Path.Value))
+                    .Concat(plan.Actions.Where(a => a.Kind is CheckoutActionKind.Replace or CheckoutActionKind.Delete).Select(a => a.Path.Value))
                     .Concat(entryPaths.Where(p => File.Exists(Path.Combine(repoRoot, p))))
                     .Distinct(StringComparer.OrdinalIgnoreCase);
 
@@ -124,11 +148,12 @@ public sealed class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
 
         try
         {
-            // Materialiseer alle bestanden eerst in de staging-directory
-            foreach (var entry in entries)
+            // Materialiseer alleen bestanden die gecreëerd of vervangen moeten worden
+            foreach (var action in plan.Actions.Where(a => a.Kind is CheckoutActionKind.Create or CheckoutActionKind.Replace))
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
+                var entry = entries.First(e => e.Path == action.Path);
                 var stagingFilePath = Path.Combine(stagingDir, entry.Path.Value.Replace('/', Path.DirectorySeparatorChar));
                 var stagingFileDir = Path.GetDirectoryName(stagingFilePath);
                 if (!string.IsNullOrEmpty(stagingFileDir))
@@ -151,22 +176,9 @@ public sealed class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
                 }
             }
 
-            // 8. Atomische installatie van de geverifieerde candidate (FR-CHK-006, ADR-IO-001)
-            foreach (var entry in entries)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                var stagingFilePath = Path.Combine(stagingDir, entry.Path.Value.Replace('/', Path.DirectorySeparatorChar));
-                var finalFilePath = Path.Combine(targetDir, entry.Path.Value.Replace('/', Path.DirectorySeparatorChar));
-                var finalFileDir = Path.GetDirectoryName(finalFilePath);
-                if (!string.IsNullOrEmpty(finalFileDir))
-                {
-                    Directory.CreateDirectory(finalFileDir);
-                }
-
-                File.Move(stagingFilePath, finalFilePath, overwrite: true);
-                restoredFiles.Add(entry.Path.Value);
-            }
+            // 8. Atomische installatie van de geverifieerde candidate met rollback journal (FR-CHK-006, ADR-IO-001)
+            await using var journal = new PublicationJournal(targetDir, Path.Combine(repoRoot, ".dawvc"));
+            restoredFiles = (await journal.ExecutePlanAsync(stagingDir, plan, cancellationToken).ConfigureAwait(false)).ToList();
         }
         finally
         {
@@ -216,6 +228,13 @@ public sealed class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
             managedAssetRoot = targetDir;
         }
 
+        var primaryEntry = entries.FirstOrDefault(e => e.Role == ArtifactRole.PrimaryProjectFile)
+            ?? entries.FirstOrDefault();
+
+        var primaryAdapter = primaryEntry != null && _adapterRegistry != null
+            ? _adapterRegistry.FindAdapterForFile(primaryEntry.Path.Value)
+            : null;
+
         if (snapshot.Dependencies.All.Count > 0)
         {
             foreach (var dep in snapshot.Dependencies.All)
@@ -226,7 +245,8 @@ public sealed class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
                     dep,
                     context.LocalBindings,
                     knownHashIndex: null,
-                    cancellationToken).ConfigureAwait(false);
+                    adapter: primaryAdapter,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
 
                 resolvedBindings.Add(binding);
 
@@ -243,8 +263,18 @@ public sealed class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
             }
         }
 
-        // FL Studio Browser extra search folder instructie (AC-013, FR-CHK-015)
-        manualInstructions.Add($"FL Studio configuration: Add '{managedAssetRoot}' to Options > File Settings > Browser extra search folders to ensure all samples load automatically.");
+        // DAW configuration guidance via adapter (FR-CHK-015)
+        if (primaryAdapter != null)
+        {
+            foreach (var guidance in primaryAdapter.GetCheckoutGuidance(managedAssetRoot, restoredFiles))
+            {
+                manualInstructions.Add(guidance);
+            }
+        }
+        else
+        {
+            manualInstructions.Add($"DAW configuration: Configure '{managedAssetRoot}' in your DAW search paths to ensure all samples load automatically.");
+        }
 
         return new CheckoutResult(
             commit.Id,

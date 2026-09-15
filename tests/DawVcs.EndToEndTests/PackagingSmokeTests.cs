@@ -39,11 +39,13 @@ public sealed class PackagingSmokeTests
 
         var repoRoot = FindRepoRoot();
         var artifactsDir = Path.Combine(repoRoot, "artifacts");
-        var zipPath = Path.Combine(artifactsDir, "dawvc-v0.1.0-preview.1-win-x64.zip");
+        var zipPath = Directory.Exists(artifactsDir)
+            ? Directory.EnumerateFiles(artifactsDir, "dawvc-v*-win-x64.zip").FirstOrDefault()
+            : null;
         var checksumPath = Path.Combine(artifactsDir, "SHA256SUMS.txt");
 
         // If release archive has not been packaged yet (e.g. running unit tests before packaging), skip
-        if (!File.Exists(zipPath))
+        if (zipPath is null || !File.Exists(zipPath))
         {
             return;
         }

@@ -1,3 +1,4 @@
+using DawVcs.Application.Adapters;
 using DawVcs.Application.Checkouts;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Hashing;
@@ -26,10 +27,12 @@ public sealed record SwitchResult(
 public sealed class SwitchUseCase
 {
     private readonly Func<string, IRepositoryContext> _contextFactory;
+    private readonly IDawAdapterRegistry? _adapterRegistry;
 
-    public SwitchUseCase(Func<string, IRepositoryContext> contextFactory)
+    public SwitchUseCase(Func<string, IRepositoryContext> contextFactory, IDawAdapterRegistry? adapterRegistry = null)
     {
         _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
+        _adapterRegistry = adapterRegistry;
     }
 
     public async Task<SwitchResult> ExecuteAsync(SwitchRequest request, CancellationToken cancellationToken = default)
@@ -46,40 +49,43 @@ public sealed class SwitchUseCase
         var context = _contextFactory(request.RepositoryDirectory);
         var currentBranch = context.GetCurrentBranch();
 
-        if (!request.CreateBranch && targetBranch == currentBranch)
+        // 1. Reeds op de doelbranch?
+        if (targetBranch == currentBranch && !request.CreateBranch)
         {
-            var currentCommit = context.GetBranchCommit(currentBranch);
-            return new SwitchResult(targetBranch, currentCommit, AlreadyOnBranch: true);
+            var headCommit = context.GetBranchCommit(currentBranch);
+            return new SwitchResult(
+                Branch: currentBranch,
+                CommitId: headCommit,
+                AlreadyOnBranch: true);
         }
 
         var branches = context.GetBranches();
         var existingBranch = branches.FirstOrDefault(b => b.Name == targetBranch);
 
-        bool createdNewBranch = false;
+        // 2. Branch aanmaken indien gevraagd (-c / -b)
+        var createdNew = false;
         if (request.CreateBranch)
         {
-            if (existingBranch != null)
+            if (existingBranch != null || context.GetBranchCommit(targetBranch).HasValue)
             {
                 throw new InvalidOperationException($"Branch '{targetBranch.Value}' already exists.");
             }
 
-            CommitId? startCommit = null;
+            // Startpunt bepalen: expliciet startpunt of huidige HEAD
+            CommitId startingCommit;
             if (!string.IsNullOrWhiteSpace(request.StartPoint))
             {
-                startCommit = context.ResolveReference(request.StartPoint)
-                    ?? throw new InvalidOperationException($"Start point '{request.StartPoint}' could not be resolved to a commit.");
+                startingCommit = context.ResolveReference(request.StartPoint)
+                    ?? throw new InvalidOperationException($"Starting point reference '{request.StartPoint}' could not be resolved.");
             }
             else
             {
-                startCommit = context.GetBranchCommit(currentBranch);
+                startingCommit = context.GetBranchCommit(currentBranch)
+                    ?? throw new InvalidOperationException($"Cannot branch from '{currentBranch.Value}': branch has no commits yet.");
             }
 
-            if (startCommit.HasValue)
-            {
-                context.CreateBranch(targetBranch, startCommit.Value);
-            }
-
-            createdNewBranch = true;
+            context.CreateBranch(targetBranch, startingCommit);
+            createdNew = true;
         }
         else if (existingBranch == null)
         {
@@ -92,7 +98,7 @@ public sealed class SwitchUseCase
         if (targetCommit.HasValue)
         {
             // Checkout voert dirty-workspacecontrole uit; gooit CheckoutStagingException bij onopgeslagen wijzigingen zonder --force
-            var checkoutUseCase = new CheckoutUseCase(_contextFactory);
+            var checkoutUseCase = new CheckoutUseCase(_contextFactory, _adapterRegistry);
             var checkoutRequest = new CheckoutRequest(
                 request.RepositoryDirectory,
                 targetCommit.Value.ToString(),
@@ -109,7 +115,7 @@ public sealed class SwitchUseCase
             CommitId: targetCommit,
             RecoveryDirectory: checkoutResult?.RecoveryDirectory,
             RestoredFilesCount: checkoutResult?.RestoredFiles.Count ?? 0,
-            CreatedNewBranch: createdNewBranch,
+            CreatedNewBranch: createdNew,
             AlreadyOnBranch: false);
     }
 }

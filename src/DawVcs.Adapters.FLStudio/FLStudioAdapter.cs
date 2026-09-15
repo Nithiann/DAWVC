@@ -384,4 +384,26 @@ public sealed class FLStudioAdapter : IDawAdapter
 
         return PluginRole.Instrument;
     }
+
+    public IReadOnlyList<string> GetCheckoutGuidance(string managedAssetRoot, IReadOnlyList<string> restoredFiles)
+    {
+        return
+        [
+            $"FL Studio configuration: Add '{managedAssetRoot}' to Options > File Settings > Browser extra search folders to ensure all samples load automatically."
+        ];
+    }
+
+    public (bool Found, string? Path, string? DetectedVersion) ProbePluginInstallation(PluginDependency plugin)
+    {
+        ArgumentNullException.ThrowIfNull(plugin);
+
+        if (plugin.Plugin.Format == PluginFormat.Native ||
+            plugin.Plugin.Vendor.Equals("Image-Line", StringComparison.OrdinalIgnoreCase) ||
+            IsNativePlugin(plugin.Plugin.Product))
+        {
+            return (true, "Native FL Studio Plugin", null);
+        }
+
+        return (false, null, null);
+    }
 }

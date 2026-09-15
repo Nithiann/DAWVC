@@ -3,14 +3,14 @@
     Packages DAWVC as a self-contained Windows x64 distribution ZIP with SHA-256 checksums.
 
 .PARAMETER Version
-    The version tag to package (default: "0.1.0-preview.1").
+    The version tag to package (default: "0.1.0-preview.2").
 
 .PARAMETER OutputDir
     Directory where release artifacts will be placed (default: "artifacts").
 #>
 [CmdletBinding()]
 param(
-    [string]$Version = "0.1.0-preview.1",
+    [string]$Version = "0.1.0-preview.2",
     [string]$OutputDir = "artifacts"
 )
 
@@ -41,12 +41,31 @@ $PublishDir = Join-Path $ArtifactsDir "staging"
     /p:IncludeNativeLibrariesForSelfExtract=true `
     /p:EnableCompressionInSingleFile=true `
     /p:DebugType=none `
+    /p:Version=$Version `
+    /p:InformationalVersion=$Version `
+    /p:AssemblyVersion=0.1.0.0 `
+    /p:FileVersion=0.1.0.0 `
     -o $PublishDir
 
 if ($LASTEXITCODE -ne 0) {
     Write-Error "dotnet publish failed with exit code $LASTEXITCODE"
     exit $LASTEXITCODE
 }
+
+# Release gate: Verify built executable reports correct version
+Write-Host "`n[Release Gate] Verifying staged binary version..." -ForegroundColor Yellow
+$ExePath = Join-Path $PublishDir "dawvc.exe"
+if (-not (Test-Path $ExePath)) {
+    Write-Error "Release gate failed: dawvc.exe not found at $ExePath"
+    exit 1
+}
+$ReportedVersion = (& $ExePath --version) | Out-String
+Write-Host "  Reported version: $($ReportedVersion.Trim())"
+if ($ReportedVersion -notmatch [regex]::Escape($Version)) {
+    Write-Error "Release gate failed: Binary reported '$ReportedVersion' but expected '$Version'"
+    exit 1
+}
+Write-Host "  Release gate PASSED: Version verified as $Version" -ForegroundColor Green
 
 # 3. Copy license and readme
 Write-Host "`n[2/4] Staging documentation and license..." -ForegroundColor Yellow

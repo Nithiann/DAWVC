@@ -209,7 +209,7 @@ public sealed class CheckoutAcTests
 
         // When machine B een checkout uitvoert (via --restore-to naar een nieuwe workspace B)
         using var machineB = new TempDirectory();
-        var checkoutUseCase = new CheckoutUseCase(ContextFactory);
+        var checkoutUseCase = new CheckoutUseCase(ContextFactory, Registry);
         var result = await checkoutUseCase.ExecuteAsync(new CheckoutRequest(
             machineA.Path,
             commitResult.CommitId.ToString(),
@@ -246,6 +246,86 @@ public sealed class CheckoutAcTests
         var binding = await DependencyResolverPipeline.ResolveAsync(machineB.Path, dep);
         binding.Status.Should().Be(BindingStatus.Verified);
         binding.VerifiedHash.Should().Be(sampleHash);
+    }
+
+    [Fact]
+    [Trait("Requirement", "AC-011")]
+    public async Task Checkout_UntrackedConflictingFile_BlocksCheckoutWithoutForce_AndPreservesContent()
+    {
+        // Given workspace at commit 1 with only Track.flp
+        using var temp = new TempDirectory();
+        var flpPath = Path.Combine(temp.Path, "Track.flp");
+        await File.WriteAllBytesAsync(flpPath, CreateFlp());
+
+        var initUseCase = new InitRepositoryUseCase(ContextFactory);
+        await initUseCase.ExecuteAsync(new InitRequest(temp.Path, "UntrackedConflictTest", "Track.flp"));
+
+        var commitUseCase = new CommitUseCase(ContextFactory, Registry);
+        var commit1 = await commitUseCase.ExecuteAsync(new CommitRequest(temp.Path, "Initial commit"));
+
+        // Commit 2 adds Kick.wav
+        var kickInCommitBytes = new byte[] { 1, 1, 1, 1 };
+        var kickPath = Path.Combine(temp.Path, "Kick.wav");
+        await File.WriteAllBytesAsync(kickPath, kickInCommitBytes);
+
+        var addUseCase = new AddUseCase(ContextFactory);
+        await addUseCase.ExecuteAsync(new AddRequest(temp.Path, ["Kick.wav"]));
+        var commit2 = await commitUseCase.ExecuteAsync(new CommitRequest(temp.Path, "Commit with Kick"));
+
+        // Checkout commit 1: Kick.wav is now deleted/obsolete
+        var checkoutUseCase = new CheckoutUseCase(ContextFactory, Registry);
+        await checkoutUseCase.ExecuteAsync(new CheckoutRequest(temp.Path, commit1.CommitId.ToString(), Force: false));
+        File.Exists(kickPath).Should().BeFalse();
+
+        // Now user creates an untracked Kick.wav with their own local content
+        var localUntrackedBytes = new byte[] { 9, 9, 9, 9, 9 };
+        await File.WriteAllBytesAsync(kickPath, localUntrackedBytes);
+
+        // When attempting checkout to commit 2 without --force
+        var act = () => checkoutUseCase.ExecuteAsync(new CheckoutRequest(temp.Path, commit2.CommitId.ToString(), Force: false));
+
+        // Then it must throw DirtyWorkspaceException with untracked conflict details
+        var ex = await act.Should().ThrowAsync<DirtyWorkspaceException>();
+        ex.Which.Conflicts.Should().ContainSingle(c => c.Path.Value == "Kick.wav" && c.Reason.Contains("untracked", StringComparison.OrdinalIgnoreCase));
+
+        // And untracked Kick.wav must NOT be overwritten
+        var preservedBytes = await File.ReadAllBytesAsync(kickPath);
+        preservedBytes.Should().Equal(localUntrackedBytes);
+    }
+
+    [Fact]
+    [Trait("Requirement", "AC-012")]
+    public async Task Checkout_DeletesObsoleteFilesFromPreviousCommit()
+    {
+        // Given workspace at commit 1 with Track.flp and Extra.wav
+        using var temp = new TempDirectory();
+        var flpPath = Path.Combine(temp.Path, "Track.flp");
+        await File.WriteAllBytesAsync(flpPath, CreateFlp());
+
+        var initUseCase = new InitRepositoryUseCase(ContextFactory);
+        await initUseCase.ExecuteAsync(new InitRequest(temp.Path, "ObsoleteDeletionTest", "Track.flp"));
+
+        var commitUseCase = new CommitUseCase(ContextFactory, Registry);
+        var commit1 = await commitUseCase.ExecuteAsync(new CommitRequest(temp.Path, "Base commit"));
+
+        // Commit 2 adds Extra.wav
+        var extraBytes = new byte[] { 42, 43, 44 };
+        var extraPath = Path.Combine(temp.Path, "Extra.wav");
+        await File.WriteAllBytesAsync(extraPath, extraBytes);
+
+        var addUseCase = new AddUseCase(ContextFactory);
+        await addUseCase.ExecuteAsync(new AddRequest(temp.Path, ["Extra.wav"]));
+        var commit2 = await commitUseCase.ExecuteAsync(new CommitRequest(temp.Path, "Commit with Extra"));
+
+        File.Exists(extraPath).Should().BeTrue();
+
+        // When checking out commit 1
+        var checkoutUseCase = new CheckoutUseCase(ContextFactory, Registry);
+        await checkoutUseCase.ExecuteAsync(new CheckoutRequest(temp.Path, commit1.CommitId.ToString(), Force: false));
+
+        // Then Extra.wav should be deleted from working tree as it does not exist in commit 1
+        File.Exists(extraPath).Should().BeFalse();
+        File.Exists(flpPath).Should().BeTrue();
     }
 
     private sealed class TempDirectory : IDisposable

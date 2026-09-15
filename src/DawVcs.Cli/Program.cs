@@ -45,13 +45,17 @@ public static class Program
             sp.GetRequiredService<IDawAdapterRegistry>()));
         services.AddTransient<LogUseCase>();
         services.AddTransient<CheckoutRestoreUseCase>();
-        services.AddTransient<CheckoutUseCase>();
+        services.AddTransient<CheckoutUseCase>(sp => new CheckoutUseCase(
+            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
+            sp.GetRequiredService<IDawAdapterRegistry>()));
         services.AddTransient<BindDependencyUseCase>();
         services.AddTransient<StatusUseCase>();
         services.AddTransient<AddUseCase>();
         services.AddTransient<ScanUseCase>();
         services.AddTransient<BranchUseCase>();
-        services.AddTransient<SwitchUseCase>();
+        services.AddTransient<SwitchUseCase>(sp => new SwitchUseCase(
+            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
+            sp.GetRequiredService<IDawAdapterRegistry>()));
         services.AddTransient<DoctorUseCase>(sp => new DoctorUseCase(
             sp.GetRequiredService<Func<string, IRepositoryContext>>(),
             sp.GetRequiredService<IDawAdapterRegistry>()));
