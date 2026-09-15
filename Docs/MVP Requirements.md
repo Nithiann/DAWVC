@@ -383,7 +383,7 @@ Detailed byte offsets are codified in `ADR-OBJ-001`.
 
 ## 17.1 Asset Relinking Boundaries
 
-FL Studio resolves missing samples via configured Browser *Extra Search Folders*. DAWVC v0.1 does not mutate user DAW preferences automatically (see [FL Studio Search Paths & Relinking Guide](../FLStudio_Search_Paths_Relinking.md)).
+FL Studio resolves missing samples via configured Browser *Extra Search Folders*. DAWVC v0.1 does not mutate user DAW preferences automatically (see [FL Studio Search Paths & Relinking Guide](FLStudio_Search_Paths_Relinking.md)).
 
 - **FR-FLP-013:** `dawvc doctor` MUST report the local managed asset root for users to register in FL Studio.
 - **FR-FLP-014:** `dawvc doctor` MUST explicitly notify users when manual relinking is expected.

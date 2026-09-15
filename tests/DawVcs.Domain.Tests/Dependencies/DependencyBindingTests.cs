@@ -12,8 +12,8 @@ public class DependencyBindingTests
     [Fact]
     public void Constructor_SetsPropertiesCorrectly()
     {
-        var depId = DependencyId.ForAsset("Samples/Kick.wav");
         var hash = Blake3ContentHasher.Hash(new byte[] { 1, 2, 3 });
+        var depId = DependencyId.ForAsset(hash);
         var now = DateTimeOffset.UtcNow;
 
         var binding = new DependencyBinding(
@@ -37,7 +37,7 @@ public class DependencyBindingTests
     [Fact]
     public void WithStatus_UpdatesStatusAndTimestamp()
     {
-        var depId = DependencyId.ForAsset("Samples/Snare.wav");
+        var depId = DependencyId.ForUnresolvedAsset("Samples/Snare.wav");
         var originalTime = DateTimeOffset.UtcNow.AddHours(-1);
         var binding = new DependencyBinding(
             depId,
@@ -59,9 +59,9 @@ public class DependencyBindingTests
     [Fact]
     public void ValueEquality_WorksAsExpected()
     {
-        var depId = DependencyId.ForAsset("Samples/Hat.wav");
-        var now = DateTimeOffset.UtcNow;
         var hash = Blake3ContentHasher.Hash(new byte[] { 7, 8, 9 });
+        var depId = DependencyId.ForAsset(hash);
+        var now = DateTimeOffset.UtcNow;
 
         var b1 = new DependencyBinding(depId, "D:\\Hat.wav", BindingMethod.ContentHashDiscovery, BindingStatus.Verified, hash, now);
         var b2 = new DependencyBinding(depId, "D:\\Hat.wav", BindingMethod.ContentHashDiscovery, BindingStatus.Verified, hash, now);

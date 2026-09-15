@@ -29,6 +29,9 @@ jobs:
       - name: Verify code formatting
         run: dotnet format --no-restore --verify-no-changes --verbosity diagnostic
 
+      - name: Vulnerability & dependency security audit
+        run: dotnet list package --vulnerable --include-transitive
+
       - name: Build solution (Release)
         run: dotnet build --no-restore -c Release
 

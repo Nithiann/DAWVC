@@ -15,6 +15,8 @@ public sealed record ProjectDetectionResult
     public IReadOnlyList<string> Findings { get; init; }
     public IReadOnlyList<DetectionEvidence> Evidence { get; init; }
     public IReadOnlyList<MetadataObservation<string>> Observations { get; init; }
+    public InspectionCompleteness Completeness { get; init; } = InspectionCompleteness.Complete;
+    public string? CompletenessReason { get; init; }
 
     /// <summary>
     /// Geeft aan of het project volledig semantisch ondersteund wordt.
@@ -34,7 +36,9 @@ public sealed record ProjectDetectionResult
         IReadOnlyDictionary<string, string>? metadata = null,
         IReadOnlyList<string>? findings = null,
         IReadOnlyList<DetectionEvidence>? evidence = null,
-        IReadOnlyList<MetadataObservation<string>>? observations = null)
+        IReadOnlyList<MetadataObservation<string>>? observations = null,
+        InspectionCompleteness completeness = InspectionCompleteness.Complete,
+        string? completenessReason = null)
     {
         Status = status;
         DawName = dawName;
@@ -44,6 +48,8 @@ public sealed record ProjectDetectionResult
         Findings = findings ?? Array.Empty<string>();
         Evidence = evidence ?? Array.Empty<DetectionEvidence>();
         Observations = observations ?? Array.Empty<MetadataObservation<string>>();
+        Completeness = completeness;
+        CompletenessReason = completenessReason;
     }
 
     public static ProjectDetectionResult Valid(

@@ -24,10 +24,14 @@ public sealed record InitResult(
 public sealed class InitRepositoryUseCase : IUseCase<InitRequest, InitResult>
 {
     private readonly Func<string, IRepositoryContext> _contextFactory;
+    private readonly Adapters.IDawAdapterRegistry? _adapterRegistry;
 
-    public InitRepositoryUseCase(Func<string, IRepositoryContext> contextFactory)
+    public InitRepositoryUseCase(
+        Func<string, IRepositoryContext> contextFactory,
+        Adapters.IDawAdapterRegistry? adapterRegistry = null)
     {
         _contextFactory = contextFactory;
+        _adapterRegistry = adapterRegistry;
     }
 
     public Task<InitResult> ExecuteAsync(InitRequest request, CancellationToken cancellationToken = default)
@@ -47,11 +51,12 @@ public sealed class InitRepositoryUseCase : IUseCase<InitRequest, InitResult>
             try
             {
                 var existingConfig = context.LoadConfig();
+                var currentBranch = context.GetCurrentBranch();
                 return Task.FromResult(new InitResult(
                     existingConfig.RepositoryId,
                     existingConfig.ProjectName,
                     existingConfig.PrimaryArtifact,
-                    existingConfig.DefaultBranch,
+                    currentBranch,
                     WasAlreadyInitialized: true));
             }
             catch
@@ -60,31 +65,45 @@ public sealed class InitRepositoryUseCase : IUseCase<InitRequest, InitResult>
             }
         }
 
-        // Determine project name
         var projectName = !string.IsNullOrWhiteSpace(request.ProjectName)
-            ? request.ProjectName.Trim()
-            : new DirectoryInfo(targetDir).Name;
+            ? request.ProjectName
+            : Path.GetFileName(targetDir);
 
-        // Determine primary artifact
         ArtifactPath primaryArtifact;
+
         if (!string.IsNullOrWhiteSpace(request.PrimaryArtifactPath))
         {
-            primaryArtifact = new ArtifactPath(request.PrimaryArtifactPath);
-            var fullArtifactPath = Path.Combine(targetDir, primaryArtifact.Value);
-            if (!File.Exists(fullArtifactPath))
+            var explicitPath = request.PrimaryArtifactPath.Trim();
+            var fullCandidatePath = Path.IsPathRooted(explicitPath)
+                ? explicitPath
+                : Path.Combine(targetDir, explicitPath);
+
+            var relativeCandidate = Path.GetRelativePath(targetDir, fullCandidatePath).Replace('\\', '/');
+            primaryArtifact = new ArtifactPath(relativeCandidate);
+
+            if (!File.Exists(fullCandidatePath))
             {
                 throw new FileNotFoundException($"Specified primary project artifact '{primaryArtifact.Value}' does not exist in '{targetDir}'.");
             }
         }
         else
         {
-            // Auto-discovery of candidate .flp in target directory (FR-REP-009 / FR-REP-010)
-            var flpFiles = Directory.GetFiles(targetDir, "*.flp", SearchOption.TopDirectoryOnly);
-            if (flpFiles.Length == 1)
+            // Auto-discovery of candidate project files via registered DAW adapters (FR-REP-009 / FR-REP-010)
+            IReadOnlyList<string> candidateFiles;
+            if (_adapterRegistry != null)
             {
-                primaryArtifact = new ArtifactPath(Path.GetFileName(flpFiles[0]));
+                candidateFiles = _adapterRegistry.FindCandidateProjectFiles(targetDir);
             }
-            else if (flpFiles.Length > 1)
+            else
+            {
+                candidateFiles = Directory.GetFiles(targetDir, "*.flp", SearchOption.TopDirectoryOnly);
+            }
+
+            if (candidateFiles.Count == 1)
+            {
+                primaryArtifact = new ArtifactPath(Path.GetFileName(candidateFiles[0]));
+            }
+            else if (candidateFiles.Count > 1)
             {
                 throw new InvalidOperationException(
                     $"Multiple project files found in '{targetDir}'. Please specify the primary artifact explicitly with --primary <file>.");
@@ -92,7 +111,7 @@ public sealed class InitRepositoryUseCase : IUseCase<InitRequest, InitResult>
             else
             {
                 throw new InvalidOperationException(
-                    $"No .flp project file found in '{targetDir}'. Please create a project or specify the primary artifact explicitly with --primary <file>.");
+                    $"No DAW project file found in '{targetDir}'. Please create a project or specify the primary artifact explicitly with --primary <file>.");
             }
         }
 

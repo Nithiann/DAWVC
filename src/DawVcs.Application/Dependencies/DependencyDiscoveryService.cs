@@ -10,14 +10,6 @@ namespace DawVcs.Application.Dependencies;
 /// </summary>
 public static class DependencyDiscoveryService
 {
-    private static readonly HashSet<string> NativeFlPlugins = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Sampler", "3x Osc", "Fruity Parametric EQ 2", "Fruity Reeverb 2",
-        "Fruity Limiter", "Fruity Compressor", "Sytrus", "Harmor", "Harmless",
-        "Gross Beat", "Fruity Delay 3", "Fruity Chorus", "Maximus", "Edison",
-        "Slicex", "Vocodex", "Fruity Flanger", "Fruity Phaser", "Soundgoodizer"
-    };
-
     private static readonly Dictionary<string, (string Vendor, PluginRole Role, string CanonicalProduct)> KnownThirdPartyPlugins = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Serum"] = ("Xfer Records", PluginRole.Instrument, "Serum"),
@@ -36,6 +28,7 @@ public static class DependencyDiscoveryService
     public static async Task<DependencyGraph> DiscoverAsync(
         string workingDirectory,
         ProjectDetectionResult detectionResult,
+        IDawAdapter? adapter = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workingDirectory);
@@ -65,7 +58,7 @@ public static class DependencyDiscoveryService
                     }
 
                     var assetDep = new AssetDependency(
-                        DependencyId.ForAsset(rawSample),
+                        DependencyId.ForAsset(hash),
                         Path.GetFileName(rawSample),
                         DependencyRequirement.Required,
                         DependencySource.NativeProjectParser,
@@ -82,7 +75,7 @@ public static class DependencyDiscoveryService
                 {
                     // Ontbrekend bestand op schijf
                     var assetDep = new AssetDependency(
-                        DependencyId.ForAsset(rawSample),
+                        DependencyId.ForUnresolvedAsset(rawSample),
                         Path.GetFileName(rawSample),
                         DependencyRequirement.Required,
                         DependencySource.NativeProjectParser,
@@ -104,8 +97,8 @@ public static class DependencyDiscoveryService
             var rawPlugins = pluginsStr.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             foreach (var rawPlugin in rawPlugins)
             {
-                var identity = NormalizePluginIdentity(rawPlugin);
-                var role = DeterminePluginRole(rawPlugin);
+                var identity = adapter != null ? adapter.NormalizePlugin(rawPlugin) : NormalizePluginIdentity(rawPlugin);
+                var role = adapter != null ? adapter.DeterminePluginRole(rawPlugin) : DeterminePluginRole(rawPlugin);
                 var policy = PortabilityPolicyEngine.DeterminePluginPolicy(identity);
                 var localVersion = DependencyResolverPipeline.DetectLocalPluginVersion(identity);
 
@@ -180,11 +173,6 @@ public static class DependencyDiscoveryService
         {
             format = PluginFormat.VST2;
             clean = clean[..^4];
-        }
-
-        if (NativeFlPlugins.Contains(clean))
-        {
-            return new PluginIdentity("Image-Line", clean, PluginFormat.Native);
         }
 
         if (KnownThirdPartyPlugins.TryGetValue(clean, out var known))

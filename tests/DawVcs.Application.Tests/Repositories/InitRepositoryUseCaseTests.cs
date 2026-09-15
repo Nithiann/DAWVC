@@ -72,7 +72,7 @@ public sealed class InitRepositoryUseCaseTests : IDisposable
         var act = async () => await useCase.ExecuteAsync(new InitRequest(_testDir));
 
         await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*No .flp project file found*");
+            .WithMessage("*No DAW project file found*");
     }
 
     [Fact]

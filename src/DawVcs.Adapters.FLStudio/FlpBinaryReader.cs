@@ -1,6 +1,8 @@
 using System.Buffers.Binary;
 using System.Text;
 
+using DawVcs.Adapters.Abstractions;
+
 namespace DawVcs.Adapters.FLStudio;
 
 /// <summary>
@@ -25,7 +27,9 @@ public static class FlpBinaryReader
         IReadOnlyList<string> PluginNames,
         bool IsSuspicious,
         string? SuspiciousReason,
-        long BytesScanned);
+        long BytesScanned,
+        InspectionCompleteness Completeness,
+        string? CompletenessReason);
 
     /// <summary>
     /// Inspecteert de FLhd header en scant begrends de initiële events in de FLdt chunk.
@@ -300,6 +304,24 @@ public static class FlpBinaryReader
             }
         }
 
+        InspectionCompleteness completeness;
+        string? completenessReason = null;
+
+        if (isSuspicious)
+        {
+            completeness = InspectionCompleteness.Partial;
+            completenessReason = suspiciousReason;
+        }
+        else if (bytesScanned < dataChunkLength)
+        {
+            completeness = InspectionCompleteness.Partial;
+            completenessReason = $"Scan limit reached at {bytesScanned:N0} bytes (declared chunk length is {dataChunkLength:N0} bytes). Events beyond scan limit were not inspected.";
+        }
+        else
+        {
+            completeness = InspectionCompleteness.Complete;
+        }
+
         return new FlpInspectionResult(
             header,
             detectedVersion,
@@ -310,7 +332,9 @@ public static class FlpBinaryReader
             pluginNames,
             isSuspicious,
             suspiciousReason,
-            bytesScanned);
+            bytesScanned,
+            completeness,
+            completenessReason);
     }
 
     private static async Task<(int Length, int BytesConsumed)> ReadVariableLengthAsync(Stream stream, CancellationToken cancellationToken)

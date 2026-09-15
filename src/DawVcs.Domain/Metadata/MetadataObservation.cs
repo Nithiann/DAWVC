@@ -8,4 +8,10 @@ public sealed record MetadataObservation<T>(
     MetadataSource Source,
     ConfidenceLevel Confidence,
     DateTimeOffset ObservedAt,
-    string? AdapterVersion);
+    string? AdapterVersion)
+{
+    public MetadataObservation(T value, string? adapterVersion = null)
+        : this(value, MetadataSource.NativeProjectParser, ConfidenceLevel.Verified, DateTimeOffset.UtcNow, adapterVersion)
+    {
+    }
+}

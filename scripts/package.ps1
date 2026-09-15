@@ -40,6 +40,7 @@ $PublishDir = Join-Path $ArtifactsDir "staging"
     /p:PublishSingleFile=true `
     /p:IncludeNativeLibrariesForSelfExtract=true `
     /p:EnableCompressionInSingleFile=true `
+    /p:DebugType=none `
     -o $PublishDir
 
 if ($LASTEXITCODE -ne 0) {
@@ -51,6 +52,9 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "`n[2/4] Staging documentation and license..." -ForegroundColor Yellow
 Copy-Item (Join-Path $RepoRoot "LICENSE") -Destination $PublishDir
 Copy-Item (Join-Path $RepoRoot "README.md") -Destination $PublishDir
+
+# Remove any debug symbols (.pdb) from release bundle
+Get-ChildItem -Path $PublishDir -Filter "*.pdb" -Recurse | Remove-Item -Force
 
 # 4. Create ZIP archive
 $ZipFileName = "dawvc-v$Version-win-x64.zip"

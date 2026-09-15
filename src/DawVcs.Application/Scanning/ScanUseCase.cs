@@ -77,12 +77,12 @@ public sealed class ScanUseCase
             else
             {
                 // Scan werkdirectory naar kandidaatproject
-                var flpFiles = Directory.GetFiles(request.WorkingDirectory, "*.flp", SearchOption.TopDirectoryOnly);
-                if (flpFiles.Length == 0)
+                var candidateFiles = _adapterRegistry.FindCandidateProjectFiles(request.WorkingDirectory);
+                if (candidateFiles.Count == 0)
                 {
-                    throw new FileNotFoundException($"Geen DAW-projectbestand (.flp) gevonden in '{request.WorkingDirectory}'.");
+                    throw new FileNotFoundException($"Geen ondersteund DAW-projectbestand gevonden in '{request.WorkingDirectory}'.");
                 }
-                artifactFullPath = flpFiles[0];
+                artifactFullPath = candidateFiles[0];
                 var relative = Path.GetRelativePath(request.WorkingDirectory, artifactFullPath);
                 relPath = new ArtifactPath(relative);
             }

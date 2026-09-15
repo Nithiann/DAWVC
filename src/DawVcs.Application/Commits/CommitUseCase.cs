@@ -83,7 +83,7 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
             {
                 using var readContext = new ArtifactReadContext(primaryFile);
                 var detection = await adapter.DetectAsync(readContext, cancellationToken).ConfigureAwait(false);
-                dependencyGraph = await DependencyDiscoveryService.DiscoverAsync(context.RootPath, detection, cancellationToken).ConfigureAwait(false);
+                dependencyGraph = await DependencyDiscoveryService.DiscoverAsync(context.RootPath, detection, adapter, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -122,12 +122,13 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
                         {
                             // Tracked bundle dependency is missing on disk (FR-DEP-012, AC-005)
                             missingBundleDependencies.Add(new AssetDependency(
-                                DependencyId.ForAsset(tracked.Path.Value),
+                                DependencyId.ForAsset(tracked.Hash),
                                 tracked.Path.FileName,
                                 DependencyRequirement.Required,
                                 DependencySource.ManualStaging,
                                 PortabilityPolicy.BundleDefault,
                                 relativePath: tracked.Path,
+                                hash: tracked.Hash,
                                 isMissing: true));
                         }
                     }
@@ -150,12 +151,13 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
             {
                 // Staged bundle dependency is missing on disk (FR-DEP-012, AC-005)
                 missingBundleDependencies.Add(new AssetDependency(
-                    DependencyId.ForAsset(staged.Path.Value),
+                    DependencyId.ForAsset(staged.Hash),
                     staged.Path.FileName,
                     DependencyRequirement.Required,
                     DependencySource.ManualStaging,
                     PortabilityPolicy.BundleDefault,
                     relativePath: staged.Path,
+                    hash: staged.Hash,
                     isMissing: true));
             }
         }
@@ -181,7 +183,26 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
             ? new SingleFileArtifact(entriesList[0])
             : new DirectoryArtifact(entriesList);
 
-        var projectArtifact = new ProjectArtifact("FL Studio", root);
+        var dawName = "Generic DAW";
+        if (config != null)
+        {
+            var primaryExt = Path.GetExtension(config.PrimaryArtifact.Value);
+            var matchingAdapter = _adapterRegistry?.FindAdapterForExtension(primaryExt);
+            if (matchingAdapter != null)
+            {
+                dawName = matchingAdapter.DawName;
+            }
+            else if (parentSnapshot != null)
+            {
+                dawName = parentSnapshot.Project.DawName;
+            }
+        }
+        else if (parentSnapshot != null)
+        {
+            dawName = parentSnapshot.Project.DawName;
+        }
+
+        var projectArtifact = new ProjectArtifact(dawName, root);
         var snapshot = new ProjectSnapshot(
             projectArtifact,
             DateTimeOffset.UtcNow,

@@ -6,6 +6,7 @@ using DawVcs.Domain.Configuration;
 using DawVcs.Domain.Dependencies;
 using DawVcs.Domain.Entities;
 using DawVcs.Domain.Hashing;
+using DawVcs.Domain.Metadata;
 using DawVcs.Domain.Repositories;
 using DawVcs.Domain.Serialization;
 using DawVcs.Domain.Storage;
@@ -116,10 +117,10 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
             return [new BranchInfo(currentBranch, GetBranchCommit(currentBranch), true)];
         }
 
-        foreach (var file in Directory.EnumerateFiles(_refsHeadsPath))
+        foreach (var file in Directory.EnumerateFiles(_refsHeadsPath, "*", SearchOption.AllDirectories))
         {
-            var fileName = Path.GetFileName(file);
-            if (BranchName.TryCreate(fileName, out var branchName, out _))
+            var relPath = Path.GetRelativePath(_refsHeadsPath, file).Replace('\\', '/');
+            if (BranchName.TryCreate(relPath, out var branchName, out _))
             {
                 var commitId = GetBranchCommit(branchName);
                 var isCurrent = branchName == currentBranch;
@@ -137,8 +138,13 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
 
     public void CreateBranch(BranchName branch, CommitId commitId)
     {
-        Directory.CreateDirectory(_refsHeadsPath);
-        var branchRefFile = Path.Combine(_refsHeadsPath, branch.Value);
+        var branchRefFile = GetBranchRefFile(branch);
+        var dir = Path.GetDirectoryName(branchRefFile);
+        if (!string.IsNullOrEmpty(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+
         if (File.Exists(branchRefFile))
         {
             throw new InvalidOperationException($"Branch '{branch.Value}' already exists.");
@@ -155,10 +161,25 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
             throw new InvalidOperationException($"Cannot delete the currently active branch '{branch.Value}'.");
         }
 
-        var branchRefFile = Path.Combine(_refsHeadsPath, branch.Value);
+        var branchRefFile = GetBranchRefFile(branch);
         if (File.Exists(branchRefFile))
         {
             File.Delete(branchRefFile);
+
+            var parent = Path.GetDirectoryName(branchRefFile);
+            while (!string.IsNullOrEmpty(parent) && !string.Equals(Path.GetFullPath(parent), Path.GetFullPath(_refsHeadsPath), StringComparison.OrdinalIgnoreCase))
+            {
+                if (Directory.Exists(parent) && !Directory.EnumerateFileSystemEntries(parent).Any())
+                {
+                    Directory.Delete(parent);
+                    parent = Path.GetDirectoryName(parent);
+                }
+                else
+                {
+                    break;
+                }
+            }
+
             return true;
         }
 
@@ -167,7 +188,7 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
 
     public CommitId? GetBranchCommit(BranchName branch)
     {
-        var branchRefFile = Path.Combine(_refsHeadsPath, branch.Value);
+        var branchRefFile = GetBranchRefFile(branch);
         if (!File.Exists(branchRefFile))
         {
             return null;
@@ -179,8 +200,13 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
 
     public async Task UpdateBranchCommitAsync(BranchName branch, CommitId newCommit, CancellationToken cancellationToken = default)
     {
-        Directory.CreateDirectory(_refsHeadsPath);
-        var branchRefFile = Path.Combine(_refsHeadsPath, branch.Value);
+        var branchRefFile = GetBranchRefFile(branch);
+        var dir = Path.GetDirectoryName(branchRefFile);
+        if (!string.IsNullOrEmpty(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+
         var bytes = Encoding.UTF8.GetBytes(newCommit.ToString() + "\n");
 
         await AtomicFileWriter.WriteAtomicAsync(
@@ -190,6 +216,12 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
                 await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
             },
             cancellationToken).ConfigureAwait(false);
+    }
+
+    private string GetBranchRefFile(BranchName branch)
+    {
+        var relative = branch.Value.Replace('/', Path.DirectorySeparatorChar);
+        return Path.Combine(_refsHeadsPath, relative);
     }
 
     public CommitId? ResolveReference(string reference)
@@ -304,21 +336,58 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
             {
                 var portMode = (PortabilityMode)d.Portability;
                 var policy = new PortabilityPolicy(portMode);
+                var source = Enum.IsDefined(typeof(DependencySource), d.Source) ? (DependencySource)d.Source : DependencySource.NativeProjectParser;
+                var requirement = Enum.IsDefined(typeof(DependencyRequirement), d.Requirement) ? (DependencyRequirement)d.Requirement : DependencyRequirement.Required;
+                var provenance = !string.IsNullOrWhiteSpace(d.Provenance) ? new MetadataObservation<string>(d.Provenance, "Snapshot") : null;
+
                 if ((DependencyKind)d.Kind == DependencyKind.Plugin)
                 {
+                    var vendor = !string.IsNullOrWhiteSpace(d.Vendor) ? d.Vendor : "Unknown";
+                    var product = !string.IsNullOrWhiteSpace(d.Product) ? d.Product : (!string.IsNullOrWhiteSpace(d.Name) ? d.Name : "Unknown Plugin");
+                    var format = d.Format.HasValue && Enum.IsDefined(typeof(PluginFormat), d.Format.Value)
+                        ? (PluginFormat)d.Format.Value
+                        : PluginFormat.Unknown;
+                    var role = d.Role.HasValue && Enum.IsDefined(typeof(PluginRole), d.Role.Value)
+                        ? (PluginRole)d.Role.Value
+                        : PluginRole.Unknown;
+
                     depList.Add(new PluginDependency(
                         new DependencyId(d.Id),
-                        new PluginIdentity("Unknown", d.Name, PluginFormat.Unknown),
-                        portability: policy));
+                        new PluginIdentity(vendor, product, format),
+                        role: role,
+                        versionRequirement: d.VersionRequirement,
+                        requirement: requirement,
+                        source: source,
+                        portability: policy,
+                        provenance: provenance));
+                }
+                else if ((DependencyKind)d.Kind == DependencyKind.Environment)
+                {
+                    depList.Add(new EnvironmentDependency(
+                        new DependencyId(d.Id),
+                        d.EnvKey ?? "Unknown",
+                        d.EnvExpectedValue ?? string.Empty,
+                        requirement: requirement,
+                        source: source,
+                        provenance: provenance));
                 }
                 else
                 {
+                    ContentHash? hash = !string.IsNullOrWhiteSpace(d.Hash) && ContentHash.TryParse(d.Hash, out var parsedHash) ? parsedHash : null;
+                    ArtifactPath? relPath = !string.IsNullOrWhiteSpace(d.RelativePath) ? new ArtifactPath(d.RelativePath) : null;
+
                     depList.Add(new AssetDependency(
                         new DependencyId(d.Id),
                         d.Name,
-                        (DependencyRequirement)d.Requirement,
-                        DependencySource.NativeProjectParser,
-                        policy));
+                        requirement,
+                        source,
+                        policy,
+                        relativePath: relPath,
+                        originalPath: d.OriginalPath,
+                        hash: hash,
+                        fileSize: d.FileSize,
+                        isMissing: d.IsMissing,
+                        provenance: provenance));
                 }
             }
         }
@@ -364,7 +433,27 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
         public int Kind { get; set; }
         public string Name { get; set; } = string.Empty;
         public int Requirement { get; set; }
+        public int Source { get; set; }
         public int Portability { get; set; }
+        public string? Provenance { get; set; }
+
+        // Asset properties
+        public string? Hash { get; set; }
+        public long? FileSize { get; set; }
+        public string? OriginalPath { get; set; }
+        public string? RelativePath { get; set; }
+        public bool IsMissing { get; set; }
+
+        // Plugin properties
+        public string? Vendor { get; set; }
+        public string? Product { get; set; }
+        public int? Format { get; set; }
+        public int? Role { get; set; }
+        public string? VersionRequirement { get; set; }
+
+        // Environment properties
+        public string? EnvKey { get; set; }
+        public string? EnvExpectedValue { get; set; }
     }
 
     private sealed class RawEntryDto

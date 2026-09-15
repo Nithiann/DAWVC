@@ -9,5 +9,7 @@ public interface IDawAdapterRegistry
 {
     void Register(IDawAdapter adapter);
     IDawAdapter? FindAdapterForExtension(string extension);
+    IDawAdapter? FindAdapterForFile(string filePath);
     IReadOnlyCollection<IDawAdapter> GetAllAdapters();
+    IReadOnlyList<string> FindCandidateProjectFiles(string directory);
 }
