@@ -124,6 +124,7 @@ public sealed class DoctorUseCase
                     context.RootPath,
                     dep,
                     context.LocalBindings,
+                    adapter: primaryAdapter,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
 
                 var isResolved = binding.Status == BindingStatus.Verified;
@@ -135,7 +136,7 @@ public sealed class DoctorUseCase
                 if (dep is PluginDependency p)
                 {
                     expectedVersion = p.VersionRequirement;
-                    var (_, _, ver) = DependencyResolverPipeline.CheckPluginInstalled(p);
+                    var (_, _, ver) = DependencyResolverPipeline.CheckPluginInstalled(p, primaryAdapter);
                     detectedVersion = ver;
                 }
 

@@ -1,3 +1,4 @@
+using DawVcs.Adapters.Abstractions;
 using DawVcs.Domain.Dependencies;
 using DawVcs.Domain.Hashing;
 
@@ -17,6 +18,7 @@ public static class DependencyResolverPipeline
         Dependency dependency,
         ILocalBindingStore? localBindingStore = null,
         IReadOnlyDictionary<ContentHash, string>? knownHashIndex = null,
+        IDawAdapter? adapter = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workingDirectory);
@@ -44,13 +46,12 @@ public static class DependencyResolverPipeline
             }
         }
 
-        // STAP 1 & 3: Repository / Relative asset in workspace
+        // STAP 1: Relatief pad binnen de workspace (hoogste voorrang)
         if (dependency is AssetDependency asset)
         {
             if (asset.RelativePath is not null)
             {
-                var relPath = asset.RelativePath.Value.Value.Replace('/', Path.DirectorySeparatorChar);
-                var fullPath = Path.Combine(fullWorkingDir, relPath);
+                var fullPath = Path.Combine(fullWorkingDir, asset.RelativePath.Value.Value.Replace('/', Path.DirectorySeparatorChar));
                 if (File.Exists(fullPath))
                 {
                     if (asset.Hash.HasValue)
@@ -71,7 +72,6 @@ public static class DependencyResolverPipeline
                                 DateTimeOffset.UtcNow);
                         }
 
-                        // Bestand bestaat op relatief pad maar hash wijkt af (FR-BND-005)
                         return new DependencyBinding(
                             asset.Id,
                             fullPath,
@@ -79,45 +79,23 @@ public static class DependencyResolverPipeline
                             BindingStatus.Mismatch,
                             actualHash,
                             DateTimeOffset.UtcNow,
-                            "File exists at relative path but content hash does not match expected snapshot hash.");
-                    }
-                }
-            }
-
-            // STAP 4: Original Path (diagnostische locator, FR-BND-008)
-            if (!string.IsNullOrWhiteSpace(asset.OriginalPath) && File.Exists(asset.OriginalPath))
-            {
-                if (asset.Hash.HasValue)
-                {
-                    var actualHash = await Blake3ContentHasher.HashFileAsync(asset.OriginalPath, cancellationToken).ConfigureAwait(false);
-                    if (actualHash == asset.Hash.Value)
-                    {
-                        return new DependencyBinding(
-                            asset.Id,
-                            asset.OriginalPath,
-                            BindingMethod.OriginalPath,
-                            BindingStatus.Verified,
-                            actualHash,
-                            DateTimeOffset.UtcNow);
+                            "Content hash does not match snapshot expectation.");
                     }
 
-                    // Bestand bestaat op origineel pad maar hash wijkt af
                     return new DependencyBinding(
                         asset.Id,
-                        asset.OriginalPath,
-                        BindingMethod.OriginalPath,
-                        BindingStatus.Mismatch,
-                        actualHash,
-                        DateTimeOffset.UtcNow,
-                        "File exists at original path but content hash does not match expected snapshot hash.");
+                        fullPath,
+                        BindingMethod.RelativePath,
+                        BindingStatus.Verified,
+                        null,
+                        DateTimeOffset.UtcNow);
                 }
             }
 
-            // STAP 7: Content-hash discovery (FR-BND-007)
-            if (asset.Hash.HasValue)
+            // STAP 3: Hash-index mapping (O(1) lookup)
+            if (asset.Hash.HasValue && knownHashIndex is not null)
             {
-                // Kijk in meegeleverde index indien beschikbaar
-                if (knownHashIndex is not null && knownHashIndex.TryGetValue(asset.Hash.Value, out var indexedPath) && File.Exists(indexedPath))
+                if (knownHashIndex.TryGetValue(asset.Hash.Value, out var indexedPath) && File.Exists(indexedPath))
                 {
                     return new DependencyBinding(
                         asset.Id,
@@ -125,11 +103,13 @@ public static class DependencyResolverPipeline
                         BindingMethod.ContentHashDiscovery,
                         BindingStatus.Verified,
                         asset.Hash.Value,
-                        DateTimeOffset.UtcNow,
-                        "Discovered via content-hash index.");
+                        DateTimeOffset.UtcNow);
                 }
+            }
 
-                // Zoek lokaal in werkdirectory naar een bestand met dezelfde hash
+            // STAP 4: Deterministic deep crawl op contenthash binnen de repository root
+            if (asset.Hash.HasValue)
+            {
                 var discoveredPath = await SearchByHashAsync(fullWorkingDir, asset.Hash.Value, cancellationToken).ConfigureAwait(false);
                 if (discoveredPath is not null)
                 {
@@ -139,15 +119,50 @@ public static class DependencyResolverPipeline
                         BindingMethod.ContentHashDiscovery,
                         BindingStatus.Verified,
                         asset.Hash.Value,
-                        DateTimeOffset.UtcNow,
-                        "Discovered in working directory via matching content hash.");
+                        DateTimeOffset.UtcNow);
                 }
+            }
+
+            // STAP 6: Oorspronkelijk absoluut pad fallback
+            if (!string.IsNullOrWhiteSpace(asset.OriginalPath) && File.Exists(asset.OriginalPath))
+            {
+                if (asset.Hash.HasValue)
+                {
+                    var origHash = await Blake3ContentHasher.HashFileAsync(asset.OriginalPath, cancellationToken).ConfigureAwait(false);
+                    if (origHash == asset.Hash.Value)
+                    {
+                        return new DependencyBinding(
+                            asset.Id,
+                            asset.OriginalPath,
+                            BindingMethod.OriginalPath,
+                            BindingStatus.Verified,
+                            origHash,
+                            DateTimeOffset.UtcNow);
+                    }
+
+                    return new DependencyBinding(
+                        asset.Id,
+                        asset.OriginalPath,
+                        BindingMethod.OriginalPath,
+                        BindingStatus.Mismatch,
+                        origHash,
+                        DateTimeOffset.UtcNow,
+                        "Original path exists but content hash differs.");
+                }
+
+                return new DependencyBinding(
+                    asset.Id,
+                    asset.OriginalPath,
+                    BindingMethod.OriginalPath,
+                    BindingStatus.Verified,
+                    null,
+                    DateTimeOffset.UtcNow);
             }
         }
         else if (dependency is PluginDependency plugin)
         {
             // STAP 5: Library mapping / Plugin detection with Version Compatibility Check
-            var (found, pluginPath, detectedVersion) = CheckPluginInstalled(plugin);
+            var (found, pluginPath, detectedVersion) = CheckPluginInstalled(plugin, adapter);
             if (found && pluginPath is not null)
             {
                 var isCompatible = IsVersionCompatible(plugin.VersionRequirement, detectedVersion, out var explanation);
@@ -228,14 +243,26 @@ public static class DependencyResolverPipeline
         return null;
     }
 
-    public static (bool Found, string? Path, string? DetectedVersion) CheckPluginInstalled(PluginDependency plugin)
+    public static (bool Found, string? Path, string? DetectedVersion) CheckPluginInstalled(PluginDependency plugin, IDawAdapter? adapter = null)
     {
         ArgumentNullException.ThrowIfNull(plugin);
 
-        // Native Image-Line plugins are considered available with the DAW
-        if (plugin.Plugin.Format == PluginFormat.Native || plugin.Plugin.Vendor.Equals("Image-Line", StringComparison.OrdinalIgnoreCase))
+        if (adapter != null)
         {
-            return (true, "Native FL Studio Plugin", null);
+            var probe = adapter.ProbePluginInstallation(plugin);
+            if (probe.Found)
+            {
+                return probe;
+            }
+        }
+        else if (plugin.Plugin.Format == PluginFormat.Native)
+        {
+            if (string.Equals(plugin.Plugin.Vendor, "Image-Line", StringComparison.OrdinalIgnoreCase))
+            {
+                return (true, "Native FL Studio Plugin", null);
+            }
+
+            return (true, "Native DAW Plugin", null);
         }
 
         // Check common VST3 paths on Windows

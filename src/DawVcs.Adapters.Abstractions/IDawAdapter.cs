@@ -51,4 +51,14 @@ public interface IDawAdapter
     /// Bepaalt de rol (instrument of effect) voor een plugin.
     /// </summary>
     PluginRole DeterminePluginRole(string rawName);
+
+    /// <summary>
+    /// Genereert DAW-specifieke instructies en relinking-stappen na een checkout (FR-CHK-013).
+    /// </summary>
+    IReadOnlyList<string> GetCheckoutGuidance(string managedAssetRoot, IReadOnlyList<string> restoredFiles);
+
+    /// <summary>
+    /// Probeert te bepalen of een plugin geïnstalleerd is of native gebundeld is met de DAW.
+    /// </summary>
+    (bool Found, string? Path, string? DetectedVersion) ProbePluginInstallation(PluginDependency plugin);
 }

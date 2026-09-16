@@ -1,7 +1,7 @@
 # Software Bill of Materials (SBOM) & Dependency Audit
 
 **Product:** DAWVC (Digital Audio Workstation Version Control)  
-**Version:** `0.1.0-preview.1`  
+**Version:** `0.1.0-preview.2`  
 **License:** MIT License  
 **Audit Date:** 2026-09-14  
 **Audit Status:** Passed (0 High/Critical Vulnerabilities, 100% Permissive Licenses)

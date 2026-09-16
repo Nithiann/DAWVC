@@ -1,6 +1,6 @@
 # Known Limitations & Scope Boundaries (v0.1 Technical Preview)
 
-**Release:** DAWVC v0.1.0-preview.1  
+**Release:** DAWVC v0.1.0-preview.2  
 **Requirement Mapping:** `NFR-REL-007`, `NFR-REL-008`, `NFR-SEC-001..009`, Section 25 & 29
 
 ---
@@ -53,3 +53,12 @@
 
 - Local absolute filesystem paths (such as `C:\Users\<username>\...`) and URL credentials are automatically redacted in diagnostic logs and error outputs (`NFR-SEC-007`).
 - Inspection metadata contains no user passwords or machine hardware IDs.
+
+---
+
+## 7. Automatic Rollback on Handled Publication Failure
+
+- In v0.1, the `PublicationJournal` provides automatic, in-memory rollback of file operations when an exception occurs during staging, candidate installation, reference updates, or index clearing.
+- If a handled error is encountered, temporary file-level backups are restored in reverse order, returning the workspace to its exact pre-checkout state.
+- **Crash Recovery Scope:** Unhandled terminations (e.g. `SIGKILL`, abrupt power outage, or OS panic) mid-publication cannot be rolled back until persistent on-disk transaction manifests (`.dawvc/transactions/<id>/`) are implemented in a future release.
+
