@@ -107,7 +107,7 @@ public sealed class PublicationJournal : IAsyncDisposable
                                 var backupDir = Path.GetDirectoryName(backupFilePath);
                                 if (!string.IsNullOrEmpty(backupDir))
                                 {
-                                Directory.CreateDirectory(backupDir);
+                                    Directory.CreateDirectory(backupDir);
                                 }
 
                                 // Take backup before deleting
