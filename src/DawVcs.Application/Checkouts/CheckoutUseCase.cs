@@ -32,7 +32,7 @@ public sealed record CheckoutResult(
 
 /// <summary>
 /// Beheert veilige, getrapte (staged) checkout en herstel van snapshots (FR-CHK-001..015, AC-009..013).
-/// Past dirty-workspacebeveiliging toe, maakt een recoverykopie bij --force, en garandeert atomiciteit via PublicationJournal.
+/// Past dirty-workspacebeveiliging toe, maakt een recoverykopie bij --force, en biedt automatische rollback bij publicatiefouten via PublicationJournal.
 /// </summary>
 public sealed class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
 {
@@ -55,6 +55,22 @@ public sealed class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
         var repoRoot = !string.IsNullOrWhiteSpace(context.RootPath)
             ? Path.GetFullPath(context.RootPath)
             : Path.GetFullPath(request.RepositoryDirectory);
+
+        var isExternalRestore = !string.IsNullOrWhiteSpace(request.RestoreToDirectory);
+
+        // Guard: in-place checkout of a loose commit hash is disallowed (Option 2 for MVP)
+        // to prevent accidentally mutating the active branch pointer.
+        if (!isExternalRestore)
+        {
+            var isBranch = BranchName.TryCreate(request.Reference, out var branchName, out _)
+                && context.GetBranchCommit(branchName).HasValue;
+
+            if (!isBranch)
+            {
+                throw new InvalidOperationException(
+                    $"Direct checkout of a commit into the active workspace is disabled to prevent accidental branch modification. Use 'dawvc switch <branch>' to switch branches, or 'dawvc checkout {request.Reference} --restore-to <directory>' to restore a snapshot.");
+            }
+        }
 
         // 1. Resolve commit reference (branch, full hash of prefix)
         var commitId = context.ResolveReference(request.Reference)
@@ -86,7 +102,6 @@ public sealed class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
         // 5. Bestemming en Dirty Workspace controle (FR-CHK-008, FR-CHK-009, FR-CHK-010, AC-009, AC-010)
         string targetDir;
         string? recoveryDir = null;
-        var isExternalRestore = !string.IsNullOrWhiteSpace(request.RestoreToDirectory);
         CheckoutPlan plan;
 
         if (isExternalRestore)
@@ -176,9 +191,29 @@ public sealed class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
                 }
             }
 
-            // 8. Atomische installatie van de geverifieerde candidate met rollback journal (FR-CHK-006, ADR-IO-001)
+            // 8. Installatie van de geverifieerde candidate met rollback journal (FR-CHK-006, ADR-IO-001)
             await using var journal = new PublicationJournal(targetDir, Path.Combine(repoRoot, ".dawvc"));
-            restoredFiles = (await journal.ExecutePlanAsync(stagingDir, plan, cancellationToken).ConfigureAwait(false)).ToList();
+            restoredFiles = (await journal.ApplyAsync(stagingDir, plan, cancellationToken).ConfigureAwait(false)).ToList();
+
+            try
+            {
+                // 9. Werk HEAD en staging index bij (alleen bij in-place checkout)
+                if (!isExternalRestore)
+                {
+                    var branch = new BranchName(request.Reference);
+                    context.SetCurrentBranch(branch);
+
+                    // Reset staging index naar schone HEAD toestand
+                    await context.StagingIndex.ClearStagedEntriesAsync(cancellationToken).ConfigureAwait(false);
+                }
+
+                await journal.CommitAsync().ConfigureAwait(false);
+            }
+            catch
+            {
+                await journal.RollbackAsync().ConfigureAwait(false);
+                throw;
+            }
         }
         finally
         {
@@ -194,28 +229,6 @@ public sealed class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
                     // Best effort cleanup
                 }
             }
-        }
-
-        // 9. Werk HEAD en staging index bij (alleen bij in-place checkout)
-        if (!isExternalRestore)
-        {
-            // Verplaats branch pointer indien een branchnaam werd opgegeven
-            var branch = new BranchName(request.Reference);
-            var existingBranchCommit = context.GetBranchCommit(branch);
-            if (existingBranchCommit.HasValue)
-            {
-                context.SetCurrentBranch(branch);
-                await context.UpdateBranchCommitAsync(branch, commit.Id, cancellationToken).ConfigureAwait(false);
-            }
-            else
-            {
-                // Checkout van specifieke commit hash
-                var currentBranch = context.GetCurrentBranch();
-                await context.UpdateBranchCommitAsync(currentBranch, commit.Id, cancellationToken).ConfigureAwait(false);
-            }
-
-            // Reset staging index naar schone HEAD toestand
-            await context.StagingIndex.ClearStagedEntriesAsync(cancellationToken).ConfigureAwait(false);
         }
 
         // 10. Dependency Resolution & Local Bindings (FR-BND-001..009, FR-CHK-014, FR-CHK-015, AC-013)

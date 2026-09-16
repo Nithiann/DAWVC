@@ -3,6 +3,7 @@ using System.Text;
 
 using DawVcs.Adapters.FLStudio;
 using DawVcs.Application.Adapters;
+using DawVcs.Application.Branches;
 using DawVcs.Application.Checkouts;
 using DawVcs.Application.Commits;
 using DawVcs.Application.Dependencies;
@@ -40,7 +41,11 @@ public sealed class CheckoutAcTests
         var commitUseCase = new CommitUseCase(ContextFactory, Registry);
         var commit1 = await commitUseCase.ExecuteAsync(new CommitRequest(temp.Path, "Initial commit"));
 
-        // Maak een tweede commit
+        // Maak feature branch 'feature' aan op commit 1
+        var branchUseCase = new BranchUseCase(ContextFactory);
+        await branchUseCase.CreateAsync(new BranchCreateRequest(temp.Path, "feature"));
+
+        // Maak een tweede commit op main
         var sampleBytes = new byte[] { 1, 2, 3, 4, 5 };
         var samplePath = Path.Combine(temp.Path, "Kick.wav");
         await File.WriteAllBytesAsync(samplePath, sampleBytes);
@@ -54,19 +59,24 @@ public sealed class CheckoutAcTests
         var dirtyBytes = new byte[] { 0xDE, 0xAD, 0xBE, 0xEF };
         await File.WriteAllBytesAsync(flpPath, dirtyBytes);
 
-        // When de gebruiker een normale checkout uitvoert (zonder --force)
+        // When de gebruiker een normale in-place checkout uitvoert naar branch feature (zonder --force)
         var checkoutUseCase = new CheckoutUseCase(ContextFactory);
-        var act = () => checkoutUseCase.ExecuteAsync(new CheckoutRequest(temp.Path, commit1.CommitId.ToString(), Force: false));
+        var act = () => checkoutUseCase.ExecuteAsync(new CheckoutRequest(temp.Path, "feature", Force: false));
 
         // Then stopt checkout met DirtyWorkspaceException (exitcode 7)
         var ex = await act.Should().ThrowAsync<DirtyWorkspaceException>();
         ex.Which.Status.HasWorkingTreeModifications.Should().BeTrue();
 
+        // And direct in-place checkout van een losse commit hash wordt geweigerd om branches te beschermen (Option 2)
+        var commitAct = () => checkoutUseCase.ExecuteAsync(new CheckoutRequest(temp.Path, commit1.CommitId.ToString(), Force: false));
+        await commitAct.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Direct checkout of a commit into the active workspace is disabled*");
+
         // And blijven alle lokale bytes onaangeraakt
         var currentBytes = await File.ReadAllBytesAsync(flpPath);
         currentBytes.Should().Equal(dirtyBytes);
 
-        // When de gebruiker --restore-to gebruikt
+        // When de gebruiker --restore-to gebruikt met commit hash
         using var restoreDir = new TempDirectory();
         var restoreResult = await checkoutUseCase.ExecuteAsync(new CheckoutRequest(
             temp.Path,
@@ -95,6 +105,10 @@ public sealed class CheckoutAcTests
         var commitUseCase = new CommitUseCase(ContextFactory, Registry);
         var commit1 = await commitUseCase.ExecuteAsync(new CommitRequest(temp.Path, "Commit 1"));
 
+        // Maak feature branch 'v1' aan op commit 1
+        var branchUseCase = new BranchUseCase(ContextFactory);
+        await branchUseCase.CreateAsync(new BranchCreateRequest(temp.Path, "v1"));
+
         // Commit 2 met extra sample
         var kickBytes = new byte[] { 10, 20, 30 };
         var kickPath = Path.Combine(temp.Path, "Kick.wav");
@@ -108,11 +122,11 @@ public sealed class CheckoutAcTests
         var dirtyFlpBytes = new byte[] { 0xAA, 0xBB, 0xCC, 0xDD };
         await File.WriteAllBytesAsync(flpPath, dirtyFlpBytes);
 
-        // When de gebruiker checkout --force uitvoert naar commit 1
+        // When de gebruiker checkout --force uitvoert naar branch v1
         var checkoutUseCase = new CheckoutUseCase(ContextFactory);
         var result = await checkoutUseCase.ExecuteAsync(new CheckoutRequest(
             temp.Path,
-            commit1.CommitId.ToString(),
+            "v1",
             Force: true));
 
         // Then wordt eerst een volledige recovery copy gemaakt en gerapporteerd
@@ -155,6 +169,10 @@ public sealed class CheckoutAcTests
         await addUseCase.ExecuteAsync(new AddRequest(temp.Path, ["Sound.wav"]));
         var commit2 = await commitUseCase.ExecuteAsync(new CommitRequest(temp.Path, "Commit 2"));
 
+        // Maak feature branch 'feature' op commit 2
+        var branchUseCase = new BranchUseCase(ContextFactory);
+        await branchUseCase.CreateAsync(new BranchCreateRequest(temp.Path, "feature"));
+
         // Simuleer dat een vereist blobobject voor commit 2 ontbreekt/corrupt raakt in de object store
         using (var repo = ContextFactory(temp.Path))
         {
@@ -168,9 +186,9 @@ public sealed class CheckoutAcTests
             }
         }
 
-        // When checkout naar commit 2 faalt tijdens validatie/staging
+        // When checkout naar branch feature faalt tijdens validatie/staging
         var checkoutUseCase = new CheckoutUseCase(ContextFactory);
-        var act = () => checkoutUseCase.ExecuteAsync(new CheckoutRequest(temp.Path, commit2.CommitId.ToString()));
+        var act = () => checkoutUseCase.ExecuteAsync(new CheckoutRequest(temp.Path, "feature"));
 
         await act.Should().ThrowAsync<CheckoutStagingException>();
 
@@ -263,7 +281,10 @@ public sealed class CheckoutAcTests
         var commitUseCase = new CommitUseCase(ContextFactory, Registry);
         var commit1 = await commitUseCase.ExecuteAsync(new CommitRequest(temp.Path, "Initial commit"));
 
-        // Commit 2 adds Kick.wav
+        var branchUseCase = new BranchUseCase(ContextFactory);
+        await branchUseCase.CreateAsync(new BranchCreateRequest(temp.Path, "v1"));
+
+        // Commit 2 adds Kick.wav on main
         var kickInCommitBytes = new byte[] { 1, 1, 1, 1 };
         var kickPath = Path.Combine(temp.Path, "Kick.wav");
         await File.WriteAllBytesAsync(kickPath, kickInCommitBytes);
@@ -272,17 +293,18 @@ public sealed class CheckoutAcTests
         await addUseCase.ExecuteAsync(new AddRequest(temp.Path, ["Kick.wav"]));
         var commit2 = await commitUseCase.ExecuteAsync(new CommitRequest(temp.Path, "Commit with Kick"));
 
-        // Checkout commit 1: Kick.wav is now deleted/obsolete
-        var checkoutUseCase = new CheckoutUseCase(ContextFactory, Registry);
-        await checkoutUseCase.ExecuteAsync(new CheckoutRequest(temp.Path, commit1.CommitId.ToString(), Force: false));
+        // Switch to branch v1: Kick.wav is now deleted/obsolete
+        var switchUseCase = new SwitchUseCase(ContextFactory);
+        await switchUseCase.ExecuteAsync(new SwitchRequest(temp.Path, "v1"));
         File.Exists(kickPath).Should().BeFalse();
 
         // Now user creates an untracked Kick.wav with their own local content
         var localUntrackedBytes = new byte[] { 9, 9, 9, 9, 9 };
         await File.WriteAllBytesAsync(kickPath, localUntrackedBytes);
 
-        // When attempting checkout to commit 2 without --force
-        var act = () => checkoutUseCase.ExecuteAsync(new CheckoutRequest(temp.Path, commit2.CommitId.ToString(), Force: false));
+        // When attempting checkout to branch main without --force
+        var checkoutUseCase = new CheckoutUseCase(ContextFactory, Registry);
+        var act = () => checkoutUseCase.ExecuteAsync(new CheckoutRequest(temp.Path, "main", Force: false));
 
         // Then it must throw DirtyWorkspaceException with untracked conflict details
         var ex = await act.Should().ThrowAsync<DirtyWorkspaceException>();
@@ -308,7 +330,10 @@ public sealed class CheckoutAcTests
         var commitUseCase = new CommitUseCase(ContextFactory, Registry);
         var commit1 = await commitUseCase.ExecuteAsync(new CommitRequest(temp.Path, "Base commit"));
 
-        // Commit 2 adds Extra.wav
+        var branchUseCase = new BranchUseCase(ContextFactory);
+        await branchUseCase.CreateAsync(new BranchCreateRequest(temp.Path, "base"));
+
+        // Commit 2 adds Extra.wav on main
         var extraBytes = new byte[] { 42, 43, 44 };
         var extraPath = Path.Combine(temp.Path, "Extra.wav");
         await File.WriteAllBytesAsync(extraPath, extraBytes);
@@ -319,13 +344,34 @@ public sealed class CheckoutAcTests
 
         File.Exists(extraPath).Should().BeTrue();
 
-        // When checking out commit 1
+        // When checking out branch base
         var checkoutUseCase = new CheckoutUseCase(ContextFactory, Registry);
-        await checkoutUseCase.ExecuteAsync(new CheckoutRequest(temp.Path, commit1.CommitId.ToString(), Force: false));
+        await checkoutUseCase.ExecuteAsync(new CheckoutRequest(temp.Path, "base", Force: false));
 
-        // Then Extra.wav should be deleted from working tree as it does not exist in commit 1
+        // Then Extra.wav should be deleted from working tree as it does not exist in branch base
         File.Exists(extraPath).Should().BeFalse();
         File.Exists(flpPath).Should().BeTrue();
+    }
+
+    [Fact]
+    [Trait("Requirement", "FR-CHK-008")]
+    public async Task Checkout_CommitHashWithoutRestoreTo_ThrowsInvalidOperationException()
+    {
+        using var temp = new TempDirectory();
+        var flpPath = Path.Combine(temp.Path, "Track.flp");
+        await File.WriteAllBytesAsync(flpPath, CreateFlp());
+
+        var initUseCase = new InitRepositoryUseCase(ContextFactory);
+        await initUseCase.ExecuteAsync(new InitRequest(temp.Path, "CommitCheckoutGuardTest", "Track.flp"));
+
+        var commitUseCase = new CommitUseCase(ContextFactory, Registry);
+        var commit = await commitUseCase.ExecuteAsync(new CommitRequest(temp.Path, "Initial commit"));
+
+        var checkoutUseCase = new CheckoutUseCase(ContextFactory);
+        var act = () => checkoutUseCase.ExecuteAsync(new CheckoutRequest(temp.Path, commit.CommitId.ToString(), Force: false));
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Direct checkout of a commit into the active workspace is disabled*");
     }
 
     private sealed class TempDirectory : IDisposable

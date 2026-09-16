@@ -7,9 +7,8 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release tag name (e.g. v0.1.0-preview.1)'
+        description: 'Release tag name (e.g. v0.1.0-preview.2)'
         required: false
-        default: 'v0.1.0-preview.1'
         type: string
 
 permissions:
@@ -51,7 +50,8 @@ jobs:
           } elseif ($isTag -eq "true") {
             $tag = $refName
           } else {
-            $tag = "v0.1.0-preview.1"
+            Write-Error "Release tag not specified. Please supply tag_name in workflow_dispatch or trigger via a git tag."
+            exit 1
           }
           
           if ($tag -match '^v(.*)$') {

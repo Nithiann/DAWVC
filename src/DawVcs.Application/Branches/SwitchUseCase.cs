@@ -101,7 +101,7 @@ public sealed class SwitchUseCase
             var checkoutUseCase = new CheckoutUseCase(_contextFactory, _adapterRegistry);
             var checkoutRequest = new CheckoutRequest(
                 request.RepositoryDirectory,
-                targetCommit.Value.ToString(),
+                targetBranch.Value,
                 Force: request.Force);
 
             checkoutResult = await checkoutUseCase.ExecuteAsync(checkoutRequest, cancellationToken).ConfigureAwait(false);

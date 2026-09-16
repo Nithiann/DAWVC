@@ -4,7 +4,7 @@ using DawVcs.Domain.Checkouts;
 namespace DawVcs.Application.Checkouts;
 
 /// <summary>
-/// Journalized atomic publisher that applies multi-file checkout plans with automatic rollback on partial failure (FR-CHK-006, ADR-IO-001).
+/// Journalized publisher that applies multi-file checkout plans with automatic rollback on handled publication failure (FR-CHK-006, ADR-IO-001).
 /// </summary>
 public sealed class PublicationJournal : IAsyncDisposable
 {
@@ -21,6 +21,7 @@ public sealed class PublicationJournal : IAsyncDisposable
     private readonly string _backupDir;
     private readonly List<JournalEntry> _appliedEntries = [];
     private bool _committed;
+    private bool _rolledBack;
 
     public PublicationJournal(string targetDir, string workspaceDotDawvcDir)
     {
@@ -29,7 +30,11 @@ public sealed class PublicationJournal : IAsyncDisposable
         _backupDir = Path.Combine(backupBase, $".journal_backup_{Guid.NewGuid():N}");
     }
 
-    public async Task<IReadOnlyList<string>> ExecutePlanAsync(
+    /// <summary>
+    /// Applies the checkout plan by moving staged files into the workspace and creating temporary backups.
+    /// Does not mark the transaction as committed, allowing subsequent steps (refs, index) to complete before committing.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> ApplyAsync(
         string stagingDir,
         CheckoutPlan plan,
         CancellationToken cancellationToken = default)
@@ -102,7 +107,7 @@ public sealed class PublicationJournal : IAsyncDisposable
                                 var backupDir = Path.GetDirectoryName(backupFilePath);
                                 if (!string.IsNullOrEmpty(backupDir))
                                 {
-                                    Directory.CreateDirectory(backupDir);
+                                Directory.CreateDirectory(backupDir);
                                 }
 
                                 // Take backup before deleting
@@ -123,7 +128,6 @@ public sealed class PublicationJournal : IAsyncDisposable
                 }
             }
 
-            _committed = true;
             return modifiedFiles;
         }
         catch (Exception ex)
@@ -133,8 +137,40 @@ public sealed class PublicationJournal : IAsyncDisposable
         }
     }
 
-    private async Task RollbackAsync()
+    /// <summary>
+    /// Executes the plan and immediately commits if all actions succeed.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> ExecutePlanAsync(
+        string stagingDir,
+        CheckoutPlan plan,
+        CancellationToken cancellationToken = default)
     {
+        var modified = await ApplyAsync(stagingDir, plan, cancellationToken).ConfigureAwait(false);
+        await CommitAsync().ConfigureAwait(false);
+        return modified;
+    }
+
+    /// <summary>
+    /// Commits the publication by removing temporary file backups.
+    /// </summary>
+    public async Task CommitAsync()
+    {
+        _committed = true;
+        await CleanupBackupDirAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Reverts all applied actions in reverse chronological order and restores backups.
+    /// </summary>
+    public async Task RollbackAsync()
+    {
+        if (_rolledBack)
+        {
+            return;
+        }
+
+        _rolledBack = true;
+
         // Revert applied actions in reverse chronological order
         for (int i = _appliedEntries.Count - 1; i >= 0; i--)
         {
@@ -191,7 +227,11 @@ public sealed class PublicationJournal : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        if (_committed)
+        if (!_committed && !_rolledBack)
+        {
+            await RollbackAsync().ConfigureAwait(false);
+        }
+        else
         {
             await CleanupBackupDirAsync().ConfigureAwait(false);
         }

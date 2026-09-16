@@ -8,6 +8,7 @@ using DawVcs.Application.Commits;
 using DawVcs.Application.Exceptions;
 using DawVcs.Application.Repositories;
 using DawVcs.Application.Staging;
+using DawVcs.Domain.Common;
 using DawVcs.Domain.Repositories;
 using DawVcs.Infrastructure.Repositories;
 
@@ -111,6 +112,47 @@ public sealed class BranchSwitchAcTests
         Directory.Exists(forceResult.RecoveryDirectory).Should().BeTrue();
 
         context.GetCurrentBranch().Value.Should().Be("experiment");
+    }
+
+    [Fact]
+    [Trait("Requirement", "FR-BRA-004..007")]
+    public async Task Switch_DoesNotMovePreviousBranchCommitPointer()
+    {
+        using var temp = new TempDirectory();
+        var flpPath = Path.Combine(temp.Path, "Track.flp");
+        await File.WriteAllBytesAsync(flpPath, CreateFlp());
+
+        var initUseCase = new InitRepositoryUseCase(ContextFactory);
+        await initUseCase.ExecuteAsync(new InitRequest(temp.Path, "SwitchBranchPointerTest", "Track.flp"));
+
+        var commitUseCase = new CommitUseCase(ContextFactory, Registry);
+        var commit1 = await commitUseCase.ExecuteAsync(new CommitRequest(temp.Path, "Commit 1 (base)"));
+
+        // Maak feature branch 'experiment' aan op commit 1
+        var branchUseCase = new BranchUseCase(ContextFactory);
+        await branchUseCase.CreateAsync(new BranchCreateRequest(temp.Path, "experiment"));
+
+        // Maak tweede commit op main
+        var sampleBytes = new byte[] { 10, 20, 30 };
+        await File.WriteAllBytesAsync(Path.Combine(temp.Path, "HiHat.wav"), sampleBytes);
+        var addUseCase = new AddUseCase(ContextFactory);
+        await addUseCase.ExecuteAsync(new AddRequest(temp.Path, ["HiHat.wav"]));
+        var commit2 = await commitUseCase.ExecuteAsync(new CommitRequest(temp.Path, "Commit 2 on main"));
+
+        var context = ContextFactory(temp.Path);
+        var mainBefore = context.GetBranchCommit(BranchName.Main);
+        mainBefore.Should().Be(commit2.CommitId);
+
+        // WHEN: switch naar experiment
+        var switchUseCase = new SwitchUseCase(ContextFactory);
+        await switchUseCase.ExecuteAsync(new SwitchRequest(temp.Path, "experiment"));
+
+        // THEN: main pointer mag NIET zijn verplaatst naar experiment's commit!
+        context.GetBranchCommit(BranchName.Main)
+            .Should().Be(mainBefore, "switching to another branch must not mutate the previous branch commit pointer");
+
+        context.GetCurrentBranch().Value.Should().Be("experiment");
+        context.GetBranchCommit(new BranchName("experiment")).Should().Be(commit1.CommitId);
     }
 
     private sealed class TempDirectory : IDisposable

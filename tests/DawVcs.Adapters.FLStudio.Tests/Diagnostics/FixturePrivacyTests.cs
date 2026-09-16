@@ -53,8 +53,7 @@ public sealed class FixturePrivacyTests
 
             foreach (var content in new[] { ascii, utf8, utf16 })
             {
-                var extendedRegex = new Regex(@"[a-zA-Z]:\\Users\\[^\x00\r\n\t]+", RegexOptions.IgnoreCase);
-                foreach (Match match in extendedRegex.Matches(content))
+                foreach (Match match in WindowsUserRegex.Matches(content))
                 {
                     violations.Add($"{relPath}: Contains Windows User Profile path: '{match.Value}'");
                 }
