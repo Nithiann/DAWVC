@@ -1,7 +1,7 @@
 # DAWVC CLI Command Reference
 
 **Executable:** `dawvc.exe`  
-**Version:** `0.1.0-preview.2`  
+**Version:** `0.1.0-preview.3`  
 **Syntax:** `dawvc <command> [options] [arguments]`
 
 ---

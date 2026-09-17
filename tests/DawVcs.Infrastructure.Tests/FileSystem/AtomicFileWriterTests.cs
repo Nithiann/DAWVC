@@ -133,4 +133,45 @@ public sealed class AtomicFileWriterTests : IDisposable
         var writtenBytes = await File.ReadAllBytesAsync(targetFile);
         writtenBytes.Should().Equal(payload);
     }
+
+    [Fact]
+    [Trait("Requirement", "FR-OBJ-004")]
+    public void WriteAtomic_SynchronousText_WritesAndOverwritesAtomically()
+    {
+        // Arrange
+        var targetFile = Path.Combine(_testDirectory, "atomic_sync.txt");
+
+        // Act 1: Initial write
+        AtomicFileWriter.WriteAtomic(targetFile, "Hello, atomic world!\n");
+
+        // Assert 1
+        File.ReadAllText(targetFile).Should().Be("Hello, atomic world!\n");
+
+        // Act 2: Overwrite
+        AtomicFileWriter.WriteAtomic(targetFile, "Overwritten atomically!\n");
+
+        // Assert 2
+        File.ReadAllText(targetFile).Should().Be("Overwritten atomically!\n");
+    }
+
+    [Fact]
+    [Trait("Requirement", "NFR-INT-004")]
+    public void WriteAtomic_WhenActionThrows_LeavesOriginalFileUnchanged()
+    {
+        // Arrange
+        var targetFile = Path.Combine(_testDirectory, "preserve_me.txt");
+        File.WriteAllText(targetFile, "Initial content");
+
+        // Act
+        var act = () =>
+        {
+            AtomicFileWriter.WriteAtomic(
+                targetFile,
+                _ => throw new InvalidOperationException("Failure during sync write"));
+        };
+
+        // Assert
+        act.Should().Throw<InvalidOperationException>().WithMessage("*Failure during sync write*");
+        File.ReadAllText(targetFile).Should().Be("Initial content");
+    }
 }

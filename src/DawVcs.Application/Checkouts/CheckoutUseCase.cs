@@ -195,6 +195,11 @@ public sealed class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
             await using var journal = new PublicationJournal(targetDir, Path.Combine(repoRoot, ".dawvc"));
             restoredFiles = (await journal.ApplyAsync(stagingDir, plan, cancellationToken).ConfigureAwait(false)).ToList();
 
+            var previousBranch = !isExternalRestore ? context.GetCurrentBranch() : (BranchName?)null;
+            var previousStagedEntries = !isExternalRestore
+                ? await context.StagingIndex.GetStagedEntriesAsync(cancellationToken).ConfigureAwait(false)
+                : null;
+
             try
             {
                 // 9. Werk HEAD en staging index bij (alleen bij in-place checkout)
@@ -211,6 +216,37 @@ public sealed class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
             }
             catch
             {
+                if (!isExternalRestore)
+                {
+                    try
+                    {
+                        if (previousBranch.HasValue)
+                        {
+                            context.SetCurrentBranch(previousBranch.Value);
+                        }
+                    }
+                    catch
+                    {
+                        // Best effort restore of previous branch
+                    }
+
+                    try
+                    {
+                        if (previousStagedEntries != null)
+                        {
+                            await context.StagingIndex.ClearStagedEntriesAsync(CancellationToken.None).ConfigureAwait(false);
+                            foreach (var entry in previousStagedEntries)
+                            {
+                                await context.StagingIndex.StageEntryAsync(entry, CancellationToken.None).ConfigureAwait(false);
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // Best effort restore of staged entries
+                    }
+                }
+
                 await journal.RollbackAsync().ConfigureAwait(false);
                 throw;
             }

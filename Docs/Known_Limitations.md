@@ -1,6 +1,6 @@
 # Known Limitations & Scope Boundaries (v0.1 Technical Preview)
 
-**Release:** DAWVC v0.1.0-preview.2  
+**Release:** DAWVC v0.1.0-preview.3  
 **Requirement Mapping:** `NFR-REL-007`, `NFR-REL-008`, `NFR-SEC-001..009`, Section 25 & 29
 
 ---
