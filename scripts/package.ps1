@@ -3,20 +3,31 @@
     Packages DAWVC as a self-contained Windows x64 distribution ZIP with SHA-256 checksums.
 
 .PARAMETER Version
-    The version tag to package (default: "0.1.0-preview.2").
+    The version tag to package. If omitted, extracted from Directory.Build.props.
 
 .PARAMETER OutputDir
     Directory where release artifacts will be placed (default: "artifacts").
 #>
 [CmdletBinding()]
 param(
-    [string]$Version = "0.1.0-preview.2",
+    [string]$Version,
     [string]$OutputDir = "artifacts"
 )
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $ArtifactsDir = Join-Path $RepoRoot $OutputDir
+
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    $propsPath = Join-Path $RepoRoot "Directory.Build.props"
+    if (Test-Path $propsPath) {
+        $xml = [xml](Get-Content $propsPath)
+        $Version = $xml.Project.PropertyGroup.Version | Select-Object -First 1
+    }
+    if ([string]::IsNullOrWhiteSpace($Version)) {
+        $Version = "0.1.0-preview.3"
+    }
+}
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host " DAWVC Packaging: v$Version (win-x64)" -ForegroundColor Cyan
@@ -70,7 +81,11 @@ Write-Host "  Release gate PASSED: Version verified as $Version" -ForegroundColo
 # 3. Copy license and readme
 Write-Host "`n[2/4] Staging documentation and license..." -ForegroundColor Yellow
 Copy-Item (Join-Path $RepoRoot "LICENSE") -Destination $PublishDir
-Copy-Item (Join-Path $RepoRoot "README.md") -Destination $PublishDir
+
+$readmeContent = Get-Content (Join-Path $RepoRoot "README.md") -Raw
+# Ensure release badge in staged README reflects the packaged release version
+$stagedReadmeContent = [regex]::Replace($readmeContent, 'Release-v[0-9A-Za-z\.\-]+-green\.svg', "Release-v$Version-green.svg")
+Set-Content (Join-Path $PublishDir "README.md") -Value $stagedReadmeContent -Encoding utf8
 
 # Remove any debug symbols (.pdb) from release bundle
 Get-ChildItem -Path $PublishDir -Filter "*.pdb" -Recurse | Remove-Item -Force

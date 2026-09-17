@@ -18,6 +18,7 @@ public sealed class FileSystemRepositoryContextBranchTests : IDisposable
         _tempDir = Path.Combine(Path.GetTempPath(), "dawvc-branch-tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_tempDir);
         _context = new FileSystemRepositoryContext(_tempDir);
+        _context.SetCurrentBranch(BranchName.Main);
     }
 
     public void Dispose()
@@ -71,5 +72,53 @@ public sealed class FileSystemRepositoryContextBranchTests : IDisposable
 
         // Second branch still remains intact
         _context.GetBranchCommit(branchName2).Should().Be(commit2);
+    }
+
+    [Fact]
+    public void GetCurrentBranch_WhenHeadFileMissing_ThrowsInvalidOperationException()
+    {
+        var emptyDir = Path.Combine(Path.GetTempPath(), "dawvc-empty-head-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(emptyDir);
+        try
+        {
+            var ctx = new FileSystemRepositoryContext(emptyDir);
+            var act = () => ctx.GetCurrentBranch();
+
+            act.Should().Throw<InvalidOperationException>()
+                .WithMessage("*HEAD file is missing*");
+        }
+        finally
+        {
+            try { Directory.Delete(emptyDir, true); } catch { }
+        }
+    }
+
+    [Fact]
+    public void GetCurrentBranch_WhenHeadFileCorrupt_ThrowsInvalidOperationException()
+    {
+        // Arrange: Write corrupt HEAD file (not ref: refs/heads/...)
+        var dotDawvc = Path.Combine(_tempDir, ".dawvc");
+        Directory.CreateDirectory(dotDawvc);
+        File.WriteAllText(Path.Combine(dotDawvc, "HEAD"), "GARBAGE_HEAD_CONTENT\n");
+
+        // Act
+        var act = () => _context.GetCurrentBranch();
+
+        // Assert
+        act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Invalid HEAD reference*");
+    }
+
+    [Fact]
+    public void SetCurrentBranch_WritesHeadAtomically_AndGetCurrentBranchReadsIt()
+    {
+        // Act
+        _context.SetCurrentBranch(new BranchName("feature/atomic"));
+
+        // Assert
+        _context.GetCurrentBranch().Value.Should().Be("feature/atomic");
+
+        var headPath = Path.Combine(_tempDir, ".dawvc", "HEAD");
+        File.ReadAllText(headPath).Trim().Should().Be("ref: refs/heads/feature/atomic");
     }
 }

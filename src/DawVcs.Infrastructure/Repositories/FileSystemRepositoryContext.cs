@@ -84,7 +84,7 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
     {
         if (!File.Exists(_headFilePath))
         {
-            return BranchName.Main;
+            throw new InvalidOperationException($"Corrupt repository: HEAD file is missing at '{_headFilePath}'.");
         }
 
         var headContent = File.ReadAllText(_headFilePath).Trim();
@@ -98,13 +98,13 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
             }
         }
 
-        return BranchName.Main;
+        throw new InvalidOperationException($"Corrupt repository: Invalid HEAD reference '{headContent}' in '{_headFilePath}'.");
     }
 
     public void SetCurrentBranch(BranchName branch)
     {
         Directory.CreateDirectory(_dotDawvcPath);
-        File.WriteAllText(_headFilePath, $"ref: refs/heads/{branch.Value}\n");
+        AtomicFileWriter.WriteAtomic(_headFilePath, $"ref: refs/heads/{branch.Value}\n");
     }
 
     public IReadOnlyList<BranchInfo> GetBranches()
@@ -150,7 +150,7 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
             throw new InvalidOperationException($"Branch '{branch.Value}' already exists.");
         }
 
-        File.WriteAllText(branchRefFile, commitId.ToString() + "\n");
+        AtomicFileWriter.WriteAtomic(branchRefFile, commitId.ToString() + "\n");
     }
 
     public bool DeleteBranch(BranchName branch)

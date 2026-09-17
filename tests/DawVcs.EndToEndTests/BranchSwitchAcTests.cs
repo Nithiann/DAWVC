@@ -155,6 +155,37 @@ public sealed class BranchSwitchAcTests
         context.GetBranchCommit(new BranchName("experiment")).Should().Be(commit1.CommitId);
     }
 
+    [Fact]
+    [Trait("Requirement", "FR-BRA-004..007")]
+    public async Task Switch_CreateBranch_WhenDirtyWorkspaceWithoutForce_FailsAndRollsBackCreatedBranch()
+    {
+        using var temp = new TempDirectory();
+        var flpPath = Path.Combine(temp.Path, "Track.flp");
+        await File.WriteAllBytesAsync(flpPath, CreateFlp());
+
+        var initUseCase = new InitRepositoryUseCase(ContextFactory);
+        await initUseCase.ExecuteAsync(new InitRequest(temp.Path, "SwitchCreateRollbackTest", "Track.flp"));
+
+        var commitUseCase = new CommitUseCase(ContextFactory, Registry);
+        await commitUseCase.ExecuteAsync(new CommitRequest(temp.Path, "Initial commit on main"));
+
+        // Maak workspace dirty
+        await File.WriteAllBytesAsync(flpPath, new byte[] { 0xDE, 0xAD, 0xBE, 0xEF });
+
+        var switchUseCase = new SwitchUseCase(ContextFactory, Registry);
+
+        // WHEN switch -c aangeroepen wordt zonder force
+        var act = () => switchUseCase.ExecuteAsync(new SwitchRequest(temp.Path, "failed-branch", CreateBranch: true, Force: false));
+
+        // THEN DirtyWorkspaceException wordt gegooid
+        await act.Should().ThrowAsync<DirtyWorkspaceException>();
+
+        // EN de zojuist aangemaakte branch mag NIET achterblijven
+        var context = ContextFactory(temp.Path);
+        context.GetBranches().Should().NotContain(b => b.Name.Value == "failed-branch");
+        context.GetCurrentBranch().Value.Should().Be("main");
+    }
+
     private sealed class TempDirectory : IDisposable
     {
         public string Path { get; } = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "dawvc-branch-test-" + Guid.NewGuid().ToString("N"));

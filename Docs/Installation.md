@@ -19,7 +19,7 @@
 
 ### Step 1: Download the Release Archive
 Download the latest distribution archive and checksum file from the [GitHub Releases](https://github.com/Nithiann/DAWVC/releases) page:
-- `dawvc-v0.1.0-preview.2-win-x64.zip`
+- `dawvc-v0.1.0-preview.3-win-x64.zip`
 - `SHA256SUMS.txt`
 
 ### Step 2: Verify Cryptographic Checksum
@@ -27,7 +27,7 @@ Open PowerShell and verify the archive's integrity against the published SHA-256
 
 ```powershell
 $expectedHash = (Get-Content SHA256SUMS.txt).Split(' ')[0]
-$actualHash = (Get-FileHash dawvc-v0.1.0-preview.2-win-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+$actualHash = (Get-FileHash dawvc-v0.1.0-preview.3-win-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
 
 if ($actualHash -eq $expectedHash) {
     Write-Host "Verification successful: SHA-256 matches!" -ForegroundColor Green
@@ -40,7 +40,7 @@ if ($actualHash -eq $expectedHash) {
 Extract the contents to a permanent location, such as `C:\Tools\dawvc` or `%LOCALAPPDATA%\Programs\dawvc`:
 
 ```powershell
-Expand-Archive -Path dawvc-v0.1.0-preview.2-win-x64.zip -DestinationPath "C:\Tools\dawvc"
+Expand-Archive -Path dawvc-v0.1.0-preview.3-win-x64.zip -DestinationPath "C:\Tools\dawvc"
 ```
 
 The directory will contain:
@@ -66,7 +66,7 @@ Verify that DAWVC runs properly:
 
 ```powershell
 dawvc --version
-# Output: 0.1.0-preview.2
+# Output: 0.1.0-preview.3
 
 dawvc --help
 ```

@@ -97,18 +97,39 @@ public sealed class SwitchUseCase
 
         if (targetCommit.HasValue)
         {
-            // Checkout voert dirty-workspacecontrole uit; gooit CheckoutStagingException bij onopgeslagen wijzigingen zonder --force
+            // Checkout voert dirty-workspacecontrole uit; gooit CheckoutStagingException of DirtyWorkspaceException bij onopgeslagen wijzigingen zonder --force
             var checkoutUseCase = new CheckoutUseCase(_contextFactory, _adapterRegistry);
             var checkoutRequest = new CheckoutRequest(
                 request.RepositoryDirectory,
                 targetBranch.Value,
                 Force: request.Force);
 
-            checkoutResult = await checkoutUseCase.ExecuteAsync(checkoutRequest, cancellationToken).ConfigureAwait(false);
-        }
+            try
+            {
+                checkoutResult = await checkoutUseCase.ExecuteAsync(checkoutRequest, cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                if (createdNew)
+                {
+                    try
+                    {
+                        context.DeleteBranch(targetBranch);
+                    }
+                    catch
+                    {
+                        // Best-effort cleanup van niet-voltooide branch
+                    }
+                }
 
-        // Update HEAD naar de nieuwe branch
-        context.SetCurrentBranch(targetBranch);
+                throw;
+            }
+        }
+        else
+        {
+            // Alleen direct HEAD bijwerken als er geen checkout plaatsvond (bijv. weesbranch zonder commits)
+            context.SetCurrentBranch(targetBranch);
+        }
 
         return new SwitchResult(
             Branch: targetBranch,

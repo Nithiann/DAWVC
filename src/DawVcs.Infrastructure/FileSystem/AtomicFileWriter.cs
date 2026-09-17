@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace DawVcs.Infrastructure.FileSystem;
 
 /// <summary>
@@ -7,6 +9,63 @@ namespace DawVcs.Infrastructure.FileSystem;
 public static class AtomicFileWriter
 {
     private const int BufferSize = 64 * 1024;
+
+    /// <summary>
+    /// Synchronously writes content to the destination path using a same-directory temporary file
+    /// with flush-to-disk and atomic replacement.
+    /// </summary>
+    /// <param name="destinationPath">Target file path.</param>
+    /// <param name="writeAction">Callback that writes data into the temporary file stream.</param>
+    public static void WriteAtomic(
+        string destinationPath,
+        Action<Stream> writeAction)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
+        ArgumentNullException.ThrowIfNull(writeAction);
+
+        var fullPath = Path.GetFullPath(destinationPath);
+        var directory = Path.GetDirectoryName(fullPath)
+            ?? throw new ArgumentException($"Invalid destination path: {destinationPath}", nameof(destinationPath));
+
+        Directory.CreateDirectory(directory);
+
+        var tempPath = Path.Combine(directory, $".tmp_{Path.GetFileName(fullPath)}_{Guid.NewGuid():N}");
+
+        try
+        {
+            var fileStreamOptions = new FileStreamOptions
+            {
+                Mode = FileMode.CreateNew,
+                Access = FileAccess.Write,
+                Share = FileShare.None,
+                BufferSize = BufferSize,
+                Options = FileOptions.None
+            };
+
+            using (var tempStream = new FileStream(tempPath, fileStreamOptions))
+            {
+                writeAction(tempStream);
+                tempStream.Flush(flushToDisk: true);
+            }
+
+            File.Move(tempPath, fullPath, overwrite: true);
+        }
+        catch
+        {
+            TryDeleteFile(tempPath);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Synchronously writes text to the destination path using atomic replacement.
+    /// </summary>
+    public static void WriteAtomic(string destinationPath, string text, Encoding? encoding = null)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        var bytes = (encoding ?? Encoding.UTF8).GetBytes(text);
+        WriteAtomic(destinationPath, stream => stream.Write(bytes, 0, bytes.Length));
+    }
 
     /// <summary>
     /// Atomically writes content to the destination path using a same-directory temporary file

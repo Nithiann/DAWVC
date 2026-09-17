@@ -11,8 +11,13 @@ using DawVcs.Application.Exceptions;
 using DawVcs.Application.Repositories;
 using DawVcs.Application.Staging;
 using DawVcs.Domain.Artifacts;
+using DawVcs.Domain.Common;
+using DawVcs.Domain.Configuration;
 using DawVcs.Domain.Dependencies;
+using DawVcs.Domain.Entities;
+using DawVcs.Domain.Hashing;
 using DawVcs.Domain.Repositories;
+using DawVcs.Domain.Storage;
 using DawVcs.Infrastructure.Repositories;
 
 using FluentAssertions;
@@ -372,6 +377,115 @@ public sealed class CheckoutAcTests
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*Direct checkout of a commit into the active workspace is disabled*");
+    }
+
+    [Fact]
+    [Trait("Requirement", "FR-CHK-006")]
+    public async Task Checkout_WhenStagingIndexClearThrows_RollsBackHeadFilesAndStagedEntries()
+    {
+        using var temp = new TempDirectory();
+        var flpPath = Path.Combine(temp.Path, "Track.flp");
+        await File.WriteAllBytesAsync(flpPath, CreateFlp());
+
+        var initUseCase = new InitRepositoryUseCase(ContextFactory);
+        await initUseCase.ExecuteAsync(new InitRequest(temp.Path, "StagingClearRollbackTest", "Track.flp"));
+
+        var commitUseCase = new CommitUseCase(ContextFactory, Registry);
+        await commitUseCase.ExecuteAsync(new CommitRequest(temp.Path, "Initial commit on main"));
+
+        // Maak feature branch en commit Synth.wav
+        var switchUseCase = new SwitchUseCase(ContextFactory, Registry);
+        await switchUseCase.ExecuteAsync(new SwitchRequest(temp.Path, "feature", CreateBranch: true));
+
+        var synthPath = Path.Combine(temp.Path, "Synth.wav");
+        await File.WriteAllBytesAsync(synthPath, new byte[] { 10, 20, 30 });
+        var addUseCase = new AddUseCase(ContextFactory);
+        await addUseCase.ExecuteAsync(new AddRequest(temp.Path, ["Synth.wav"]));
+        await commitUseCase.ExecuteAsync(new CommitRequest(temp.Path, "Commit Synth on feature"));
+
+        // Ga terug naar main
+        await switchUseCase.ExecuteAsync(new SwitchRequest(temp.Path, "main"));
+        File.Exists(synthPath).Should().BeFalse();
+
+        // Stage een bestand op main
+        var localPath = Path.Combine(temp.Path, "LocalOnly.wav");
+        await File.WriteAllBytesAsync(localPath, new byte[] { 1, 2, 3 });
+        await addUseCase.ExecuteAsync(new AddRequest(temp.Path, ["LocalOnly.wav"]));
+
+        // Simuleer fout tijdens het leegmaken van staging index bij checkout
+        var faultyContext = new FaultyStagingIndexContext(ContextFactory(temp.Path));
+        var faultyCheckoutUseCase = new CheckoutUseCase(_ => faultyContext, Registry);
+
+        // WHEN checkout naar feature wordt uitgevoerd met force
+        var act = () => faultyCheckoutUseCase.ExecuteAsync(new CheckoutRequest(temp.Path, "feature", Force: true));
+
+        // THEN staging fout wordt gegooid
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*Simulated staging index SQLite failure during clear*");
+
+        // EN HEAD moet gerolled back zijn naar 'main'
+        var normalContext = ContextFactory(temp.Path);
+        normalContext.GetCurrentBranch().Value.Should().Be("main");
+
+        // EN bestanden van feature (Synth.wav) moeten gerolled back zijn (niet aanwezig)
+        File.Exists(synthPath).Should().BeFalse();
+
+        // EN gestagete entries moeten hersteld zijn in de index
+        var stagedEntries = await normalContext.StagingIndex.GetStagedEntriesAsync();
+        stagedEntries.Should().Contain(e => e.Path.Value == "LocalOnly.wav");
+    }
+
+    private sealed class FaultyStagingIndexContext : IRepositoryContext
+    {
+        private readonly IRepositoryContext _inner;
+        private readonly FaultyStagingIndex _stagingIndex;
+
+        public FaultyStagingIndexContext(IRepositoryContext inner)
+        {
+            _inner = inner;
+            _stagingIndex = new FaultyStagingIndex(inner.StagingIndex);
+        }
+
+        public string RootPath => _inner.RootPath;
+        public IObjectStore ObjectStore => _inner.ObjectStore;
+        public IStagingIndex StagingIndex => _stagingIndex;
+        public ILocalBindingStore LocalBindings => _inner.LocalBindings;
+        public BranchName GetCurrentBranch() => _inner.GetCurrentBranch();
+        public void SetCurrentBranch(BranchName branch) => _inner.SetCurrentBranch(branch);
+        public IReadOnlyList<BranchInfo> GetBranches() => _inner.GetBranches();
+        public void CreateBranch(BranchName branch, CommitId commitId) => _inner.CreateBranch(branch, commitId);
+        public bool DeleteBranch(BranchName branch) => _inner.DeleteBranch(branch);
+        public CommitId? GetBranchCommit(BranchName branch) => _inner.GetBranchCommit(branch);
+        public Task UpdateBranchCommitAsync(BranchName branch, CommitId newCommit, CancellationToken cancellationToken = default) => _inner.UpdateBranchCommitAsync(branch, newCommit, cancellationToken);
+        public CommitId? ResolveReference(string reference) => _inner.ResolveReference(reference);
+        public Task<Commit?> LoadCommitAsync(CommitId commitId, CancellationToken cancellationToken = default) => _inner.LoadCommitAsync(commitId, cancellationToken);
+        public Task<ProjectSnapshot?> LoadSnapshotAsync(SnapshotId snapshotId, CancellationToken cancellationToken = default) => _inner.LoadSnapshotAsync(snapshotId, cancellationToken);
+        public RepositoryConfig LoadConfig() => _inner.LoadConfig();
+        public void SaveConfig(RepositoryConfig config) => _inner.SaveConfig(config);
+        public void Dispose() => _inner.Dispose();
+    }
+
+    private sealed class FaultyStagingIndex : IStagingIndex
+    {
+        private readonly IStagingIndex _inner;
+        public bool ShouldThrowOnClear { get; set; } = true;
+
+        public FaultyStagingIndex(IStagingIndex inner) => _inner = inner;
+
+        public Task ClearStagedEntriesAsync(CancellationToken cancellationToken = default)
+        {
+            if (ShouldThrowOnClear)
+            {
+                throw new InvalidOperationException("Simulated staging index SQLite failure during clear.");
+            }
+            return _inner.ClearStagedEntriesAsync(cancellationToken);
+        }
+
+        public Task StageEntryAsync(ArtifactEntry entry, CancellationToken cancellationToken = default) => _inner.StageEntryAsync(entry, cancellationToken);
+        public Task UnstageEntryAsync(ArtifactPath path, CancellationToken cancellationToken = default) => _inner.UnstageEntryAsync(path, cancellationToken);
+        public Task<IReadOnlyList<ArtifactEntry>> GetStagedEntriesAsync(CancellationToken cancellationToken = default) => _inner.GetStagedEntriesAsync(cancellationToken);
+        public Task<ContentHash?> TryGetCachedHashAsync(ArtifactPath path, long size, DateTimeOffset lastModifiedUtc, CancellationToken cancellationToken = default) => _inner.TryGetCachedHashAsync(path, size, lastModifiedUtc, cancellationToken);
+        public Task SetCachedHashAsync(ArtifactPath path, long size, DateTimeOffset lastModifiedUtc, ContentHash hash, CancellationToken cancellationToken = default) => _inner.SetCachedHashAsync(path, size, lastModifiedUtc, hash, cancellationToken);
     }
 
     private sealed class TempDirectory : IDisposable

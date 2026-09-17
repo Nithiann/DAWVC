@@ -121,4 +121,31 @@ public sealed class SwitchUseCaseTests : IDisposable
         _context.Received(1).CreateBranch(Arg.Is<BranchName>(b => b.Value == "experiment"), commitId);
         _context.Received(1).SetCurrentBranch(Arg.Is<BranchName>(b => b.Value == "experiment"));
     }
+
+    [Fact]
+    public async Task Switch_WhenCreateTrueAndCheckoutThrows_RollsBackCreatedBranch()
+    {
+        // Arrange
+        var main = BranchName.Main;
+        var commitId = new CommitId(Blake3ContentHasher.Hash(new byte[] { 1 }));
+        var experimentBranch = new BranchName("experiment");
+
+        _context.GetCurrentBranch().Returns(main);
+        _context.GetBranchCommit(main).Returns(commitId);
+        _context.GetBranches().Returns([new BranchInfo(main, commitId, true)]);
+
+        // Initial existence check returns null; lookup after creation returns commitId
+        _context.GetBranchCommit(experimentBranch).Returns((CommitId?)null, commitId);
+
+        // Act: checkout fails because commit cannot be loaded (throws InvalidOperationException)
+        _context.LoadCommitAsync(commitId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<Commit?>(null));
+
+        var act = () => _useCase.ExecuteAsync(new SwitchRequest(_tempDir, "experiment", CreateBranch: true));
+
+        // Assert: exception is thrown and DeleteBranch is called to roll back
+        await act.Should().ThrowAsync<InvalidOperationException>();
+        _context.Received(1).CreateBranch(Arg.Is<BranchName>(b => b.Value == "experiment"), commitId);
+        _context.Received(1).DeleteBranch(Arg.Is<BranchName>(b => b.Value == "experiment"));
+    }
 }
