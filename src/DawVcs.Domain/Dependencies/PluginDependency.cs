@@ -11,6 +11,8 @@ public sealed record PluginDependency : Dependency
     public PluginIdentity Plugin { get; init; }
     public string? VersionRequirement { get; init; }
     public PluginRole Role { get; init; }
+    public string? Location { get; init; }
+    public string? ExpectedFilePath { get; init; }
 
     public PluginDependency(
         DependencyId id,
@@ -20,7 +22,9 @@ public sealed record PluginDependency : Dependency
         DependencyRequirement requirement = DependencyRequirement.Required,
         DependencySource source = DependencySource.NativeProjectParser,
         PortabilityPolicy? portability = null,
-        MetadataObservation<string>? provenance = null)
+        MetadataObservation<string>? provenance = null,
+        string? location = null,
+        string? expectedFilePath = null)
         : base(
             id,
             DependencyKind.Plugin,
@@ -34,5 +38,7 @@ public sealed record PluginDependency : Dependency
         Plugin = plugin;
         Role = role;
         VersionRequirement = versionRequirement;
+        Location = location;
+        ExpectedFilePath = expectedFilePath;
     }
 }

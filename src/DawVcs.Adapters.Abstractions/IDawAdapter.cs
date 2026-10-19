@@ -61,4 +61,9 @@ public interface IDawAdapter
     /// Probeert te bepalen of een plugin geïnstalleerd is of native gebundeld is met de DAW.
     /// </summary>
     (bool Found, string? Path, string? DetectedVersion) ProbePluginInstallation(PluginDependency plugin);
+
+    /// <summary>
+    /// Probeert een DAW-specifieke macro of placeholder (bijv. %FLStudioFactoryData%) op te lossen naar een fysiek bestandspad.
+    /// </summary>
+    string? ResolveMacroPath(string rawPath) => null;
 }

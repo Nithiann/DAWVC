@@ -657,39 +657,101 @@ public static class Program
 
                     if (report.DependencyHealth.Count > 0)
                     {
-                        var table = new Table();
-                        table.Border(TableBorder.Rounded);
-                        table.AddColumn("Type");
-                        table.AddColumn("Name");
-                        table.AddColumn("Required");
-                        table.AddColumn("Installed");
-                        table.AddColumn("Status");
+                        var pluginDeps = report.DependencyHealth.Where(d => d.Category == "Plugin").ToList();
+                        var assetDeps = report.DependencyHealth.Where(d => d.Category == "Asset").ToList();
 
-                        foreach (var dep in report.DependencyHealth)
+                        if (pluginDeps.Count > 0)
                         {
-                            var statusMarkup = dep.Status switch
+                            AnsiConsole.MarkupLine("\n[bold cyan]Plugins (Channel Generators & Mixer Effects)[/]");
+                            var pluginTable = new Table();
+                            pluginTable.Border(TableBorder.Rounded);
+                            pluginTable.AddColumn("Plugin");
+                            pluginTable.AddColumn("Location");
+                            pluginTable.AddColumn("Required");
+                            pluginTable.AddColumn("Installed");
+                            pluginTable.AddColumn("Status");
+
+                            foreach (var dep in pluginDeps)
                             {
-                                Domain.Dependencies.BindingStatus.Verified => "[green]Verified[/]",
-                                Domain.Dependencies.BindingStatus.Mismatch => "[red]Mismatch[/]",
-                                Domain.Dependencies.BindingStatus.Missing => "[red]Missing[/]",
-                                _ => "[yellow]Unresolved[/]"
-                            };
+                                var statusMarkup = dep.Status switch
+                                {
+                                    Domain.Dependencies.BindingStatus.Verified => "[green]Verified[/]",
+                                    Domain.Dependencies.BindingStatus.Mismatch => "[red]Mismatch[/]",
+                                    Domain.Dependencies.BindingStatus.Missing => "[red]Missing[/]",
+                                    _ => "[yellow]Unresolved[/]"
+                                };
 
-                            var requiredText = dep.Category == "Plugin" && !string.IsNullOrWhiteSpace(dep.ExpectedVersion)
-                                ? $">= {Markup.Escape(dep.ExpectedVersion)}"
-                                : (dep.Requirement == Domain.Dependencies.DependencyRequirement.Required ? "Required" : "Optional");
+                                var requiredText = !string.IsNullOrWhiteSpace(dep.ExpectedVersion)
+                                    ? $">= {Markup.Escape(dep.ExpectedVersion)}"
+                                    : (dep.Requirement == Domain.Dependencies.DependencyRequirement.Required ? "Required" : "Optional");
 
-                            var installedText = dep.Category == "Plugin"
-                                ? (dep.DetectedVersion != null
+                                var installedText = dep.DetectedVersion != null
                                     ? (dep.Status == Domain.Dependencies.BindingStatus.Mismatch
                                         ? $"[red]{Markup.Escape(dep.DetectedVersion)} (older)[/]"
                                         : $"[green]{Markup.Escape(dep.DetectedVersion)}[/]")
-                                    : (dep.Status == Domain.Dependencies.BindingStatus.Missing ? "[dim]Not found[/]" : "[dim]Present[/]"))
-                                : (dep.Status == Domain.Dependencies.BindingStatus.Verified ? "[dim]Verified[/]" : "[dim]-[/]");
+                                    : (dep.Status == Domain.Dependencies.BindingStatus.Verified
+                                        ? "[green]Present[/]"
+                                        : (dep.Status == Domain.Dependencies.BindingStatus.Missing ? "[red]Not found[/]" : "[yellow]Unresolved[/]"));
 
-                            table.AddRow(dep.Category, Markup.Escape(dep.Name), requiredText, installedText, statusMarkup);
+                                var locationText = !string.IsNullOrWhiteSpace(dep.Location)
+                                    ? Markup.Escape(dep.Location)
+                                    : "[dim]General[/]";
+
+                                pluginTable.AddRow(Markup.Escape(dep.Name), locationText, requiredText, installedText, statusMarkup);
+                            }
+                            AnsiConsole.Write(pluginTable);
+
+                            // Missing plugins brief summary
+                            var missingOrUnresolved = pluginDeps
+                                .Where(d => d.Status != Domain.Dependencies.BindingStatus.Verified)
+                                .GroupBy(d => d.Name)
+                                .ToList();
+
+                            if (missingOrUnresolved.Count > 0)
+                            {
+                                AnsiConsole.MarkupLine("\n[bold red]Missing Plugins Summary:[/]");
+                                foreach (var group in missingOrUnresolved)
+                                {
+                                    var locations = string.Join(", ", group.Select(g => g.Location ?? "General").Distinct());
+                                    var statusLabel = group.Any(g => g.Status == Domain.Dependencies.BindingStatus.Mismatch)
+                                        ? "[yellow]Version mismatch[/]"
+                                        : "[red]Not installed[/]";
+                                    AnsiConsole.MarkupLine($"  [red]✗[/] [bold]{Markup.Escape(group.Key)}[/] - {statusLabel} (Used in: [dim]{Markup.Escape(locations)}[/])");
+                                }
+                            }
+                            else
+                            {
+                                AnsiConsole.MarkupLine("\n  [green]✓ All required plugins are installed and verified.[/]");
+                            }
                         }
-                        AnsiConsole.Write(table);
+
+                        if (assetDeps.Count > 0)
+                        {
+                            AnsiConsole.MarkupLine("\n[bold cyan]Project Assets (Audio Samples & Recordings)[/]");
+                            var assetTable = new Table();
+                            assetTable.Border(TableBorder.Rounded);
+                            assetTable.AddColumn("Asset");
+                            assetTable.AddColumn("Required");
+                            assetTable.AddColumn("Installed");
+                            assetTable.AddColumn("Status");
+
+                            foreach (var dep in assetDeps)
+                            {
+                                var statusMarkup = dep.Status switch
+                                {
+                                    Domain.Dependencies.BindingStatus.Verified => "[green]Verified[/]",
+                                    Domain.Dependencies.BindingStatus.Mismatch => "[red]Mismatch[/]",
+                                    Domain.Dependencies.BindingStatus.Missing => "[red]Missing[/]",
+                                    _ => "[yellow]Unresolved[/]"
+                                };
+
+                                var requiredText = dep.Requirement == Domain.Dependencies.DependencyRequirement.Required ? "Required" : "Optional";
+                                var installedText = dep.Status == Domain.Dependencies.BindingStatus.Verified ? "[green]Present[/]" : "[dim]-[/]";
+
+                                assetTable.AddRow(Markup.Escape(dep.Name), requiredText, installedText, statusMarkup);
+                            }
+                            AnsiConsole.Write(assetTable);
+                        }
 
                         var mismatches = report.DependencyHealth
                             .Where(d => d.Status == Domain.Dependencies.BindingStatus.Mismatch && !string.IsNullOrWhiteSpace(d.Details))

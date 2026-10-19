@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Text;
 
 using DawVcs.Adapters.Abstractions;
+using DawVcs.Domain.Dependencies;
 
 namespace DawVcs.Adapters.FLStudio;
 
@@ -12,10 +13,18 @@ namespace DawVcs.Adapters.FLStudio;
 /// </summary>
 public static class FlpBinaryReader
 {
-    public const int MaxMetadataScanBytes = 2 * 1024 * 1024; // 2 MB scanlimiet voor headers en metadata
+    public const int MaxMetadataScanBytes = 100 * 1024 * 1024; // 100 MB scanlimiet voor headers en metadata
     public const int MaxEventPayloadBytes = 10 * 1024 * 1024; // 10 MB sanity check per event
 
     private static readonly byte[] FldtMagic = [0x46, 0x4C, 0x64, 0x74]; // ASCII 'FLdt'
+
+    public sealed record FlpPluginInfo(
+        string Name,
+        string? Vendor,
+        string? FilePath,
+        string Location,
+        PluginRole Role,
+        PluginFormat Format);
 
     public sealed record FlpInspectionResult(
         FlpHeader Header,
@@ -29,7 +38,8 @@ public static class FlpBinaryReader
         string? SuspiciousReason,
         long BytesScanned,
         InspectionCompleteness Completeness,
-        string? CompletenessReason);
+        string? CompletenessReason,
+        IReadOnlyList<FlpPluginInfo>? Plugins = null);
 
     /// <summary>
     /// Inspecteert de FLhd header en scant begrends de initiële events in de FLdt chunk.
@@ -71,6 +81,11 @@ public static class FlpBinaryReader
         double? detectedTempo = null;
         var samplePaths = new List<string>();
         var pluginNames = new List<string>();
+        var plugins = new List<FlpPluginInfo>();
+        string? currentChannelName = null;
+        string? currentMixerTrackName = null;
+        bool inMixerSection = false;
+        bool hasEncounteredChannelsOrMixer = false;
         bool isSuspicious = false;
         string? suspiciousReason = null;
 
@@ -232,31 +247,7 @@ public static class FlpBinaryReader
                     break;
                 }
 
-                if (eventId == 199 && detectedVersion is null) // FL Studio Version string
-                {
-                    var textBuffer = new byte[payloadLength];
-                    int totalRead = await ReadExactAsync(stream, textBuffer, cancellationToken).ConfigureAwait(false);
-                    bytesScanned += totalRead;
-
-                    detectedVersion = CleanString(Encoding.ASCII.GetString(textBuffer, 0, totalRead));
-                }
-                else if (eventId == 201 && detectedTitle is null) // Project Title
-                {
-                    var textBuffer = new byte[payloadLength];
-                    int totalRead = await ReadExactAsync(stream, textBuffer, cancellationToken).ConfigureAwait(false);
-                    bytesScanned += totalRead;
-
-                    detectedTitle = DecodeFlpString(textBuffer, totalRead);
-                }
-                else if (eventId == 200 && detectedComments is null) // Comments / info
-                {
-                    var textBuffer = new byte[payloadLength];
-                    int totalRead = await ReadExactAsync(stream, textBuffer, cancellationToken).ConfigureAwait(false);
-                    bytesScanned += totalRead;
-
-                    detectedComments = DecodeFlpString(textBuffer, totalRead);
-                }
-                else if (eventId == 203) // Sample path / recording locator
+                if (eventId == 196) // Sample file path (FLP_Text_SampleFileName)
                 {
                     var textBuffer = new byte[payloadLength];
                     int totalRead = await ReadExactAsync(stream, textBuffer, cancellationToken).ConfigureAwait(false);
@@ -268,6 +259,140 @@ public static class FlpBinaryReader
                         samplePaths.Add(path);
                     }
                 }
+                else if (eventId == 199 && detectedVersion is null) // FL Studio Version string
+                {
+                    var textBuffer = new byte[payloadLength];
+                    int totalRead = await ReadExactAsync(stream, textBuffer, cancellationToken).ConfigureAwait(false);
+                    bytesScanned += totalRead;
+
+                    detectedVersion = CleanString(Encoding.ASCII.GetString(textBuffer, 0, totalRead));
+                }
+                else if (eventId == 200 && detectedComments is null) // Comments / info
+                {
+                    var textBuffer = new byte[payloadLength];
+                    int totalRead = await ReadExactAsync(stream, textBuffer, cancellationToken).ConfigureAwait(false);
+                    bytesScanned += totalRead;
+
+                    detectedComments = DecodeFlpString(textBuffer, totalRead);
+                }
+                else if (eventId == 201) // Project Title OR Plugin/Generator name
+                {
+                    var textBuffer = new byte[payloadLength];
+                    int totalRead = await ReadExactAsync(stream, textBuffer, cancellationToken).ConfigureAwait(false);
+                    bytesScanned += totalRead;
+
+                    var text = DecodeFlpString(textBuffer, totalRead);
+                    if (!hasEncounteredChannelsOrMixer && detectedTitle is null && !string.IsNullOrWhiteSpace(text))
+                    {
+                        detectedTitle = text;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(text) && !text.Equals("Fruity Wrapper", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (inMixerSection)
+                        {
+                            var loc = $"Mixer: {currentMixerTrackName ?? "Insert"}";
+                            plugins.Add(new FlpPluginInfo(text, "Image-Line", null, loc, PluginRole.Effect, PluginFormat.Native));
+                            if (!pluginNames.Contains(text))
+                            {
+                                pluginNames.Add(text);
+                            }
+                        }
+                        else if (hasEncounteredChannelsOrMixer)
+                        {
+                            var loc = $"Channel: {currentChannelName ?? "Generator"}";
+                            plugins.Add(new FlpPluginInfo(text, "Image-Line", null, loc, PluginRole.Instrument, PluginFormat.Native));
+                            if (!pluginNames.Contains(text))
+                            {
+                                pluginNames.Add(text);
+                            }
+                        }
+                    }
+                }
+                else if (eventId == 203) // Channel Rack Channel Name (FLP_Text_ChanName) or legacy sample path
+                {
+                    var textBuffer = new byte[payloadLength];
+                    int totalRead = await ReadExactAsync(stream, textBuffer, cancellationToken).ConfigureAwait(false);
+                    bytesScanned += totalRead;
+
+                    var name = DecodeFlpString(textBuffer, totalRead);
+                    hasEncounteredChannelsOrMixer = true;
+                    if (!string.IsNullOrWhiteSpace(name))
+                    {
+                        currentChannelName = name;
+
+                        if (HasAudioExtension(name) && !samplePaths.Contains(name))
+                        {
+                            samplePaths.Add(name);
+                        }
+                    }
+                }
+                else if (eventId == 204) // Mixer Track Insert Name (FLP_Text_EffectChanName)
+                {
+                    var textBuffer = new byte[payloadLength];
+                    int totalRead = await ReadExactAsync(stream, textBuffer, cancellationToken).ConfigureAwait(false);
+                    bytesScanned += totalRead;
+
+                    var name = DecodeFlpString(textBuffer, totalRead);
+                    hasEncounteredChannelsOrMixer = true;
+                    inMixerSection = true;
+                    if (!string.IsNullOrWhiteSpace(name))
+                    {
+                        currentMixerTrackName = name;
+                    }
+                }
+                else if (eventId == 213) // VST / Plugin params wrapper chunk (FLP_Text_PluginParams)
+                {
+                    var payload = new byte[payloadLength];
+                    int totalRead = await ReadExactAsync(stream, payload, cancellationToken).ConfigureAwait(false);
+                    bytesScanned += totalRead;
+
+                    if (totalRead >= 4)
+                    {
+                        int offset = 4;
+                        string? pName = null;
+                        string? pPath = null;
+                        string? pVendor = null;
+
+                        while (offset + 12 <= totalRead)
+                        {
+                            int subId = BinaryPrimitives.ReadInt32LittleEndian(payload.AsSpan(offset, 4));
+                            long subLen = BinaryPrimitives.ReadInt64LittleEndian(payload.AsSpan(offset + 4, 8));
+                            offset += 12;
+
+                            if (subLen < 0 || offset + subLen > totalRead) break;
+
+                            var chunkBytes = payload.AsSpan(offset, (int)subLen);
+                            offset += (int)subLen;
+
+                            if (subId == 54) pName = CleanString(Encoding.UTF8.GetString(chunkBytes));
+                            else if (subId == 55) pPath = CleanString(Encoding.UTF8.GetString(chunkBytes));
+                            else if (subId == 56) pVendor = CleanString(Encoding.UTF8.GetString(chunkBytes));
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(pName) || !string.IsNullOrWhiteSpace(pPath))
+                        {
+                            var finalName = !string.IsNullOrWhiteSpace(pName)
+                                ? pName
+                                : Path.GetFileNameWithoutExtension(pPath)!;
+
+                            var format = (pPath != null && pPath.EndsWith(".vst3", StringComparison.OrdinalIgnoreCase))
+                                ? PluginFormat.VST3
+                                : (pPath != null && pPath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? PluginFormat.VST2 : PluginFormat.VST3);
+
+                            var role = inMixerSection ? PluginRole.Effect : PluginRole.Instrument;
+                            var location = inMixerSection
+                                ? $"Mixer: {currentMixerTrackName ?? "Insert"}"
+                                : $"Channel: {currentChannelName ?? "Generator"}";
+
+                            plugins.Add(new FlpPluginInfo(finalName, pVendor, pPath, location, role, format));
+
+                            if (!pluginNames.Contains(finalName))
+                            {
+                                pluginNames.Add(finalName);
+                            }
+                        }
+                    }
+                }
                 else if (eventId == 214) // Plugin name / generator/effect reference
                 {
                     var textBuffer = new byte[payloadLength];
@@ -275,9 +400,18 @@ public static class FlpBinaryReader
                     bytesScanned += totalRead;
 
                     var name = DecodeFlpString(textBuffer, totalRead);
-                    if (!string.IsNullOrWhiteSpace(name) && !pluginNames.Contains(name))
+                    if (!string.IsNullOrWhiteSpace(name))
                     {
-                        pluginNames.Add(name);
+                        if (!pluginNames.Contains(name))
+                        {
+                            pluginNames.Add(name);
+                        }
+
+                        var role = inMixerSection ? PluginRole.Effect : PluginRole.Instrument;
+                        var location = inMixerSection
+                            ? $"Mixer: {currentMixerTrackName ?? "Insert"}"
+                            : $"Channel: {currentChannelName ?? "Generator"}";
+                        plugins.Add(new FlpPluginInfo(name, "Unknown", null, location, role, PluginFormat.Unknown));
                     }
                 }
                 else
@@ -334,7 +468,8 @@ public static class FlpBinaryReader
             suspiciousReason,
             bytesScanned,
             completeness,
-            completenessReason);
+            completenessReason,
+            plugins);
     }
 
     private static async Task<(int Length, int BytesConsumed)> ReadVariableLengthAsync(Stream stream, CancellationToken cancellationToken)
@@ -381,7 +516,7 @@ public static class FlpBinaryReader
         return await ReadExactAsync(stream, buffer.AsMemory(), cancellationToken).ConfigureAwait(false);
     }
 
-    private static string DecodeFlpString(byte[] buffer, int length)
+    public static string DecodeFlpString(byte[] buffer, int length)
     {
         if (length <= 0) return string.Empty;
 
@@ -392,6 +527,17 @@ public static class FlpBinaryReader
         }
 
         return CleanString(Encoding.UTF8.GetString(buffer, 0, length));
+    }
+
+    private static bool HasAudioExtension(string s)
+    {
+        var ext = Path.GetExtension(s);
+        return ext.Equals(".wav", StringComparison.OrdinalIgnoreCase) ||
+               ext.Equals(".mp3", StringComparison.OrdinalIgnoreCase) ||
+               ext.Equals(".flac", StringComparison.OrdinalIgnoreCase) ||
+               ext.Equals(".ogg", StringComparison.OrdinalIgnoreCase) ||
+               ext.Equals(".aiff", StringComparison.OrdinalIgnoreCase) ||
+               ext.Equals(".aif", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string CleanString(string s)

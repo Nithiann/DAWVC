@@ -29,8 +29,10 @@ public readonly record struct DependencyId : IEquatable<DependencyId>, IComparab
         return new($"asset:unresolved:{locatorHash.ToString().ToLowerInvariant()}");
     }
 
-    public static DependencyId ForPlugin(string vendor, string product, string format) =>
-        new($"plugin:{vendor.ToLowerInvariant()}:{product.ToLowerInvariant()}:{format.ToLowerInvariant()}");
+    public static DependencyId ForPlugin(string vendor, string product, string format, string? instance = null) =>
+        string.IsNullOrWhiteSpace(instance)
+            ? new($"plugin:{vendor.ToLowerInvariant()}:{product.ToLowerInvariant()}:{format.ToLowerInvariant()}")
+            : new($"plugin:{vendor.ToLowerInvariant()}:{product.ToLowerInvariant()}:{format.ToLowerInvariant()}:{instance.ToLowerInvariant()}");
 
     public int CompareTo(DependencyId other) => string.CompareOrdinal(Value, other.Value);
 
