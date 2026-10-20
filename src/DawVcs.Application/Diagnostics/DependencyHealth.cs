@@ -12,4 +12,5 @@ public sealed record DependencyHealth(
     string? Locator,
     string? Details,
     string? ExpectedVersion = null,
-    string? DetectedVersion = null);
+    string? DetectedVersion = null,
+    string? Location = null);

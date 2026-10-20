@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Globalization;
 using System.Text;
 
 using DawVcs.Adapters.Abstractions;
@@ -163,4 +164,94 @@ public sealed class FLStudioAdapterFixtureTests
         result.DetectedVersion.Should().Be("99.0.0");
         result.Findings.Should().Contain(f => f.Contains("opaque"));
     }
+
+    [Fact]
+    [Trait("Requirement", "FR-FLP-007")]
+    [Trait("Requirement", "FR-DEP-004")]
+    public async Task DetectAsync_RealFixture_DiscoversPluginsAndMixerEffects()
+    {
+        // Arrange
+        var fixturePath = GetFixturePath();
+        var adapter = new FLStudioAdapter();
+        await using var stream = new FileStream(fixturePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+        // Act
+        var result = await adapter.DetectAsync(stream);
+
+        // Assert
+        result.Metadata.Should().ContainKey("PluginOccurrences");
+        result.Metadata.Should().ContainKey("SamplePaths");
+
+        var samplePaths = result.Metadata["SamplePaths"];
+        samplePaths.Should().Contain("OPS_HE3_MIDINTRO_KICK_7_E.wav");
+        samplePaths.Should().NotContain(";LEAD;"); // Channel names must not be treated as audio samples
+
+        var occurrencesJson = result.Metadata["PluginOccurrences"];
+        occurrencesJson.Should().Contain("Vital");
+        occurrencesJson.Should().Contain("Vital Audio");
+        occurrencesJson.Should().Contain("Channel: Lead");
+    }
+
+    [Fact]
+    [Trait("Requirement", "FR-DEP-005")]
+    public void ProbePluginInstallation_VitalWithExpectedPath_FindsInstalledPlugin()
+    {
+        // Arrange
+        var adapter = new FLStudioAdapter();
+        var pluginDep = new DawVcs.Domain.Dependencies.PluginDependency(
+            DawVcs.Domain.Dependencies.DependencyId.ForPlugin("Vital Audio", "Vital", "VST3"),
+            new DawVcs.Domain.Dependencies.PluginIdentity("Vital Audio", "Vital", DawVcs.Domain.Dependencies.PluginFormat.VST3),
+            DawVcs.Domain.Dependencies.PluginRole.Instrument,
+            expectedFilePath: @"C:\Program Files\Common Files\VST3\Vital.vst3");
+
+        // Act
+        var probe = adapter.ProbePluginInstallation(pluginDep);
+
+        // Assert
+        if (File.Exists(@"C:\Program Files\Common Files\VST3\Vital.vst3"))
+        {
+            probe.Found.Should().BeTrue();
+            probe.Path.Should().Be(@"C:\Program Files\Common Files\VST3\Vital.vst3");
+        }
+    }
+
+    [Fact]
+    [Trait("Requirement", "FR-DEP-005")]
+    public void ProbePluginInstallation_NativePlugin_ReturnsFoundTrue()
+    {
+        // Arrange
+        var adapter = new FLStudioAdapter();
+        var pluginDep = new DawVcs.Domain.Dependencies.PluginDependency(
+            DawVcs.Domain.Dependencies.DependencyId.ForPlugin("Image-Line", "Fruity Parametric EQ 2", "Native"),
+            new DawVcs.Domain.Dependencies.PluginIdentity("Image-Line", "Fruity Parametric EQ 2", DawVcs.Domain.Dependencies.PluginFormat.Native),
+            DawVcs.Domain.Dependencies.PluginRole.Effect);
+
+        // Act
+        var probe = adapter.ProbePluginInstallation(pluginDep);
+
+        // Assert
+        probe.Found.Should().BeTrue();
+        probe.Path.Should().Be("Native FL Studio Plugin");
+    }
+
+    [Fact]
+    [Trait("Requirement", "FR-DEP-004")]
+    public void ResolveMacroPath_FactoryDataPath_ExpandsCorrectlyIfInstalled()
+    {
+        // Arrange
+        var adapter = new FLStudioAdapter();
+        var macroPath = @"%FLStudioFactoryData%\Data\Patches\Packs\Drums\Hats\808 CH.wav";
+
+        // Act
+        var resolved = adapter.ResolveMacroPath(macroPath);
+
+        // Assert
+        if (Directory.Exists(@"C:\Program Files\Image-Line\FL Studio 2026"))
+        {
+            resolved.Should().NotBeNull();
+            File.Exists(resolved).Should().BeTrue();
+            resolved.Should().EndWith("808 CH.wav");
+        }
+    }
 }
+

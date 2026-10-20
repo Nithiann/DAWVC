@@ -5,6 +5,7 @@ using DawVcs.Application.Adapters;
 using DawVcs.Application.Common;
 using DawVcs.Application.Dependencies;
 using DawVcs.Domain.Dependencies;
+using DawVcs.Domain.Entities;
 using DawVcs.Domain.Repositories;
 
 namespace DawVcs.Application.Diagnostics;
@@ -112,14 +113,64 @@ public sealed class DoctorUseCase
         // 2. Domein 2: Dependency Integrity & Reproduceerbaarheid
         if (primaryDetection != null)
         {
+            ProjectSnapshot? headSnapshot = null;
+            try
+            {
+                var currentBranch = context.GetCurrentBranch();
+                var headCommitId = context.GetBranchCommit(currentBranch);
+                if (headCommitId.HasValue)
+                {
+                    var commit = await context.LoadCommitAsync(headCommitId.Value, cancellationToken).ConfigureAwait(false);
+                    if (commit != null)
+                    {
+                        headSnapshot = await context.LoadSnapshotAsync(commit.SnapshotId, cancellationToken).ConfigureAwait(false);
+                    }
+                }
+            }
+            catch
+            {
+                // In uncommitted / newly initialized repositories, headSnapshot may not exist yet
+            }
+
             var depGraph = await DependencyDiscoveryService.DiscoverAsync(
                 context.RootPath,
                 primaryDetection,
                 primaryAdapter,
                 cancellationToken).ConfigureAwait(false);
 
-            foreach (var dep in depGraph.Dependencies)
+            foreach (var rawDep in depGraph.Dependencies)
             {
+                var dep = rawDep;
+
+                // Als er een gecommitte snapshot is, gebruik dan de gecommitteerde vereisten (hashes en plugin requirements)
+                if (headSnapshot != null)
+                {
+                    if (dep is PluginDependency p)
+                    {
+                        var snapshotPlugin = headSnapshot.Dependencies.Dependencies
+                            .OfType<PluginDependency>()
+                            .FirstOrDefault(sp =>
+                                sp.Plugin.Product.Equals(p.Plugin.Product, StringComparison.OrdinalIgnoreCase) &&
+                                (string.IsNullOrWhiteSpace(sp.Location) || string.IsNullOrWhiteSpace(p.Location) || sp.Location.Equals(p.Location, StringComparison.OrdinalIgnoreCase)));
+
+                        if (snapshotPlugin != null && !string.IsNullOrWhiteSpace(snapshotPlugin.VersionRequirement))
+                        {
+                            dep = p with { VersionRequirement = snapshotPlugin.VersionRequirement };
+                        }
+                    }
+                    else if (dep is AssetDependency a && !a.Hash.HasValue)
+                    {
+                        var snapshotAsset = headSnapshot.Dependencies.Dependencies
+                            .OfType<AssetDependency>()
+                            .FirstOrDefault(sa => sa.Name.Equals(a.Name, StringComparison.OrdinalIgnoreCase));
+
+                        if (snapshotAsset != null && snapshotAsset.Hash.HasValue)
+                        {
+                            dep = a with { Hash = snapshotAsset.Hash, FileSize = snapshotAsset.FileSize };
+                        }
+                    }
+                }
+
                 var binding = await DependencyResolverPipeline.ResolveAsync(
                     context.RootPath,
                     dep,
@@ -132,11 +183,13 @@ public sealed class DoctorUseCase
 
                 string? expectedVersion = null;
                 string? detectedVersion = null;
+                string? location = null;
 
-                if (dep is PluginDependency p)
+                if (dep is PluginDependency plug)
                 {
-                    expectedVersion = p.VersionRequirement;
-                    var (_, _, ver) = DependencyResolverPipeline.CheckPluginInstalled(p, primaryAdapter);
+                    expectedVersion = plug.VersionRequirement;
+                    location = plug.Location;
+                    var (_, _, ver) = DependencyResolverPipeline.CheckPluginInstalled(plug, primaryAdapter);
                     detectedVersion = ver;
                 }
 
@@ -150,7 +203,8 @@ public sealed class DoctorUseCase
                     Locator: PathRedactor.Redact(binding.Locator),
                     Details: PathRedactor.Redact(binding.Notes),
                     ExpectedVersion: expectedVersion,
-                    DetectedVersion: detectedVersion));
+                    DetectedVersion: detectedVersion,
+                    Location: location));
             }
         }
 

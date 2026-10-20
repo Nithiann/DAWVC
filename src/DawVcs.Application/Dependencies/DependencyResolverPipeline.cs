@@ -123,17 +123,38 @@ public static class DependencyResolverPipeline
                 }
             }
 
-            // STAP 6: Oorspronkelijk absoluut pad fallback
-            if (!string.IsNullOrWhiteSpace(asset.OriginalPath) && File.Exists(asset.OriginalPath))
+            // STAP 6: Oorspronkelijk absoluut pad of macro fallback
+            var effectivePath = asset.OriginalPath;
+            if (!string.IsNullOrWhiteSpace(effectivePath) && !File.Exists(effectivePath))
+            {
+                if (adapter != null)
+                {
+                    var macroPath = adapter.ResolveMacroPath(effectivePath);
+                    if (macroPath != null && File.Exists(macroPath))
+                    {
+                        effectivePath = macroPath;
+                    }
+                }
+                else
+                {
+                    var exp = Environment.ExpandEnvironmentVariables(effectivePath);
+                    if (File.Exists(exp))
+                    {
+                        effectivePath = exp;
+                    }
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(effectivePath) && File.Exists(effectivePath))
             {
                 if (asset.Hash.HasValue)
                 {
-                    var origHash = await Blake3ContentHasher.HashFileAsync(asset.OriginalPath, cancellationToken).ConfigureAwait(false);
+                    var origHash = await Blake3ContentHasher.HashFileAsync(effectivePath, cancellationToken).ConfigureAwait(false);
                     if (origHash == asset.Hash.Value)
                     {
                         return new DependencyBinding(
                             asset.Id,
-                            asset.OriginalPath,
+                            effectivePath,
                             BindingMethod.OriginalPath,
                             BindingStatus.Verified,
                             origHash,
@@ -142,7 +163,7 @@ public static class DependencyResolverPipeline
 
                     return new DependencyBinding(
                         asset.Id,
-                        asset.OriginalPath,
+                        effectivePath,
                         BindingMethod.OriginalPath,
                         BindingStatus.Mismatch,
                         origHash,
@@ -152,7 +173,7 @@ public static class DependencyResolverPipeline
 
                 return new DependencyBinding(
                     asset.Id,
-                    asset.OriginalPath,
+                    effectivePath,
                     BindingMethod.OriginalPath,
                     BindingStatus.Verified,
                     null,
@@ -265,31 +286,106 @@ public static class DependencyResolverPipeline
             return (true, "Native DAW Plugin", null);
         }
 
-        // Check common VST3 paths on Windows
-        var commonVst3 = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFiles),
-            "VST3",
-            $"{plugin.Plugin.Product}.vst3");
-
-        if (Directory.Exists(commonVst3) || File.Exists(commonVst3))
+        if (!string.IsNullOrWhiteSpace(plugin.ExpectedFilePath))
         {
-            var binPath = FindBinaryPath(commonVst3);
-            var version = binPath is not null ? GetFileVersion(binPath) : null;
-            return (true, commonVst3, version);
+            if (File.Exists(plugin.ExpectedFilePath) || Directory.Exists(plugin.ExpectedFilePath))
+            {
+                var binPath = FindBinaryPath(plugin.ExpectedFilePath);
+                var version = binPath is not null ? GetFileVersion(binPath) : null;
+                return (true, plugin.ExpectedFilePath, version);
+            }
         }
 
-        var userVst3 = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Programs",
-            "Common",
-            "VST3",
-            $"{plugin.Plugin.Product}.vst3");
+        var product = plugin.Plugin.Product;
+        var vendor = plugin.Plugin.Vendor;
 
-        if (Directory.Exists(userVst3) || File.Exists(userVst3))
+        // Check common VST3 paths on Windows
+        var vst3Roots = new List<string>
         {
-            var binPath = FindBinaryPath(userVst3);
-            var version = binPath is not null ? GetFileVersion(binPath) : null;
-            return (true, userVst3, version);
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFiles), "VST3"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFilesX86), "VST3"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Common", "VST3")
+        };
+
+        foreach (var root in vst3Roots.Where(Directory.Exists))
+        {
+            var direct = Path.Combine(root, $"{product}.vst3");
+            if (File.Exists(direct) || Directory.Exists(direct))
+            {
+                var binPath = FindBinaryPath(direct);
+                var version = binPath is not null ? GetFileVersion(binPath) : null;
+                return (true, direct, version);
+            }
+
+            if (!string.IsNullOrWhiteSpace(vendor) && !vendor.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
+            {
+                var vendorDirect = Path.Combine(root, vendor, $"{product}.vst3");
+                if (File.Exists(vendorDirect) || Directory.Exists(vendorDirect))
+                {
+                    var binPath = FindBinaryPath(vendorDirect);
+                    var version = binPath is not null ? GetFileVersion(binPath) : null;
+                    return (true, vendorDirect, version);
+                }
+            }
+
+            try
+            {
+                foreach (var sub in Directory.EnumerateDirectories(root))
+                {
+                    var candidate = Path.Combine(sub, $"{product}.vst3");
+                    if (File.Exists(candidate) || Directory.Exists(candidate))
+                    {
+                        var binPath = FindBinaryPath(candidate);
+                        var version = binPath is not null ? GetFileVersion(binPath) : null;
+                        return (true, candidate, version);
+                    }
+                }
+            }
+            catch
+            {
+                // Best effort
+            }
+        }
+
+        // Check common VST2 paths on Windows
+        var vst2Roots = new List<string>
+        {
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "VstPlugins"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Steinberg", "VstPlugins"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFiles), "VST2"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "VstPlugins")
+        };
+
+        var productNames = new List<string> { product, $"{product}_x64", $"{product}_x86" };
+        foreach (var root in vst2Roots.Where(Directory.Exists))
+        {
+            foreach (var pName in productNames)
+            {
+                var directDll = Path.Combine(root, $"{pName}.dll");
+                if (File.Exists(directDll))
+                {
+                    return (true, directDll, GetFileVersion(directDll));
+                }
+            }
+
+            try
+            {
+                foreach (var sub in Directory.EnumerateDirectories(root))
+                {
+                    foreach (var pName in productNames)
+                    {
+                        var candidate = Path.Combine(sub, $"{pName}.dll");
+                        if (File.Exists(candidate))
+                        {
+                            return (true, candidate, GetFileVersion(candidate));
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Best effort
+            }
         }
 
         return (false, null, null);

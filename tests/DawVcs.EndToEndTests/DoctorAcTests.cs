@@ -61,6 +61,43 @@ public sealed class DoctorAcTests
     }
 
     [Fact]
+    [Trait("Requirement", "FR-DOC-001..010")]
+    public async Task Doctor_OnRealFlpFixture_DistinguishesPluginsAndAssets()
+    {
+        var dirInfo = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dirInfo != null && !File.Exists(Path.Combine(dirInfo.FullName, "DawVcs.slnx")))
+        {
+            dirInfo = dirInfo.Parent;
+        }
+        var root = dirInfo!.FullName;
+        var fixturePath = Path.Combine(root, "fixtures", "flstudio", "Nithiann & Mr. Unit - ID", "Nithiann & Mr. Unit - ID.flp");
+
+        using var temp = new TempDirectory();
+        var targetFlp = Path.Combine(temp.Path, "Project.flp");
+        File.Copy(fixturePath, targetFlp);
+
+        var initUseCase = new InitRepositoryUseCase(ContextFactory);
+        await initUseCase.ExecuteAsync(new InitRequest(temp.Path, "RealFixtureProject", "Project.flp"));
+
+        var doctorUseCase = new DoctorUseCase(ContextFactory, Registry);
+        var report = await doctorUseCase.ExecuteAsync(new DoctorRequest(temp.Path));
+
+        report.SchemaVersion.Should().Be(1);
+        report.DependencyHealth.Should().NotBeEmpty();
+
+        var plugins = report.DependencyHealth.Where(d => d.Category == "Plugin").ToList();
+        var assets = report.DependencyHealth.Where(d => d.Category == "Asset").ToList();
+
+        // Plugins must be separated and identified
+        plugins.Should().NotBeEmpty();
+        plugins.Should().Contain(p => p.Name == "Vital" && p.Location != null && p.Location.Contains("Lead"));
+
+        // Assets must only contain real audio samples (not channel names)
+        assets.Should().NotBeEmpty();
+        assets.Should().NotContain(a => a.Name == "LEAD" || a.Name == "ATMOSPHERE - Volume");
+    }
+
+    [Fact]
     [Trait("Requirement", "FR-DOC-005")]
     public async Task Doctor_WhenArtifactMissing_ReportsBlockingIssue()
     {

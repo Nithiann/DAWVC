@@ -22,7 +22,11 @@ public static class DependencyDiscoveryService
         ["Massive"] = ("Native Instruments", PluginRole.Instrument, "Massive"),
         ["Kontakt"] = ("Native Instruments", PluginRole.Instrument, "Kontakt"),
         ["Ozone"] = ("iZotope", PluginRole.Effect, "Ozone"),
-        ["ValhallaVintageVerb"] = ("Valhalla DSP", PluginRole.Effect, "ValhallaVintageVerb")
+        ["ValhallaVintageVerb"] = ("Valhalla DSP", PluginRole.Effect, "ValhallaVintageVerb"),
+        ["Vital"] = ("Vital Audio", PluginRole.Instrument, "Vital"),
+        ["Kickstart"] = ("Cableguys", PluginRole.Effect, "Kickstart"),
+        ["Kickstart 2"] = ("Cableguys", PluginRole.Effect, "Kickstart 2"),
+        ["OTT"] = ("Xfer Records", PluginRole.Effect, "OTT")
     };
 
     public static async Task<DependencyGraph> DiscoverAsync(
@@ -45,8 +49,8 @@ public static class DependencyDiscoveryService
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var (resolvedFullPath, relativePath) = ResolveAssetPath(fullWorkingDir, rawSample);
-                var policy = PortabilityPolicyEngine.DetermineAssetPolicy(rawSample, fullWorkingDir);
+                var (resolvedFullPath, relativePath) = ResolveAssetPath(fullWorkingDir, rawSample, adapter);
+                var policy = PortabilityPolicyEngine.DetermineAssetPolicy(resolvedFullPath ?? rawSample, fullWorkingDir);
 
                 if (resolvedFullPath != null && File.Exists(resolvedFullPath))
                 {
@@ -91,8 +95,82 @@ public static class DependencyDiscoveryService
             }
         }
 
-        // 2. Vertaal plugin names naar PluginDependencies (IMP-0605)
-        if (detectionResult.Metadata.TryGetValue("PluginNames", out var pluginsStr) && !string.IsNullOrWhiteSpace(pluginsStr))
+        // 2. Vertaal plugin occurrences naar PluginDependencies (IMP-0605)
+        bool handledOccurrences = false;
+        if (detectionResult.Metadata.TryGetValue("PluginOccurrences", out var occurrencesJson) && !string.IsNullOrWhiteSpace(occurrencesJson))
+        {
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(occurrencesJson);
+                int index = 0;
+                foreach (var element in doc.RootElement.EnumerateArray())
+                {
+                    index++;
+                    var rawName = element.GetProperty("Name").GetString() ?? "Unknown";
+                    string? vendor = element.TryGetProperty("Vendor", out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString() : null;
+                    string? filePath = element.TryGetProperty("FilePath", out var fp) && fp.ValueKind == System.Text.Json.JsonValueKind.String ? fp.GetString() : null;
+                    string location = element.TryGetProperty("Location", out var loc) && loc.ValueKind == System.Text.Json.JsonValueKind.String ? (loc.GetString() ?? "General") : "General";
+
+                    PluginRole role = PluginRole.Unknown;
+                    if (element.TryGetProperty("Role", out var rVal))
+                    {
+                        if (Enum.TryParse<PluginRole>(rVal.ToString(), true, out var parsedRole))
+                        {
+                            role = parsedRole;
+                        }
+                    }
+
+                    PluginFormat format = PluginFormat.Unknown;
+                    if (element.TryGetProperty("Format", out var fVal))
+                    {
+                        if (Enum.TryParse<PluginFormat>(fVal.ToString(), true, out var parsedFormat))
+                        {
+                            format = parsedFormat;
+                        }
+                    }
+
+                    var identity = adapter != null ? adapter.NormalizePlugin(rawName) : NormalizePluginIdentity(rawName);
+                    if (!string.IsNullOrWhiteSpace(vendor) && (identity.Vendor == "Unknown" || string.IsNullOrWhiteSpace(identity.Vendor)))
+                    {
+                        identity = identity with { Vendor = vendor };
+                    }
+                    if (format != PluginFormat.Unknown && identity.Format == PluginFormat.Unknown)
+                    {
+                        identity = identity with { Format = format };
+                    }
+
+                    if (role == PluginRole.Unknown)
+                    {
+                        role = adapter != null ? adapter.DeterminePluginRole(rawName) : DeterminePluginRole(rawName);
+                    }
+
+                    var policy = PortabilityPolicyEngine.DeterminePluginPolicy(identity);
+                    var localVersion = DependencyResolverPipeline.DetectLocalPluginVersion(identity);
+
+                    var depId = DependencyId.ForPlugin(identity.Vendor, identity.Product, identity.Format.ToString(), $"{location}#{index}");
+
+                    var pluginDep = new PluginDependency(
+                        depId,
+                        identity,
+                        role,
+                        versionRequirement: localVersion,
+                        requirement: DependencyRequirement.Required,
+                        source: DependencySource.NativeProjectParser,
+                        portability: policy,
+                        location: location,
+                        expectedFilePath: filePath);
+
+                    dependencies.Add(pluginDep);
+                    handledOccurrences = true;
+                }
+            }
+            catch
+            {
+                // Fallback to legacy PluginNames if parsing fails
+            }
+        }
+
+        if (!handledOccurrences && detectionResult.Metadata.TryGetValue("PluginNames", out var pluginsStr) && !string.IsNullOrWhiteSpace(pluginsStr))
         {
             var rawPlugins = pluginsStr.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             foreach (var rawPlugin in rawPlugins)
@@ -118,7 +196,7 @@ public static class DependencyDiscoveryService
         return new DependencyGraph(dependencies);
     }
 
-    private static (string? FullPath, string? RelativePath) ResolveAssetPath(string workingDirectory, string rawSample)
+    private static (string? FullPath, string? RelativePath) ResolveAssetPath(string workingDirectory, string rawSample, IDawAdapter? adapter = null)
     {
         // 1. Direct bestaand pad (absoluut of direct relatief)
         if (Path.IsPathRooted(rawSample))
@@ -153,6 +231,34 @@ public static class DependencyDiscoveryService
             if (File.Exists(samplesPath))
             {
                 return (samplesPath, Path.GetRelativePath(workingDirectory, samplesPath));
+            }
+        }
+
+        // 2. Probeer DAW macro's / environment variabelen op te lossen (bijv. %FLStudioFactoryData%)
+        if (adapter != null)
+        {
+            var resolvedMacro = adapter.ResolveMacroPath(rawSample);
+            if (resolvedMacro != null && File.Exists(resolvedMacro))
+            {
+                if (resolvedMacro.StartsWith(workingDirectory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                {
+                    var rel = Path.GetRelativePath(workingDirectory, resolvedMacro);
+                    return (resolvedMacro, rel);
+                }
+                return (resolvedMacro, null);
+            }
+        }
+        else
+        {
+            var expanded = Environment.ExpandEnvironmentVariables(rawSample);
+            if (File.Exists(expanded))
+            {
+                if (expanded.StartsWith(workingDirectory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                {
+                    var rel = Path.GetRelativePath(workingDirectory, expanded);
+                    return (expanded, rel);
+                }
+                return (expanded, null);
             }
         }
 

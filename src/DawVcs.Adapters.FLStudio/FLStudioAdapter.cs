@@ -71,7 +71,7 @@ public sealed class FLStudioAdapter : IDawAdapter
             metadata["Ppq"] = inspection.Header.Ppq.ToString(CultureInfo.InvariantCulture);
             metadata["Format"] = inspection.Header.Format.ToString(CultureInfo.InvariantCulture);
             metadata["SampleCount"] = inspection.SamplePaths.Count.ToString(CultureInfo.InvariantCulture);
-            metadata["PluginCount"] = inspection.PluginNames.Count.ToString(CultureInfo.InvariantCulture);
+            metadata["PluginCount"] = Math.Max(inspection.Plugins?.Count ?? 0, inspection.PluginNames.Count).ToString(CultureInfo.InvariantCulture);
 
             observations.Add(new MetadataObservation<string>(
                 inspection.Header.ChannelCount.ToString(CultureInfo.InvariantCulture),
@@ -131,6 +131,12 @@ public sealed class FLStudioAdapter : IDawAdapter
                         now,
                         AdapterVersion));
                 }
+            }
+
+            if (inspection.Plugins != null && inspection.Plugins.Count > 0)
+            {
+                findings.Add($"Found {inspection.Plugins.Count} referenced plugin occurrence(s).");
+                metadata["PluginOccurrences"] = System.Text.Json.JsonSerializer.Serialize(inspection.Plugins);
             }
 
             if (inspection.PluginNames.Count > 0)
@@ -303,7 +309,11 @@ public sealed class FLStudioAdapter : IDawAdapter
         ["Massive"] = ("Native Instruments", PluginRole.Instrument, "Massive"),
         ["Kontakt"] = ("Native Instruments", PluginRole.Instrument, "Kontakt"),
         ["Ozone"] = ("iZotope", PluginRole.Effect, "Ozone"),
-        ["ValhallaVintageVerb"] = ("Valhalla DSP", PluginRole.Effect, "ValhallaVintageVerb")
+        ["ValhallaVintageVerb"] = ("Valhalla DSP", PluginRole.Effect, "ValhallaVintageVerb"),
+        ["Vital"] = ("Vital Audio", PluginRole.Instrument, "Vital"),
+        ["Kickstart"] = ("Cableguys", PluginRole.Effect, "Kickstart"),
+        ["Kickstart 2"] = ("Cableguys", PluginRole.Effect, "Kickstart 2"),
+        ["OTT"] = ("Xfer Records", PluginRole.Effect, "OTT")
     };
 
     public bool IsNativePlugin(string pluginName)
@@ -397,6 +407,7 @@ public sealed class FLStudioAdapter : IDawAdapter
     {
         ArgumentNullException.ThrowIfNull(plugin);
 
+        // 1. Native Image-Line / FL Studio plugins
         if (plugin.Plugin.Format == PluginFormat.Native ||
             plugin.Plugin.Vendor.Equals("Image-Line", StringComparison.OrdinalIgnoreCase) ||
             IsNativePlugin(plugin.Plugin.Product))
@@ -404,6 +415,280 @@ public sealed class FLStudioAdapter : IDawAdapter
             return (true, "Native FL Studio Plugin", null);
         }
 
+        // 2. Exact expected file path from project metadata (Event 213 subchunk 55)
+        if (!string.IsNullOrWhiteSpace(plugin.ExpectedFilePath))
+        {
+            var expPath = plugin.ExpectedFilePath;
+            if (File.Exists(expPath) || Directory.Exists(expPath))
+            {
+                var bin = FindBinaryPath(expPath);
+                var version = bin != null ? GetFileVersion(bin) : null;
+                return (true, expPath, version);
+            }
+        }
+
+        var product = plugin.Plugin.Product;
+        var vendor = plugin.Plugin.Vendor;
+
+        // 3. Common VST3 search paths on Windows
+        var vst3Roots = new List<string>
+        {
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFiles), "VST3"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFilesX86), "VST3"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Common", "VST3")
+        };
+
+        foreach (var root in vst3Roots.Where(Directory.Exists))
+        {
+            var direct = Path.Combine(root, $"{product}.vst3");
+            if (File.Exists(direct) || Directory.Exists(direct))
+            {
+                var bin = FindBinaryPath(direct);
+                return (true, direct, bin != null ? GetFileVersion(bin) : null);
+            }
+
+            if (!string.IsNullOrWhiteSpace(vendor) && !vendor.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
+            {
+                var vendorDirect = Path.Combine(root, vendor, $"{product}.vst3");
+                if (File.Exists(vendorDirect) || Directory.Exists(vendorDirect))
+                {
+                    var bin = FindBinaryPath(vendorDirect);
+                    return (true, vendorDirect, bin != null ? GetFileVersion(bin) : null);
+                }
+            }
+
+            var prodSub = Path.Combine(root, product, $"{product}.vst3");
+            if (File.Exists(prodSub) || Directory.Exists(prodSub))
+            {
+                var bin = FindBinaryPath(prodSub);
+                return (true, prodSub, bin != null ? GetFileVersion(bin) : null);
+            }
+
+            try
+            {
+                foreach (var sub in Directory.EnumerateDirectories(root))
+                {
+                    var candidate = Path.Combine(sub, $"{product}.vst3");
+                    if (File.Exists(candidate) || Directory.Exists(candidate))
+                    {
+                        var bin = FindBinaryPath(candidate);
+                        return (true, candidate, bin != null ? GetFileVersion(bin) : null);
+                    }
+                }
+            }
+            catch
+            {
+                // Best effort
+            }
+        }
+
+        // 4. Common VST2 search paths on Windows
+        var vst2Roots = new List<string>
+        {
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "VstPlugins"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Steinberg", "VstPlugins"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFiles), "VST2"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "VstPlugins"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Steinberg", "VstPlugins")
+        };
+
+        var productNames = new List<string> { product, $"{product}_x64", $"{product}_x86" };
+
+        foreach (var root in vst2Roots.Where(Directory.Exists))
+        {
+            foreach (var pName in productNames)
+            {
+                var directDll = Path.Combine(root, $"{pName}.dll");
+                if (File.Exists(directDll))
+                {
+                    return (true, directDll, GetFileVersion(directDll));
+                }
+
+                if (!string.IsNullOrWhiteSpace(vendor) && !vendor.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
+                {
+                    var vendorDll = Path.Combine(root, vendor, $"{pName}.dll");
+                    if (File.Exists(vendorDll))
+                    {
+                        return (true, vendorDll, GetFileVersion(vendorDll));
+                    }
+                }
+            }
+
+            try
+            {
+                foreach (var sub in Directory.EnumerateDirectories(root))
+                {
+                    foreach (var pName in productNames)
+                    {
+                        var candidate = Path.Combine(sub, $"{pName}.dll");
+                        if (File.Exists(candidate))
+                        {
+                            return (true, candidate, GetFileVersion(candidate));
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Best effort
+            }
+        }
+
         return (false, null, null);
+    }
+
+    private static string? FindBinaryPath(string path)
+    {
+        if (File.Exists(path)) return path;
+        if (Directory.Exists(path))
+        {
+            var winArch = Path.Combine(path, "Contents", "x86_64-win");
+            if (Directory.Exists(winArch))
+            {
+                var match = Directory.EnumerateFiles(winArch, "*.vst3").FirstOrDefault()
+                    ?? Directory.EnumerateFiles(winArch, "*.dll").FirstOrDefault();
+                if (match is not null) return match;
+            }
+            return Directory.EnumerateFiles(path, "*.vst3", SearchOption.AllDirectories).FirstOrDefault()
+                ?? Directory.EnumerateFiles(path, "*.dll", SearchOption.AllDirectories).FirstOrDefault();
+        }
+        return null;
+    }
+
+    private static string? GetFileVersion(string binaryPath)
+    {
+        try
+        {
+            var info = System.Diagnostics.FileVersionInfo.GetVersionInfo(binaryPath);
+            if (!string.IsNullOrWhiteSpace(info.ProductVersion))
+            {
+                return CleanVersion(info.ProductVersion);
+            }
+            if (!string.IsNullOrWhiteSpace(info.FileVersion))
+            {
+                return CleanVersion(info.FileVersion);
+            }
+        }
+        catch
+        {
+        }
+        return null;
+    }
+
+    private static string CleanVersion(string v)
+    {
+        var trimmed = v.Trim();
+        var commaIdx = trimmed.IndexOf(',', StringComparison.Ordinal);
+        if (commaIdx > 0)
+        {
+            trimmed = trimmed.Replace(',', '.').Replace(" ", "", StringComparison.Ordinal);
+        }
+        return trimmed;
+    }
+
+    public string? ResolveMacroPath(string rawPath)
+    {
+        if (string.IsNullOrWhiteSpace(rawPath)) return null;
+
+        var expanded = Environment.ExpandEnvironmentVariables(rawPath);
+        if (File.Exists(expanded))
+        {
+            return expanded;
+        }
+
+        var isFactory = expanded.Contains("%FLStudioFactoryData%", StringComparison.OrdinalIgnoreCase);
+        var isData = expanded.Contains("%FLStudioData%", StringComparison.OrdinalIgnoreCase);
+
+        if (isFactory || isData)
+        {
+            var installDirs = GetFlStudioInstallDirectories();
+            foreach (var dir in installDirs)
+            {
+                var candidate = expanded
+                    .Replace("%FLStudioFactoryData%", dir, StringComparison.OrdinalIgnoreCase)
+                    .Replace("%FLStudioData%", dir, StringComparison.OrdinalIgnoreCase);
+
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+        }
+
+        // Also check FL Studio user data folder: Documents/Image-Line
+        var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        if (!string.IsNullOrEmpty(docs))
+        {
+            var ilDocs = Path.Combine(docs, "Image-Line");
+            if (Directory.Exists(ilDocs))
+            {
+                var candidate = expanded
+                    .Replace("%FLStudioData%", ilDocs, StringComparison.OrdinalIgnoreCase)
+                    .Replace("%FLStudioFactoryData%", ilDocs, StringComparison.OrdinalIgnoreCase);
+
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static List<string> GetFlStudioInstallDirectories()
+    {
+        var dirs = new List<string>();
+        var pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        var pfx86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+
+        var roots = new List<string>();
+        if (!string.IsNullOrEmpty(pf)) roots.Add(Path.Combine(pf, "Image-Line"));
+        if (!string.IsNullOrEmpty(pfx86)) roots.Add(Path.Combine(pfx86, "Image-Line"));
+
+        var versionSubdirs = new[]
+        {
+            "FL Studio 2026",
+            "FL Studio 2025",
+            "FL Studio 2024",
+            "FL Studio 21",
+            "FL Studio 20",
+            "FL Studio"
+        };
+
+        foreach (var root in roots)
+        {
+            if (!Directory.Exists(root)) continue;
+            foreach (var sub in versionSubdirs)
+            {
+                var candidate = Path.Combine(root, sub);
+                if (Directory.Exists(candidate) && !dirs.Contains(candidate, StringComparer.OrdinalIgnoreCase))
+                {
+                    dirs.Add(candidate);
+                }
+            }
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            try
+            {
+                using var baseKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Image-Line\FL Studio\Paths");
+                if (baseKey != null)
+                {
+                    var appPath = baseKey.GetValue("AppPath") as string;
+                    if (!string.IsNullOrEmpty(appPath) && Directory.Exists(appPath) && !dirs.Contains(appPath, StringComparer.OrdinalIgnoreCase))
+                    {
+                        dirs.Add(appPath);
+                    }
+                }
+            }
+            catch
+            {
+                // Best effort
+            }
+        }
+
+        return dirs;
     }
 }
