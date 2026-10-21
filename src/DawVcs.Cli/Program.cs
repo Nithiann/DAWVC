@@ -1292,22 +1292,32 @@ public static class Program
             }
         }, cloneUrlArg, cloneDirArg, cloneForceOption);
 
+        // Chronologically ordered workflow:
+        // 1. Getting started / Setup
         rootCommand.AddCommand(initCommand);
+        rootCommand.AddCommand(cloneCommand);
+
+        // 2. Daily development & staging
+        rootCommand.AddCommand(statusCommand);
         rootCommand.AddCommand(scanCommand);
+        rootCommand.AddCommand(addCommand);
         rootCommand.AddCommand(commitCommand);
         rootCommand.AddCommand(logCommand);
-        rootCommand.AddCommand(checkoutCommand);
-        rootCommand.AddCommand(bindCommand);
-        rootCommand.AddCommand(statusCommand);
-        rootCommand.AddCommand(addCommand);
+
+        // 3. Branching & navigation
         rootCommand.AddCommand(branchCommand);
         rootCommand.AddCommand(switchCommand);
-        rootCommand.AddCommand(doctorCommand);
-        rootCommand.AddCommand(fsckCommand);
+        rootCommand.AddCommand(checkoutCommand);
+
+        // 4. Remote collaboration & synchronization
         rootCommand.AddCommand(remoteCommand);
         rootCommand.AddCommand(fetchCommand);
         rootCommand.AddCommand(pullCommand);
-        rootCommand.AddCommand(cloneCommand);
+
+        // 5. Diagnostics, reproducibility & maintenance
+        rootCommand.AddCommand(doctorCommand);
+        rootCommand.AddCommand(bindCommand);
+        rootCommand.AddCommand(fsckCommand);
 
         Environment.ExitCode = 0;
         var exitCode = await rootCommand.InvokeAsync(args);
