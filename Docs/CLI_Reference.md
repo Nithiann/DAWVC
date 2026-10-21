@@ -86,14 +86,22 @@ dawvc add <path> [--dir <path>]
 Records an immutable project snapshot into repository history.
 
 ```powershell
-dawvc commit -m <message> [--allow-incomplete] [--dir <path>]
+dawvc commit -m <message> [--allow-incomplete] [--consolidate] [--dir <path>]
 ```
 
 | Option | Type | Description |
 |---|---|---|
 | `-m`, `--message` | String | **Required.** Descriptive commit message. |
 | `--allow-incomplete` | Flag | Permits committing even if required bundle dependencies are missing locally (exit code 5 override). |
+| `--consolidate` | Flag | Automatically copies bundled external audio samples into the local repository `./Samples/` folder. |
 | `--dir` | Path | Target repository directory. |
+
+#### Auto-Bundling & Portability
+When committing, DAWVC automatically analyzes project dependencies:
+- **Audio Assets (`.wav`, `.mp3`, `.flac`, etc.)**: Automatically classified as `Bundle`. External samples located on central drives or DAW search folders are read and stored as content-addressed blobs in `.dawvc/objects/`, mapped to snapshot relative paths under `Samples/<filename>`.
+- **Zero-Config Checkout**: When a collaborator clones or checks out the commit, DAWVC materializes all bundled samples directly into their workspace `./Samples/` folder without any missing file dialogues.
+- **Consolidation**: By default, DAWVC leaves the author's local file references unchanged on disk. Passing `--consolidate` physically copies external samples into the author's local `./Samples/` folder as well.
+- **Third-Party Instrument Libraries**: Multi-gigabyte proprietary libraries (e.g. Kontakt, Omnisphere) remain `ReferenceOnly` or `UserChoice` and are never bundled into the repository.
 
 ---
 

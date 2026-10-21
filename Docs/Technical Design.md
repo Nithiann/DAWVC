@@ -953,10 +953,11 @@ public enum PortabilityMode
 }
 ```
 
-Defaults:
-- Custom samples / recordings: `Bundle`
-- Plugin binaries: `ReferenceOnly`
-- Commercial libraries: `ReferenceOnly` or `UserChoice`
+Defaults & Evaluation:
+- **Project audio samples & recordings** (`.wav`, `.mp3`, `.ogg`, `.flac`, `.aif`, `.wv`, `.mid`): `Bundle`. Regardless of whether they reside in the local workspace or external sample-pack directories, DAWVC automatically bundles them into content-addressed repository storage (`Samples/<filename>`) during commit for zero-config reproducibility.
+- **Third-party instrument libraries** (Kontakt, Omnisphere, Nexus, Komplete): `UserChoice` or `ReferenceOnly`. Multi-gigabyte proprietary instrument libraries are excluded from automatic bundling to prevent repository bloat and copyright violations.
+- **Plugin binaries**: `ReferenceOnly`.
+- **System paths** (`C:\Windows`, `C:\Program Files`): `ReferenceOnly`.
 
 ---
 
@@ -1004,13 +1005,16 @@ All persisted contracts require schema versions. Repository migrations must be e
 3. Detect format and structural invariants;
 4. Scan modified files via index;
 5. Read-only validation;
-6. Scan dependencies via adapter;
-7. Hash new assets;
-8. Write missing blobs into loose object storage;
-9. Construct artifact tree and compute aggregate hash;
-10. Construct manifests and snapshot;
-11. Write commit object;
-12. Atomically update branch ref.
+6. Scan dependencies via adapter (with DAW search-path and registry auto-discovery);
+7. Auto-bundle project asset dependencies (`PortabilityMode.Bundle`): stream file to blob store, map to `Samples/<filename>` in artifact tree (with collision disambiguation), and update snapshot dependency graph;
+8. Optional local consolidation (`--consolidate`): copy bundled external assets to local `./Samples/`;
+9. Hash new assets;
+10. Write missing blobs into loose object storage;
+11. Construct artifact tree (`SingleFileArtifact` or `DirectoryArtifact`) and compute aggregate hash;
+12. Construct manifests and snapshot;
+13. Write commit object;
+14. Atomically update branch ref;
+15. Clear staging index.
 
 ---
 

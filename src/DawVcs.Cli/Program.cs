@@ -120,18 +120,20 @@ public static class Program
         var commitAuthorOption = new Option<string?>("--author", "Author name/identity");
         var commitDirOption = new Option<string?>("--dir", "Repository directory");
         var commitAllowIncompleteOption = new Option<bool>("--allow-incomplete", "Allow commit even if required bundle dependencies are missing (marks snapshot incomplete)");
+        var commitConsolidateOption = new Option<bool>("--consolidate", "Copy bundled external audio samples to the local project './Samples/' directory");
         commitCommand.AddOption(commitMessageOption);
         commitCommand.AddOption(commitAuthorOption);
         commitCommand.AddOption(commitDirOption);
         commitCommand.AddOption(commitAllowIncompleteOption);
+        commitCommand.AddOption(commitConsolidateOption);
 
-        commitCommand.SetHandler(async (message, author, dir, allowIncomplete) =>
+        commitCommand.SetHandler(async (message, author, dir, allowIncomplete, consolidate) =>
         {
             try
             {
                 var repoDir = ResolveRepoDirectory(dir);
                 var useCase = serviceProvider.GetRequiredService<CommitUseCase>();
-                var result = await useCase.ExecuteAsync(new CommitRequest(repoDir, message, author, allowIncomplete));
+                var result = await useCase.ExecuteAsync(new CommitRequest(repoDir, message, author, allowIncomplete, consolidate));
 
                 AnsiConsole.MarkupLine($"[green]✓[/] ([yellow]{result.Branch.Value}[/] [bold]{result.CommitId.ToString()[..8]}[/]) {Markup.Escape(result.Message)}");
                 AnsiConsole.MarkupLine($"  [dim]Author:[/]   {Markup.Escape(result.Author)}");
@@ -155,7 +157,7 @@ public static class Program
             {
                 WriteError(ex.Message, 1);
             }
-        }, commitMessageOption, commitAuthorOption, commitDirOption, commitAllowIncompleteOption);
+        }, commitMessageOption, commitAuthorOption, commitDirOption, commitAllowIncompleteOption, commitConsolidateOption);
 
         // --- dawvc log ---
         var logCommand = new Command("log", "Show commit history");
