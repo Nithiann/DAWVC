@@ -1022,12 +1022,14 @@ All persisted contracts require schema versions. Repository migrations must be e
 
 1. Load commit and snapshot;
 2. Verify object hashes, artifact tree, and aggregate hash;
-3. Resolve local bindings;
-4. Download/materialize bundled blobs into staged directory on the same filesystem volume;
-5. Verify materialized bytes;
-6. Atomically install candidate directory into workspace (guarding against dirty trees);
-7. Verify host environment and plugin versions;
-8. Emit diagnostic report.
+3. Pre-materialization path security validation (guard against directory traversal);
+4. Stage materialization on the same volume (into `.staging_checkout_<guid>`);
+5. Materialize primary DAW project file and all bundled audio assets (`./Samples/<filename>`);
+6. Verify materialized bytes and BLAKE3 content hashes;
+7. Atomically install candidate directory into target workspace via `PublicationJournal` (guarding against dirty trees unless `--force` is specified);
+8. Automatically resolve dependencies against workspace relative paths (`./Samples/` highest priority `BindingMethod.RepositoryAsset`);
+9. Update machine-local bindings cache;
+10. Emit context-aware DAW checkout guidance (informing collaborator that project folder assets load automatically in FL Studio).
 
 ---
 

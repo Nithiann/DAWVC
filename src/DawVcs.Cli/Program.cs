@@ -222,9 +222,28 @@ public static class Program
                 }
 
                 AnsiConsole.MarkupLine($"[green]✓[/] Successfully checked out snapshot [dim]{result.SnapshotId.ToString()[..8]}[/] to [cyan]{Markup.Escape(PathRedactor.Redact(result.TargetDirectory))}[/]");
-                foreach (var file in result.RestoredFiles)
+
+                var sampleFiles = result.RestoredFiles.Where(f => f.StartsWith("Samples/", StringComparison.OrdinalIgnoreCase) || f.StartsWith("Samples\\", StringComparison.OrdinalIgnoreCase)).ToList();
+                var otherFiles = result.RestoredFiles.Except(sampleFiles).ToList();
+
+                foreach (var file in otherFiles)
                 {
                     AnsiConsole.MarkupLine($"  [green]+[/] {Markup.Escape(file)}");
+                }
+
+                if (sampleFiles.Count > 0)
+                {
+                    if (sampleFiles.Count <= 5)
+                    {
+                        foreach (var sample in sampleFiles)
+                        {
+                            AnsiConsole.MarkupLine($"  [green]+[/] {Markup.Escape(sample)}");
+                        }
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLine($"  [green]+[/] {sampleFiles.Count} bundled audio sample(s) materialized in [cyan]'./Samples/'[/]");
+                    }
                 }
 
                 if (result.ManualInstructions is not null && result.ManualInstructions.Count > 0)

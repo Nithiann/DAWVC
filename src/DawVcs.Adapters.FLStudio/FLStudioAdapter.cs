@@ -410,6 +410,18 @@ public sealed class FLStudioAdapter : IDawAdapter
 
     public IReadOnlyList<string> GetCheckoutGuidance(string managedAssetRoot, IReadOnlyList<string> restoredFiles)
     {
+        var hasSamplesFolder = restoredFiles.Any(f =>
+            f.StartsWith("Samples/", StringComparison.OrdinalIgnoreCase) ||
+            f.StartsWith("Samples\\", StringComparison.OrdinalIgnoreCase));
+
+        if (hasSamplesFolder || (Directory.Exists(managedAssetRoot) && managedAssetRoot.EndsWith("Samples", StringComparison.OrdinalIgnoreCase)))
+        {
+            return
+            [
+                "FL Studio project assets materialized in './Samples/'. FL Studio discovers project folder assets automatically on project load."
+            ];
+        }
+
         return
         [
             $"FL Studio configuration: Add '{managedAssetRoot}' to Options > File Settings > Browser extra search folders to ensure all samples load automatically."

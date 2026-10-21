@@ -271,10 +271,14 @@ public sealed class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
         var resolvedBindings = new List<DependencyBinding>();
         var manualInstructions = new List<string>();
 
-        var managedAssetRoot = Path.Combine(targetDir, "Audio");
+        var managedAssetRoot = Path.Combine(targetDir, "Samples");
         if (!Directory.Exists(managedAssetRoot))
         {
-            managedAssetRoot = targetDir;
+            managedAssetRoot = Path.Combine(targetDir, "Audio");
+            if (!Directory.Exists(managedAssetRoot))
+            {
+                managedAssetRoot = targetDir;
+            }
         }
 
         var primaryEntry = entries.FirstOrDefault(e => e.Role == ArtifactRole.PrimaryProjectFile)
