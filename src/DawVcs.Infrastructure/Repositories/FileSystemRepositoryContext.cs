@@ -7,6 +7,7 @@ using DawVcs.Domain.Dependencies;
 using DawVcs.Domain.Entities;
 using DawVcs.Domain.Hashing;
 using DawVcs.Domain.Metadata;
+using DawVcs.Domain.Remotes;
 using DawVcs.Domain.Repositories;
 using DawVcs.Domain.Serialization;
 using DawVcs.Domain.Storage;
@@ -25,7 +26,9 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
     private readonly string _rootPath;
     private readonly string _dotDawvcPath;
     private readonly string _refsHeadsPath;
+    private readonly string _refsRemotesPath;
     private readonly string _headFilePath;
+    private readonly string _remotesFilePath;
     private readonly string _objectsPath;
     private readonly LooseObjectStore _objectStore;
     private readonly SqliteStagingIndex _stagingIndex;
@@ -43,7 +46,9 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
         _rootPath = Path.GetFullPath(rootPath);
         _dotDawvcPath = Path.Combine(_rootPath, ".dawvc");
         _refsHeadsPath = Path.Combine(_dotDawvcPath, "refs", "heads");
+        _refsRemotesPath = Path.Combine(_dotDawvcPath, "refs", "remotes");
         _headFilePath = Path.Combine(_dotDawvcPath, "HEAD");
+        _remotesFilePath = Path.Combine(_dotDawvcPath, "remotes.json");
         _objectsPath = Path.Combine(_dotDawvcPath, "objects");
 
         _objectStore = new LooseObjectStore(_rootPath, onBeforeAtomicPublish);
@@ -238,6 +243,22 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
             }
         }
 
+        // 1b. Try resolve as remote tracking branch (e.g. 'origin/main')
+        var slashIdx = reference.IndexOf('/');
+        if (slashIdx > 0 && slashIdx < reference.Length - 1)
+        {
+            var rem = reference[..slashIdx];
+            var br = reference[(slashIdx + 1)..];
+            if (BranchName.TryCreate(br, out var remoteBranchName, out _))
+            {
+                var remoteCommit = GetRemoteTrackingCommit(rem, remoteBranchName);
+                if (remoteCommit.HasValue)
+                {
+                    return remoteCommit.Value;
+                }
+            }
+        }
+
         // 2. Try resolve as full 64-character hex CommitId
         if (CommitId.TryParse(reference, out var commitId))
         {
@@ -286,17 +307,7 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
         }
 
         var payload = await _objectStore.ReadObjectPayloadAsync(id.Value, cancellationToken).ConfigureAwait(false);
-        var dto = CanonicalJsonSerializer.Deserialize<RawCommitDto>(payload);
-        if (dto is null) return null;
-
-        var parents = (dto.Parents ?? Array.Empty<string>())
-            .Select(p => CommitId.Parse(p))
-            .ToList();
-
-        var snapshotId = SnapshotId.Parse(dto.SnapshotId);
-        var timestamp = DateTimeOffset.FromUnixTimeMilliseconds(dto.Timestamp);
-
-        return new Commit(parents, snapshotId, dto.Author, timestamp, dto.Message, id);
+        return ObjectPayloadSerializer.DeserializeCommit(payload, id);
     }
 
     public async Task<ProjectSnapshot?> LoadSnapshotAsync(SnapshotId id, CancellationToken cancellationToken = default)
@@ -307,162 +318,180 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
         }
 
         var payload = await _objectStore.ReadObjectPayloadAsync(id.Value, cancellationToken).ConfigureAwait(false);
-        var dto = CanonicalJsonSerializer.Deserialize<RawSnapshotDto>(payload);
-        if (dto is null) return null;
+        return ObjectPayloadSerializer.DeserializeSnapshot(payload, id);
+    }
 
-        var entries = (dto.Entries ?? Array.Empty<RawEntryDto>()).Select(e => new ArtifactEntry(
-            new ArtifactPath(e.Path),
-            BlobId.Parse(e.BlobId),
-            ContentHash.Parse(e.Hash),
-            e.Size,
-            (ArtifactRole)e.Role
-        )).ToList();
 
-        ArtifactRoot root = (ArtifactKind)dto.ContainerKind switch
+
+    public IReadOnlyList<RemoteConfig> GetRemotes()
+    {
+        var dto = LoadRemotesConfigDto();
+        return dto.Remotes
+            .Select(r => new RemoteConfig(new RemoteName(r.Name), r.Url, r.FetchSpecs))
+            .ToList();
+    }
+
+    public RemoteConfig? GetRemote(string remoteName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(remoteName);
+        return GetRemotes().FirstOrDefault(r => r.Name.Value.Equals(remoteName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public void SaveRemote(RemoteConfig remote)
+    {
+        ArgumentNullException.ThrowIfNull(remote);
+        var dto = LoadRemotesConfigDto();
+        var existingIdx = dto.Remotes.FindIndex(r => r.Name.Equals(remote.Name.Value, StringComparison.OrdinalIgnoreCase));
+        var entry = new RemoteEntryDto
         {
-            ArtifactKind.SingleFile => new SingleFileArtifact(entries.First()),
-            ArtifactKind.Directory => new DirectoryArtifact(entries),
-            ArtifactKind.Package => new PackageArtifact(entries),
-            _ => new SingleFileArtifact(entries.First())
+            Name = remote.Name.Value,
+            Url = remote.Url,
+            FetchSpecs = remote.FetchSpecs != null ? new List<string>(remote.FetchSpecs) : null
         };
 
-        var project = new ProjectArtifact(dto.DawName, root);
-        var createdAt = DateTimeOffset.FromUnixTimeMilliseconds(dto.CreatedAt);
-
-        var depList = new List<Dependency>();
-        if (dto.Dependencies != null)
+        if (existingIdx >= 0)
         {
-            foreach (var d in dto.Dependencies)
+            dto.Remotes[existingIdx] = entry;
+        }
+        else
+        {
+            dto.Remotes.Add(entry);
+        }
+
+        SaveRemotesConfigDto(dto);
+    }
+
+    public bool RemoveRemote(string remoteName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(remoteName);
+        var dto = LoadRemotesConfigDto();
+        var removed = dto.Remotes.RemoveAll(r => r.Name.Equals(remoteName, StringComparison.OrdinalIgnoreCase)) > 0;
+        if (removed)
+        {
+            var keysToRemove = dto.Upstreams.Where(kv => kv.Value.Remote.Equals(remoteName, StringComparison.OrdinalIgnoreCase)).Select(kv => kv.Key).ToList();
+            foreach (var k in keysToRemove)
             {
-                var portMode = (PortabilityMode)d.Portability;
-                var policy = new PortabilityPolicy(portMode);
-                var source = Enum.IsDefined(typeof(DependencySource), d.Source) ? (DependencySource)d.Source : DependencySource.NativeProjectParser;
-                var requirement = Enum.IsDefined(typeof(DependencyRequirement), d.Requirement) ? (DependencyRequirement)d.Requirement : DependencyRequirement.Required;
-                var provenance = !string.IsNullOrWhiteSpace(d.Provenance) ? new MetadataObservation<string>(d.Provenance, "Snapshot") : null;
+                dto.Upstreams.Remove(k);
+            }
+            SaveRemotesConfigDto(dto);
 
-                if ((DependencyKind)d.Kind == DependencyKind.Plugin)
-                {
-                    var vendor = !string.IsNullOrWhiteSpace(d.Vendor) ? d.Vendor : "Unknown";
-                    var product = !string.IsNullOrWhiteSpace(d.Product) ? d.Product : (!string.IsNullOrWhiteSpace(d.Name) ? d.Name : "Unknown Plugin");
-                    var format = d.Format.HasValue && Enum.IsDefined(typeof(PluginFormat), d.Format.Value)
-                        ? (PluginFormat)d.Format.Value
-                        : PluginFormat.Unknown;
-                    var role = d.Role.HasValue && Enum.IsDefined(typeof(PluginRole), d.Role.Value)
-                        ? (PluginRole)d.Role.Value
-                        : PluginRole.Unknown;
-
-                    depList.Add(new PluginDependency(
-                        new DependencyId(d.Id),
-                        new PluginIdentity(vendor, product, format),
-                        role: role,
-                        versionRequirement: d.VersionRequirement,
-                        requirement: requirement,
-                        source: source,
-                        portability: policy,
-                        provenance: provenance));
-                }
-                else if ((DependencyKind)d.Kind == DependencyKind.Environment)
-                {
-                    depList.Add(new EnvironmentDependency(
-                        new DependencyId(d.Id),
-                        d.EnvKey ?? "Unknown",
-                        d.EnvExpectedValue ?? string.Empty,
-                        requirement: requirement,
-                        source: source,
-                        provenance: provenance));
-                }
-                else
-                {
-                    ContentHash? hash = !string.IsNullOrWhiteSpace(d.Hash) && ContentHash.TryParse(d.Hash, out var parsedHash) ? parsedHash : null;
-                    ArtifactPath? relPath = !string.IsNullOrWhiteSpace(d.RelativePath) ? new ArtifactPath(d.RelativePath) : null;
-
-                    depList.Add(new AssetDependency(
-                        new DependencyId(d.Id),
-                        d.Name,
-                        requirement,
-                        source,
-                        policy,
-                        relativePath: relPath,
-                        originalPath: d.OriginalPath,
-                        hash: hash,
-                        fileSize: d.FileSize,
-                        isMissing: d.IsMissing,
-                        provenance: provenance));
-                }
+            // Clean up .dawvc/refs/remotes/<remoteName> if it exists
+            var remoteRefsDir = Path.Combine(_refsRemotesPath, remoteName);
+            if (Directory.Exists(remoteRefsDir))
+            {
+                try { Directory.Delete(remoteRefsDir, recursive: true); } catch { }
             }
         }
-        var depGraph = new DependencyGraph(depList);
-
-        return new ProjectSnapshot(
-            project,
-            createdAt,
-            dto.Metadata,
-            id,
-            isComplete: dto.IsComplete,
-            incompleteReason: dto.IncompleteReason,
-            dependencies: depGraph);
+        return removed;
     }
 
-    private sealed class RawCommitDto
+    public (string? Remote, BranchName? RemoteBranch) GetUpstream(BranchName branch)
     {
-        public int SchemaVersion { get; set; }
-        public string[]? Parents { get; set; }
-        public string SnapshotId { get; set; } = string.Empty;
-        public string Author { get; set; } = string.Empty;
-        public long Timestamp { get; set; }
-        public string Message { get; set; } = string.Empty;
+        var dto = LoadRemotesConfigDto();
+        if (dto.Upstreams.TryGetValue(branch.Value, out var u) && !string.IsNullOrWhiteSpace(u.Remote) && !string.IsNullOrWhiteSpace(u.Branch))
+        {
+            if (BranchName.TryCreate(u.Branch, out var b, out _))
+            {
+                return (u.Remote, b);
+            }
+        }
+        return (null, null);
     }
 
-    private sealed class RawSnapshotDto
+    public void SetUpstream(BranchName branch, string remote, BranchName remoteBranch)
     {
-        public int SchemaVersion { get; set; }
-        public string DawName { get; set; } = string.Empty;
-        public int ContainerKind { get; set; }
-        public string AggregateHash { get; set; } = string.Empty;
-        public long CreatedAt { get; set; }
-        public bool IsComplete { get; set; } = true;
-        public string? IncompleteReason { get; set; }
-        public RawEntryDto[]? Entries { get; set; }
-        public RawDependencyDto[]? Dependencies { get; set; }
-        public Dictionary<string, string>? Metadata { get; set; }
+        ArgumentException.ThrowIfNullOrWhiteSpace(remote);
+        var dto = LoadRemotesConfigDto();
+        dto.Upstreams[branch.Value] = new UpstreamEntryDto
+        {
+            Remote = remote,
+            Branch = remoteBranch.Value
+        };
+        SaveRemotesConfigDto(dto);
     }
 
-    private sealed class RawDependencyDto
+    public CommitId? GetRemoteTrackingCommit(string remote, BranchName branch)
     {
-        public string Id { get; set; } = string.Empty;
-        public int Kind { get; set; }
-        public string Name { get; set; } = string.Empty;
-        public int Requirement { get; set; }
-        public int Source { get; set; }
-        public int Portability { get; set; }
-        public string? Provenance { get; set; }
+        ArgumentException.ThrowIfNullOrWhiteSpace(remote);
+        var relative = branch.Value.Replace('/', Path.DirectorySeparatorChar);
+        var refFile = Path.Combine(_refsRemotesPath, remote, relative);
+        if (!File.Exists(refFile))
+        {
+            return null;
+        }
 
-        // Asset properties
-        public string? Hash { get; set; }
-        public long? FileSize { get; set; }
-        public string? OriginalPath { get; set; }
-        public string? RelativePath { get; set; }
-        public bool IsMissing { get; set; }
-
-        // Plugin properties
-        public string? Vendor { get; set; }
-        public string? Product { get; set; }
-        public int? Format { get; set; }
-        public int? Role { get; set; }
-        public string? VersionRequirement { get; set; }
-
-        // Environment properties
-        public string? EnvKey { get; set; }
-        public string? EnvExpectedValue { get; set; }
+        var hashHex = File.ReadAllText(refFile).Trim();
+        return CommitId.TryParse(hashHex, out var commitId) ? commitId : null;
     }
 
-    private sealed class RawEntryDto
+    public async Task UpdateRemoteTrackingCommitAsync(string remote, BranchName branch, CommitId commitId, CancellationToken cancellationToken = default)
     {
-        public string Path { get; set; } = string.Empty;
-        public string BlobId { get; set; } = string.Empty;
-        public string Hash { get; set; } = string.Empty;
-        public long Size { get; set; }
-        public int Role { get; set; }
+        ArgumentException.ThrowIfNullOrWhiteSpace(remote);
+        var relative = branch.Value.Replace('/', Path.DirectorySeparatorChar);
+        var refFile = Path.Combine(_refsRemotesPath, remote, relative);
+        var dir = Path.GetDirectoryName(refFile);
+        if (!string.IsNullOrEmpty(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+
+        var bytes = Encoding.UTF8.GetBytes(commitId.ToString() + "\n");
+        await AtomicFileWriter.WriteAtomicAsync(
+            refFile,
+            async stream =>
+            {
+                await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+            },
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private RemotesConfigDto LoadRemotesConfigDto()
+    {
+        if (!File.Exists(_remotesFilePath))
+        {
+            return new RemotesConfigDto();
+        }
+
+        try
+        {
+            var bytes = File.ReadAllBytes(_remotesFilePath);
+            return CanonicalJsonSerializer.Deserialize<RemotesConfigDto>(bytes) ?? new RemotesConfigDto();
+        }
+        catch
+        {
+            return new RemotesConfigDto();
+        }
+    }
+
+    private void SaveRemotesConfigDto(RemotesConfigDto dto)
+    {
+        var bytes = CanonicalJsonSerializer.SerializeCanonical(dto);
+        var dir = Path.GetDirectoryName(_remotesFilePath);
+        if (!string.IsNullOrEmpty(dir))
+        {
+            Directory.CreateDirectory(dir);
+        }
+        File.WriteAllBytes(_remotesFilePath, bytes);
+    }
+
+    private sealed class RemotesConfigDto
+    {
+        public int SchemaVersion { get; set; } = 1;
+        public List<RemoteEntryDto> Remotes { get; set; } = [];
+        public Dictionary<string, UpstreamEntryDto> Upstreams { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private sealed class RemoteEntryDto
+    {
+        public string Name { get; set; } = "";
+        public string Url { get; set; } = "";
+        public List<string>? FetchSpecs { get; set; }
+    }
+
+    private sealed class UpstreamEntryDto
+    {
+        public string Remote { get; set; } = "";
+        public string Branch { get; set; } = "";
     }
 
     public void Dispose()

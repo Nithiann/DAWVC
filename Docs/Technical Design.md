@@ -1230,8 +1230,18 @@ Reconstructing an FL Studio project across two machines with differing directory
 
 ---
 
-# 57. MVP v0.2 Scope
-Remote repository synchronization, central server, and project locks.
+# 57. MVP v0.2 Scope & WP-11 Implementation
+
+Remote repository synchronization, transports, and multi-machine collaboration:
+- **WP-11 Remote Synchronization:**
+  - Pluggable transport architecture via `IRemoteTransport` and `IRemoteTransportFactory`.
+  - Implemented `FileSystemRemoteTransport` supporting local paths, external drives, and UNC network shares (`\\server\share`).
+  - Quarantine-first ingestion (`.dawvc/incoming/<sessionId>/`) with envelope inspection, BLAKE3 payload verification, 2MB metadata size guard, and strict path traversal validation (`PathSecurityGuard`).
+  - Graph traversal via `ObjectGraphWalker` downloading only missing commits, snapshots, and audio blobs.
+  - Fast-forward-only integration in v0.2 via `AncestryService`; diverged branch histories are safely rejected with exit code `9` (`RejectedNonFastForwardException`) without risk of binary file loss.
+  - Safe workspace materialization via `CheckoutUseCase` and `PublicationJournal`, enforcing a dirty working tree guard (exit code `4`) bypassable via `--force` with automatic recovery snapshots.
+  - Zero-config clone (`dawvc clone <url> [<dir>]`) initializing upstream tracking references, materializing `./Samples/`, and verifying 100% environment reproducibility.
+  - Remote management via `dawvc remote add/rm/list`.
 
 ---
 

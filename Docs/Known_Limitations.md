@@ -34,10 +34,11 @@
 
 ---
 
-## 4. Local-Only Version Control (No Remotes in v0.1)
+## 4. Remote Synchronization & Transports (v0.2 Baseline)
 
-- Version 0.1 is designed for single-machine local version control and manual export/import (`dawvc checkout --restore-to <dir>`).
-- Remote commands (`dawvc push`, `dawvc pull`, `dawvc clone`) and cloud repository negotiation are part of the post-MVP roadmap (v0.2+).
+- **Supported Transports:** DAWVC v0.2 supports remote collaboration via the filesystem transport (`FileSystemRemoteTransport`), covering local paths, external drives, and network UNC shares (`\\server\share\repo`). Cloud transports (SSH, HTTPS) are scheduled for subsequent iterations.
+- **Fast-Forward Only Synchronization:** In v0.2, synchronization operations (`dawvc pull`) enforce fast-forward integration (`--ff-only`). If histories diverge (e.g. concurrent commits made on different machines), the pull is rejected with exit code `9` (`NonFastForward`) to prevent automated binary corruption. Three-way structural merging of DAW projects is planned for future releases.
+- **Quarantine Ingestion:** All remote payloads pass through incoming staging (`.dawvc/incoming/<sessionId>/`) with envelope inspection, BLAKE3 verification, and strict path traversal validation (`NFR-SEC-001..003`) before promotion to `.dawvc/objects/`.
 
 ---
 
