@@ -68,7 +68,7 @@ public static class DependencyDiscoveryService
                         DependencySource.NativeProjectParser,
                         policy,
                         relativePath != null ? new ArtifactPath(relativePath) : null,
-                        originalPath: rawSample,
+                        originalPath: resolvedFullPath ?? rawSample,
                         hash: hash,
                         fileSize: fileInfo.Length,
                         isMissing: false);
@@ -259,6 +259,21 @@ public static class DependencyDiscoveryService
                     return (expanded, rel);
                 }
                 return (expanded, null);
+            }
+        }
+
+        // 3. Probeer DAW sample zoekpaden (bijv. FL Studio Browser Extra Search Folders)
+        if (adapter != null)
+        {
+            var resolvedSample = adapter.ResolveSamplePath(rawSample);
+            if (resolvedSample != null && File.Exists(resolvedSample))
+            {
+                if (resolvedSample.StartsWith(workingDirectory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                {
+                    var rel = Path.GetRelativePath(workingDirectory, resolvedSample);
+                    return (resolvedSample, rel);
+                }
+                return (resolvedSample, null);
             }
         }
 

@@ -66,4 +66,14 @@ public interface IDawAdapter
     /// Probeert een DAW-specifieke macro of placeholder (bijv. %FLStudioFactoryData%) op te lossen naar een fysiek bestandspad.
     /// </summary>
     string? ResolveMacroPath(string rawPath) => null;
+
+    /// <summary>
+    /// Geeft de lijst met geconfigureerde zoekmappen voor samples van deze DAW terug (bijv. FL Studio Browser extra search folders).
+    /// </summary>
+    IReadOnlyList<string> GetSampleSearchPaths() => Array.Empty<string>();
+
+    /// <summary>
+    /// Probeert een DAW-specifieke sample-referentie (bestandsnaam of relatief pad) op te lossen via DAW zoekpaden en bibliotheken.
+    /// </summary>
+    string? ResolveSamplePath(string rawSample) => null;
 }

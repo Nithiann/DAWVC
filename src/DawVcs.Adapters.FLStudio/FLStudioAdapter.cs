@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 
 using DawVcs.Adapters.Abstractions;
@@ -13,6 +14,18 @@ namespace DawVcs.Adapters.FLStudio;
 /// </summary>
 public sealed class FLStudioAdapter : IDawAdapter
 {
+    private readonly IReadOnlyList<string>? _customSearchPaths;
+    private readonly Lazy<List<string>> _discoveredSearchPaths;
+    private readonly ConcurrentDictionary<string, string?> _resolvedSampleCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Lazy<Dictionary<string, string>> _sampleFileIndex;
+
+    public FLStudioAdapter(IEnumerable<string>? customSearchPaths = null)
+    {
+        _customSearchPaths = customSearchPaths?.ToList();
+        _discoveredSearchPaths = new Lazy<List<string>>(DiscoverAllSearchPaths);
+        _sampleFileIndex = new Lazy<Dictionary<string, string>>(BuildSampleIndex);
+    }
+
     public string DawName => "FL Studio";
 
     public string AdapterVersion => "0.1.0";
@@ -690,5 +703,288 @@ public sealed class FLStudioAdapter : IDawAdapter
         }
 
         return dirs;
+    }
+
+    /// <summary>
+    /// Geeft de lijst met geconfigureerde zoekmappen voor samples van deze DAW terug (bijv. FL Studio Browser extra search folders).
+    /// </summary>
+    public IReadOnlyList<string> GetSampleSearchPaths()
+    {
+        return _discoveredSearchPaths.Value;
+    }
+
+    /// <summary>
+    /// Probeert een DAW-specifieke sample-referentie (bestandsnaam of relatief pad) op te lossen via de zoekpaden van deze DAW.
+    /// </summary>
+    public string? ResolveSamplePath(string rawSample)
+    {
+        if (string.IsNullOrWhiteSpace(rawSample)) return null;
+
+        var cleanSample = rawSample.Trim().Trim('\"');
+        if (Path.IsPathRooted(cleanSample) && File.Exists(cleanSample))
+        {
+            return cleanSample;
+        }
+
+        if (_resolvedSampleCache.TryGetValue(cleanSample, out var cached))
+        {
+            return cached;
+        }
+
+        var normalizedSample = cleanSample.Replace('/', Path.DirectorySeparatorChar);
+        var searchRoots = GetSampleSearchPaths();
+
+        // 1. Directe controle per zoekmap
+        foreach (var root in searchRoots)
+        {
+            try
+            {
+                var candidate = Path.Combine(root, normalizedSample);
+                if (File.Exists(candidate))
+                {
+                    _resolvedSampleCache[cleanSample] = candidate;
+                    return candidate;
+                }
+            }
+            catch
+            {
+                // Negeer ongeldige padcombinaties
+            }
+        }
+
+        // 2. Snelle O(1) index op bestandsnaam
+        var fileName = Path.GetFileName(cleanSample);
+        if (!string.IsNullOrWhiteSpace(fileName) && _sampleFileIndex.Value.TryGetValue(fileName, out var indexedPath))
+        {
+            if (File.Exists(indexedPath))
+            {
+                _resolvedSampleCache[cleanSample] = indexedPath;
+                return indexedPath;
+            }
+        }
+
+        _resolvedSampleCache[cleanSample] = null;
+        return null;
+    }
+
+    /// <summary>
+    /// Parseert een registry-entry uit FL Studio's "Search paths" naar een fysiek directorypad.
+    /// </summary>
+    public static string? ParseSearchPathEntry(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+
+        var trimmed = raw.Trim();
+        string path;
+
+        if (trimmed.StartsWith('\"'))
+        {
+            var closingQuote = trimmed.IndexOf('\"', 1);
+            if (closingQuote > 1)
+            {
+                path = trimmed.Substring(1, closingQuote - 1);
+            }
+            else
+            {
+                path = trimmed.Trim('\"');
+            }
+        }
+        else
+        {
+            var commaIdx = trimmed.IndexOf(',');
+            if (commaIdx >= 0)
+            {
+                path = trimmed.Substring(0, commaIdx);
+            }
+            else
+            {
+                path = trimmed;
+            }
+        }
+
+        path = path.Trim().Trim('\"');
+        if (string.IsNullOrWhiteSpace(path)) return null;
+
+        if (path.Length > 3 && (path.EndsWith('\\') || path.EndsWith('/')))
+        {
+            path = path.TrimEnd('\\', '/');
+        }
+
+        return path;
+    }
+
+    private List<string> DiscoverAllSearchPaths()
+    {
+        var paths = new List<string>();
+
+        if (_customSearchPaths != null)
+        {
+            foreach (var p in _customSearchPaths)
+            {
+                if (!string.IsNullOrWhiteSpace(p) && Directory.Exists(p) && !paths.Contains(p, StringComparer.OrdinalIgnoreCase))
+                {
+                    paths.Add(p);
+                }
+            }
+            return paths;
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            DiscoverRegistrySearchPaths(paths);
+        }
+
+        DiscoverStandardSearchPaths(paths);
+
+        return paths;
+    }
+
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static void DiscoverRegistrySearchPaths(List<string> paths)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        try
+        {
+            using var ilKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Image-Line");
+            if (ilKey != null)
+            {
+                foreach (var subKeyName in ilKey.GetSubKeyNames())
+                {
+                    if (subKeyName.StartsWith("FL Studio", StringComparison.OrdinalIgnoreCase))
+                    {
+                        using var searchKey = ilKey.OpenSubKey($@"{subKeyName}\Search paths");
+                        if (searchKey != null)
+                        {
+                            foreach (var valName in searchKey.GetValueNames())
+                            {
+                                if (searchKey.GetValue(valName) is string rawVal)
+                                {
+                                    var parsed = ParseSearchPathEntry(rawVal);
+                                    if (!string.IsNullOrEmpty(parsed) && Directory.Exists(parsed) &&
+                                        !paths.Contains(parsed, StringComparer.OrdinalIgnoreCase))
+                                    {
+                                        paths.Add(parsed);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Check Shared Paths
+                using var sharedPathsKey = ilKey.OpenSubKey(@"Shared\Paths");
+                if (sharedPathsKey != null)
+                {
+                    if (sharedPathsKey.GetValue("Shared data") is string sharedData && !string.IsNullOrWhiteSpace(sharedData))
+                    {
+                        var clean = sharedData.Trim().Trim('\"').TrimEnd('\\', '/');
+                        if (Directory.Exists(clean))
+                        {
+                            var patches = Path.Combine(clean, "Data", "Patches");
+                            if (Directory.Exists(patches) && !paths.Contains(patches, StringComparer.OrdinalIgnoreCase))
+                            {
+                                paths.Add(patches);
+                            }
+                            if (!paths.Contains(clean, StringComparer.OrdinalIgnoreCase))
+                            {
+                                paths.Add(clean);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Best effort - registertoegang mag nooit crashen
+        }
+    }
+
+    private static void DiscoverStandardSearchPaths(List<string> paths)
+    {
+        // 1. FL Studio installatiedirectories (Data\Patches\Packs)
+        foreach (var installDir in GetFlStudioInstallDirectories())
+        {
+            var packs = Path.Combine(installDir, "Data", "Patches", "Packs");
+            if (Directory.Exists(packs) && !paths.Contains(packs, StringComparer.OrdinalIgnoreCase))
+            {
+                paths.Add(packs);
+            }
+            var patches = Path.Combine(installDir, "Data", "Patches");
+            if (Directory.Exists(patches) && !paths.Contains(patches, StringComparer.OrdinalIgnoreCase))
+            {
+                paths.Add(patches);
+            }
+        }
+
+        // 2. User Documenten
+        var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        if (!string.IsNullOrEmpty(docs))
+        {
+            var ilDocs = Path.Combine(docs, "Image-Line");
+            if (Directory.Exists(ilDocs) && !paths.Contains(ilDocs, StringComparer.OrdinalIgnoreCase))
+            {
+                paths.Add(ilDocs);
+            }
+
+            var spliceDocs = Path.Combine(docs, "Splice");
+            if (Directory.Exists(spliceDocs) && !paths.Contains(spliceDocs, StringComparer.OrdinalIgnoreCase))
+            {
+                paths.Add(spliceDocs);
+            }
+        }
+
+        // 3. User Profile Splice
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrEmpty(userProfile))
+        {
+            var spliceSounds = Path.Combine(userProfile, "Splice", "sounds");
+            if (Directory.Exists(spliceSounds) && !paths.Contains(spliceSounds, StringComparer.OrdinalIgnoreCase))
+            {
+                paths.Add(spliceSounds);
+            }
+        }
+    }
+
+    private Dictionary<string, string> BuildSampleIndex()
+    {
+        var index = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var searchPaths = GetSampleSearchPaths();
+        var audioExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".wav", ".mp3", ".ogg", ".flac", ".aif", ".aiff", ".wv", ".mid", ".midi"
+        };
+
+        var enumOptions = new EnumerationOptions
+        {
+            IgnoreInaccessible = true,
+            RecurseSubdirectories = true,
+            ReturnSpecialDirectories = false
+        };
+
+        foreach (var root in searchPaths)
+        {
+            if (!Directory.Exists(root)) continue;
+
+            try
+            {
+                foreach (var file in Directory.EnumerateFiles(root, "*.*", enumOptions))
+                {
+                    var ext = Path.GetExtension(file);
+                    if (audioExtensions.Contains(ext))
+                    {
+                        var name = Path.GetFileName(file);
+                        index.TryAdd(name, file);
+                    }
+                }
+            }
+            catch
+            {
+                // Best-effort per root directory
+            }
+        }
+
+        return index;
     }
 }
