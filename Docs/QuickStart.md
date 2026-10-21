@@ -173,3 +173,42 @@ dawvc checkout 4f98d1a --restore-to "D:\Collab\Midnight_Drive_V1"
   - Midnight_Drive.flp (byte-identical)
   - vocals.wav (byte-identical)
 ```
+
+---
+
+## Step 9: Collaborating over Remotes (`dawvc clone`, `fetch`, `pull`)
+
+DAWVC v0.2 supports remote collaboration over shared network folders (NAS, UNC paths like `\\studio-server\projects\Midnight_Drive`) and external drives.
+
+### 9.1 Clone on a Collaborator's Machine
+Your collaborator clones the repository directly:
+
+```powershell
+dawvc clone "\\studio-server\projects\Midnight_Drive" "C:\Music\Midnight_Drive"
+```
+
+**Output:**
+```text
+✓ Cloned repository 'Midnight_Drive' from '\\studio-server\projects\Midnight_Drive'
+  Default branch: main (HEAD -> 4f98d1a)
+  Materialized 2 files (1 project file, 1 bundled audio sample)
+  Doctor Readiness: 100% (Reproducible)
+```
+All audio samples are placed into `./Samples/` with zero configuration required.
+
+### 9.2 Pulling New Changes
+When changes are pushed to the shared remote, pull them down cleanly:
+
+```powershell
+dawvc pull
+```
+
+**Output:**
+```text
+✓ Fast-forwarded branch 'main': 4f98d1a..8b3e210
+  Updated 2 files:
+  - Midnight_Drive.flp
+  - Samples/guitar_lead.wav
+```
+If you have uncommitted changes in your workspace, DAWVC will protect your work and refuse to overwrite. Use `dawvc pull --force` to create an automatic timestamped backup in `.dawvc/recovery/` before updating.
+

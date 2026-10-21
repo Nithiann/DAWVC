@@ -20,6 +20,8 @@ DAWVC uses deterministic process exit codes across all commands:
 | `5` | `MissingDependencies` | Incomplete commit blocked due to missing required `Bundle` assets. |
 | `6` | `DiagnosticFailure` | `doctor` or `fsck` found one or more unresolved warnings or errors. |
 | `7` | `InvalidArguments` | CLI syntax error or mutually incompatible flags passed. |
+| `8` | `RemoteError` | Remote transport failure, unreachable share/directory, repository ID mismatch, or schema error. |
+| `9` | `NonFastForward` | Push or pull rejected because local and remote branch histories have diverged (no fast-forward possible). |
 
 ---
 
@@ -40,17 +42,20 @@ dawvc init [--dir <path>] [--name <string>] [--primary <path>]
 
 ---
 
-### 2. `dawvc scan`
-Scans the primary project file and workspace for referenced audio assets and plugins.
+### 2. `dawvc clone`
+Clones a remote repository (directory or UNC share) into a new local directory, checks out the default branch, and materializes all project files and bundled sample assets.
 
 ```powershell
-dawvc scan [--dir <path>] [--json]
+dawvc clone <url> [<dir>]
 ```
 
-| Option | Type | Description |
+| Argument/Option | Type | Description |
 |---|---|---|
-| `--dir` | Path | Target repository directory (default: current repository). |
-| `--json` | Flag | Emits scan results as canonical JSON. |
+| `<url>` | Argument | **Required.** Remote repository path (filesystem path or `\\server\share\path`). |
+| `<dir>` | Argument | Target directory for the new repository (defaults to project name). |
+
+#### Post-Clone Verification:
+`dawvc clone` automatically configures `origin` pointing to `<url>`, checks out the default branch (`main`), materializes all bundled audio samples into `./Samples/`, and runs a silent `doctor` check, reporting immediate reproducibility readiness.
 
 ---
 
@@ -68,7 +73,21 @@ dawvc status [--dir <path>] [--json]
 
 ---
 
-### 4. `dawvc add`
+### 4. `dawvc scan`
+Scans the primary project file and workspace for referenced audio assets and plugins.
+
+```powershell
+dawvc scan [--dir <path>] [--json]
+```
+
+| Option | Type | Description |
+|---|---|---|
+| `--dir` | Path | Target repository directory (default: current repository). |
+| `--json` | Flag | Emits scan results as canonical JSON. |
+
+---
+
+### 5. `dawvc add`
 Stages discovered external assets or sample files for bundling into repository storage.
 
 ```powershell
@@ -82,7 +101,7 @@ dawvc add <path> [--dir <path>]
 
 ---
 
-### 5. `dawvc commit`
+### 6. `dawvc commit`
 Records an immutable project snapshot into repository history.
 
 ```powershell
@@ -105,7 +124,7 @@ When committing, DAWVC automatically analyzes project dependencies:
 
 ---
 
-### 6. `dawvc log`
+### 7. `dawvc log`
 Displays commit history starting from HEAD.
 
 ```powershell
@@ -120,7 +139,7 @@ dawvc log [-n <limit>] [--json] [--dir <path>]
 
 ---
 
-### 7. `dawvc branch`
+### 8. `dawvc branch`
 Lists existing branches or creates a new branch pointer at current HEAD.
 
 ```powershell
@@ -138,7 +157,7 @@ dawvc branch <branch-name> [--dir <path>]
 
 ---
 
-### 8. `dawvc switch`
+### 9. `dawvc switch`
 Safely switches workspace to a target branch.
 
 ```powershell
@@ -153,7 +172,7 @@ dawvc switch <branch-name> [--force] [--dir <path>]
 
 ---
 
-### 9. `dawvc checkout`
+### 10. `dawvc checkout`
 Restores a specific commit snapshot or exports it to an external folder.
 
 ```powershell
@@ -169,16 +188,71 @@ dawvc checkout <commit-ref> [--restore-to <dir>] [--force] [--dir <path>]
 
 ---
 
-### 10. `dawvc bind`
-Binds an external file path to a logical asset identity or updates local path bindings.
+### 11. `dawvc remote`
+Manages configured remote repositories (local folders, external drives, or UNC network shares).
 
 ```powershell
-dawvc bind <asset-id> <local-path> [--dir <path>]
+# List remotes:
+dawvc remote list [--dir <path>]
+
+# Add remote:
+dawvc remote add <name> <url> [--dir <path>]
+
+# Remove remote:
+dawvc remote rm <name> [--dir <path>]
 ```
+
+| Subcommand/Option | Description |
+|---|---|
+| `list` | Lists all configured remotes with their URLs. |
+| `add <name> <url>` | Registers a new remote repository location (e.g. `origin` `\\NAS\Projects\Song`). |
+| `rm <name>` | Removes an existing remote configuration. |
+| `--dir` | Path to target repository directory. |
 
 ---
 
-### 11. `dawvc doctor`
+### 12. `dawvc fetch`
+Downloads commits, snapshots, and missing blob dependencies from a remote repository into the local quarantine (`.dawvc/incoming/`), verifies envelope integrity and BLAKE3 hashes, promotes them to `.dawvc/objects/`, and updates remote-tracking references (`.dawvc/refs/remotes/<remote>/<branch>`). Never touches the workspace or HEAD.
+
+```powershell
+dawvc fetch [<remote>] [<branch>] [--dry-run] [--dir <path>]
+```
+
+| Argument/Option | Type | Description |
+|---|---|---|
+| `<remote>` | Argument | Name of remote to fetch from (default: `origin`). |
+| `<branch>` | Argument | Optional remote branch to fetch (default: all tracking branches). |
+| `--dry-run` | Flag | Simulates the fetch operation and displays incoming commits and transfer sizes without writing. |
+| `--dir` | Path | Target repository directory. |
+
+*Exits with code `8` (`RemoteError`) if remote handshake fails or repository IDs do not match.*
+
+---
+
+### 13. `dawvc pull`
+Fetches changes from the remote repository and safely integrates them into the current branch using fast-forward materialization.
+
+```powershell
+dawvc pull [<remote>] [<branch>] [--force] [--ff-only] [--dry-run] [--dir <path>]
+```
+
+| Argument/Option | Type | Description |
+|---|---|---|
+| `<remote>` | Argument | Remote repository name (default: `origin`). |
+| `<branch>` | Argument | Remote branch to pull (default: upstream tracking branch or current branch name). |
+| `--force` | Flag | Bypasses dirty workspace check by creating a timestamped recovery copy in `.dawvc/recovery/` before updating files. |
+| `--ff-only` | Flag | Explicitly enforces that only fast-forward updates are permitted (default behavior in v0.2). |
+| `--dry-run` | Flag | Previews pull actions without modifying workspace or advancing branch pointers. |
+| `--dir` | Path | Target repository directory. |
+
+#### Behavior & Safety Guarantees:
+- **Fast-Forward Only**: In v0.2, if local history and remote history have diverged, the pull is safely rejected with exit code `9` (`NonFastForward`) without touching any files.
+- **Dirty Workspace Guard**: If uncommitted edits exist in tracked assets, pull is rejected with exit code `4` (`DirtyWorkingTree`). Use `--force` to create an automatic recovery snapshot and proceed.
+- **Zero Binary Mutations**: Audio files and `.flp` project files are restored cleanly and byte-identically. Bundled samples are materialized to `./Samples/` with automatic path deduplication.
+
+---
+
+### 14. `dawvc doctor`
 Inspects workspace and host system health, verifying that all referenced audio assets exist and that required plugins are installed with compatible versions.
 
 ```powershell
@@ -225,7 +299,16 @@ When run with `--json`, each item in the `dependencies` array includes:
 
 ---
 
-### 12. `dawvc fsck`
+### 15. `dawvc bind`
+Binds an external file path to a logical asset identity or updates local path bindings.
+
+```powershell
+dawvc bind <asset-id> <local-path> [--dir <path>]
+```
+
+---
+
+### 16. `dawvc fsck`
 Validates repository database, commit DAG, envelope formats, and BLAKE3 object hashes.
 
 ```powershell
@@ -239,3 +322,4 @@ dawvc fsck [--artifacts] [--json] [--dir <path>]
 | `--dir` | Path | Target repository directory. |
 
 *Exits with code `6` if repository or artifact corruption is detected.*
+

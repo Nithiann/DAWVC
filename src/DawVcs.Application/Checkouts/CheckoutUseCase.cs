@@ -20,6 +20,12 @@ public sealed record CheckoutRequest(
     string? RestoreToDirectory = null,
     bool Force = false);
 
+public sealed record FastForwardTarget(
+    string RepositoryDirectory,
+    BranchName Branch,
+    CommitId? OldCommitId,
+    CommitId NewCommitId);
+
 public sealed record CheckoutResult(
     CommitId CommitId,
     SnapshotId SnapshotId,
@@ -34,7 +40,7 @@ public sealed record CheckoutResult(
 /// Beheert veilige, getrapte (staged) checkout en herstel van snapshots (FR-CHK-001..015, AC-009..013).
 /// Past dirty-workspacebeveiliging toe, maakt een recoverykopie bij --force, en biedt automatische rollback bij publicatiefouten via PublicationJournal.
 /// </summary>
-public sealed class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
+public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
 {
     private readonly Func<string, IRepositoryContext> _contextFactory;
     private readonly IDawAdapterRegistry? _adapterRegistry;
@@ -45,7 +51,7 @@ public sealed class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
         _adapterRegistry = adapterRegistry;
     }
 
-    public async Task<CheckoutResult> ExecuteAsync(CheckoutRequest request, CancellationToken cancellationToken = default)
+    public virtual async Task<CheckoutResult> ExecuteAsync(CheckoutRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.RepositoryDirectory);
@@ -333,6 +339,242 @@ public sealed class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
             commit.Id,
             snapshot.Id,
             targetDir,
+            restoredFiles,
+            recoveryDir,
+            managedAssetRoot,
+            manualInstructions,
+            resolvedBindings);
+    }
+
+    /// <summary>
+    /// Executes a safe fast-forward update of an active branch to a new commit tip (FR-PUL-001..012, AC-030).
+    /// Enforces dirty workspace guard, atomic PublicationJournal staging, and branch pointer progression.
+    /// </summary>
+    public virtual async Task<CheckoutResult> ExecuteFastForwardAsync(
+        FastForwardTarget target,
+        bool force = false,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentException.ThrowIfNullOrWhiteSpace(target.RepositoryDirectory);
+
+        var context = _contextFactory(target.RepositoryDirectory);
+        var repoRoot = !string.IsNullOrWhiteSpace(context.RootPath)
+            ? context.RootPath
+            : Path.GetFullPath(target.RepositoryDirectory);
+
+        // 1. Load new commit and snapshot
+        var newCommit = await context.LoadCommitAsync(target.NewCommitId, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"Commit '{target.NewCommitId}' not found in repository.");
+
+        var newSnapshot = await context.LoadSnapshotAsync(newCommit.SnapshotId, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException($"Snapshot '{newCommit.SnapshotId}' not found in repository.");
+
+        var entries = newSnapshot.Project.Root.GetEntries().ToList();
+        var entryPaths = entries.Select(e => e.Path.Value).ToList();
+
+        // 2. Pre-materialization path security (FR-CHK-012)
+        PathSecurityGuard.ValidateAll(entryPaths);
+
+        // 3. Pre-materialization blob existence
+        foreach (var entry in entries)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!context.ObjectStore.Exists(entry.Blob.Value))
+            {
+                throw new CheckoutStagingException($"Required object blob '{entry.Blob.Value}' for artifact '{entry.Path.Value}' is missing from the repository object store.");
+            }
+        }
+
+        // 4. Dirty workspace check and planning (FR-PUL-002, AC-032)
+        ProjectSnapshot? oldSnapshot = null;
+        if (target.OldCommitId.HasValue)
+        {
+            var oldCommit = await context.LoadCommitAsync(target.OldCommitId.Value, cancellationToken).ConfigureAwait(false);
+            if (oldCommit != null)
+            {
+                oldSnapshot = await context.LoadSnapshotAsync(oldCommit.SnapshotId, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        var statusUseCase = new StatusUseCase(_contextFactory);
+        var statusResult = await statusUseCase.ExecuteAsync(new StatusRequest(repoRoot), cancellationToken).ConfigureAwait(false);
+        var status = statusResult.Status;
+
+        var plan = await CheckoutPlanner.PlanAsync(repoRoot, oldSnapshot, newSnapshot, status, cancellationToken).ConfigureAwait(false);
+
+        string? recoveryDir = null;
+        if (plan.HasConflicts || status.HasStagedChanges || status.HasWorkingTreeModifications)
+        {
+            if (!force)
+            {
+                // Dirty workspace guard blocks fast-forward pull with DirtyWorkspaceException (Exit Code 4)
+                throw new DirtyWorkspaceException(status, plan.Conflicts);
+            }
+
+            var filesToBackup = status.Staged.Select(s => s.Path.Value)
+                .Concat(status.Modified.Select(m => m.Path.Value))
+                .Concat(status.Untracked.Select(u => u.Path.Value))
+                .Concat(plan.Actions.Where(a => a.Kind is CheckoutActionKind.Replace or CheckoutActionKind.Delete).Select(a => a.Path.Value))
+                .Concat(entryPaths.Where(p => File.Exists(Path.Combine(repoRoot, p))))
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+
+            recoveryDir = await RecoveryCopyService.CreateRecoveryCopyAsync(repoRoot, filesToBackup, cancellationToken).ConfigureAwait(false);
+        }
+
+        // 5. Staged materialization
+        var stagingBaseDir = Path.Combine(repoRoot, ".dawvc");
+        var stagingDir = Path.Combine(stagingBaseDir, $".staging_checkout_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(stagingDir);
+
+        var restoredFiles = new List<string>();
+
+        try
+        {
+            foreach (var action in plan.Actions.Where(a => a.Kind is CheckoutActionKind.Create or CheckoutActionKind.Replace))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var entry = entries.First(e => e.Path == action.Path);
+                var stagingFilePath = Path.Combine(stagingDir, entry.Path.Value.Replace('/', Path.DirectorySeparatorChar));
+                var stagingFileDir = Path.GetDirectoryName(stagingFilePath);
+                if (!string.IsNullOrEmpty(stagingFileDir))
+                {
+                    Directory.CreateDirectory(stagingFileDir);
+                }
+
+                await using (var payloadStream = await context.ObjectStore.OpenPayloadStreamAsync(entry.Blob.Value, cancellationToken).ConfigureAwait(false))
+                await using (var fileStream = new FileStream(stagingFilePath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 64 * 1024, FileOptions.Asynchronous))
+                {
+                    await payloadStream.CopyToAsync(fileStream, cancellationToken).ConfigureAwait(false);
+                    await fileStream.FlushAsync(cancellationToken).ConfigureAwait(false);
+                }
+
+                var actualHash = await Blake3ContentHasher.HashFileAsync(stagingFilePath, cancellationToken).ConfigureAwait(false);
+                if (actualHash != entry.Hash)
+                {
+                    throw new CheckoutStagingException($"Integrity verification failed for staged artifact '{entry.Path.Value}'. Expected hash {entry.Hash}, but got {actualHash}.");
+                }
+            }
+
+            // 6. PublicationJournal & branch advance (atomic publication)
+            await using var journal = new PublicationJournal(repoRoot, Path.Combine(repoRoot, ".dawvc"));
+            restoredFiles = (await journal.ApplyAsync(stagingDir, plan, cancellationToken).ConfigureAwait(false)).ToList();
+
+            var previousBranchCommit = target.OldCommitId;
+            var previousStagedEntries = await context.StagingIndex.GetStagedEntriesAsync(cancellationToken).ConfigureAwait(false);
+
+            try
+            {
+                // Advance branch tip and reset staging index
+                await context.UpdateBranchCommitAsync(target.Branch, target.NewCommitId, cancellationToken).ConfigureAwait(false);
+                await context.StagingIndex.ClearStagedEntriesAsync(cancellationToken).ConfigureAwait(false);
+
+                await journal.CommitAsync().ConfigureAwait(false);
+            }
+            catch
+            {
+                try
+                {
+                    if (previousBranchCommit.HasValue)
+                    {
+                        await context.UpdateBranchCommitAsync(target.Branch, previousBranchCommit.Value, CancellationToken.None).ConfigureAwait(false);
+                    }
+                }
+                catch
+                {
+                    // Best effort rollback of branch tip
+                }
+
+                try
+                {
+                    if (previousStagedEntries != null)
+                    {
+                        await context.StagingIndex.ClearStagedEntriesAsync(CancellationToken.None).ConfigureAwait(false);
+                        foreach (var entry in previousStagedEntries)
+                        {
+                            await context.StagingIndex.StageEntryAsync(entry, CancellationToken.None).ConfigureAwait(false);
+                        }
+                    }
+                }
+                catch
+                {
+                    // Best effort restore of staged entries
+                }
+
+                await journal.RollbackAsync().ConfigureAwait(false);
+                throw;
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(stagingDir))
+            {
+                try { Directory.Delete(stagingDir, recursive: true); } catch { }
+            }
+        }
+
+        // 7. Dependency Resolution & Local Bindings
+        var resolvedBindings = new List<DependencyBinding>();
+        var manualInstructions = new List<string>();
+
+        var managedAssetRoot = Path.Combine(repoRoot, "Samples");
+        if (!Directory.Exists(managedAssetRoot))
+        {
+            managedAssetRoot = Path.Combine(repoRoot, "Audio");
+            if (!Directory.Exists(managedAssetRoot))
+            {
+                managedAssetRoot = repoRoot;
+            }
+        }
+
+        var primaryEntry = entries.FirstOrDefault(e => e.Role == ArtifactRole.PrimaryProjectFile)
+            ?? entries.FirstOrDefault();
+
+        var primaryAdapter = primaryEntry != null && _adapterRegistry != null
+            ? _adapterRegistry.FindAdapterForFile(primaryEntry.Path.Value)
+            : null;
+
+        if (newSnapshot.Dependencies.All.Count > 0)
+        {
+            foreach (var dep in newSnapshot.Dependencies.All)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var binding = await DependencyResolverPipeline.ResolveAsync(
+                    repoRoot,
+                    dep,
+                    context.LocalBindings,
+                    knownHashIndex: null,
+                    adapter: primaryAdapter,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+
+                resolvedBindings.Add(binding);
+
+                if (dep is PluginDependency plugin && binding.Status != BindingStatus.Verified)
+                {
+                    manualInstructions.Add($"Plugin missing: {plugin.Plugin.Product} ({plugin.Plugin.Vendor}) [{plugin.Plugin.Format}]. Please install the plugin binary.");
+                }
+            }
+
+            await context.LocalBindings.SaveAllAsync(resolvedBindings, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (primaryAdapter != null)
+        {
+            foreach (var guidance in primaryAdapter.GetCheckoutGuidance(managedAssetRoot, restoredFiles))
+            {
+                manualInstructions.Add(guidance);
+            }
+        }
+        else
+        {
+            manualInstructions.Add($"DAW configuration: Configure '{managedAssetRoot}' in your DAW search paths to ensure all samples load automatically.");
+        }
+
+        return new CheckoutResult(
+            newCommit.Id,
+            newSnapshot.Id,
+            repoRoot,
             restoredFiles,
             recoveryDir,
             managedAssetRoot,
