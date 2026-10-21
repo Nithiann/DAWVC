@@ -108,12 +108,33 @@ public sealed class CloneUseCaseTests : IDisposable
         var result = await _useCase.ExecuteAsync(request);
 
         result.TargetDirectory.Should().Be(targetDir);
+        result.ProjectName.Should().Be("Song");
         result.DefaultBranch.Should().Be(BranchName.Main);
         result.HeadCommit.Should().Be(_headCommit);
 
+        _context.Received(1).SaveConfig(Arg.Is<RepositoryConfig>(c => c.ProjectName == "Song" && c.PrimaryArtifact.Value == "Song.flp"));
         _context.Received(1).SaveRemote(Arg.Is<RemoteConfig>(r => r.Name.Value == "origin" && r.Url == @"\\NAS\Music\Song.dawvc"));
         _context.Received(1).SetUpstream(BranchName.Main, "origin", BranchName.Main);
         await _fetchUseCase.Received(1).ExecuteAsync(Arg.Is<FetchRequest>(f => f.RemoteName == "origin"), Arg.Any<CancellationToken>());
         await _checkoutUseCase.Received(1).ExecuteFastForwardAsync(Arg.Is<FastForwardTarget>(t => t.NewCommitId == _headCommit), true, Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(@"\\NAS\Music\Song.dawvc", "Song")]
+    [InlineData(@"/var/music/Song.dawvc", "Song")]
+    [InlineData(@"file:///var/music/Song.dawvc", "Song")]
+    [InlineData(@"https://example.com/repos/Song.git", "Song")]
+    [InlineData(@"C:\Projects\Song", "Song")]
+    public async Task ExecuteAsync_CrossPlatformRemoteUrls_ExtractsExpectedProjectName(string remoteUrl, string expectedProjectName)
+    {
+        var targetDir = Path.Combine(_tempDir, "url_test_" + Guid.NewGuid().ToString("N"));
+        var request = new CloneRequest(remoteUrl, targetDir);
+
+        var result = await _useCase.ExecuteAsync(request);
+
+        result.ProjectName.Should().Be(expectedProjectName);
+        _context.Received().SaveConfig(Arg.Is<RepositoryConfig>(c =>
+            c.ProjectName == expectedProjectName &&
+            c.PrimaryArtifact.Value == $"{expectedProjectName}.flp"));
     }
 }

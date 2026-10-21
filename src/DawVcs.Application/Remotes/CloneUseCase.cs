@@ -152,7 +152,14 @@ public sealed class CloneUseCase
         var path = remoteUrl.Trim();
         if (path.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
         {
-            path = new Uri(path).LocalPath;
+            try
+            {
+                path = new Uri(path).LocalPath;
+            }
+            catch
+            {
+                // Fallback to raw path if URI parsing fails
+            }
         }
 
         try
@@ -169,25 +176,32 @@ public sealed class CloneUseCase
             // Fallback default config if remote dawvc.yaml was not directly loadable via context
         }
 
-        var projectName = Path.GetFileNameWithoutExtension(path);
+        var leaf = ExtractLeafName(path);
+        var projectName = Path.GetFileNameWithoutExtension(leaf);
         if (string.IsNullOrWhiteSpace(projectName)) projectName = "Project";
         return new RepositoryConfig(fallbackRepoId, projectName, new ArtifactPath($"{projectName}.flp"), BranchName.Main);
     }
 
     private static string DeriveTargetDirectory(string remoteUrl, string projectName)
     {
-        var trimmed = remoteUrl.Trim().TrimEnd('/', '\\');
-        var name = Path.GetFileName(trimmed);
-        if (name.EndsWith(".dawvc", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
+        var leaf = ExtractLeafName(remoteUrl);
+        if (leaf.EndsWith(".dawvc", StringComparison.OrdinalIgnoreCase) || leaf.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
         {
-            name = Path.GetFileNameWithoutExtension(name);
+            leaf = Path.GetFileNameWithoutExtension(leaf);
         }
 
-        if (string.IsNullOrWhiteSpace(name))
+        if (string.IsNullOrWhiteSpace(leaf))
         {
-            name = projectName;
+            leaf = projectName;
         }
 
-        return Path.Combine(Directory.GetCurrentDirectory(), name);
+        return Path.Combine(Directory.GetCurrentDirectory(), leaf);
+    }
+
+    private static string ExtractLeafName(string path)
+    {
+        var trimmed = path.Trim().TrimEnd('/', '\\');
+        int lastSeparator = Math.Max(trimmed.LastIndexOf('/'), trimmed.LastIndexOf('\\'));
+        return lastSeparator >= 0 ? trimmed[(lastSeparator + 1)..] : trimmed;
     }
 }
