@@ -134,6 +134,14 @@ public static class DependencyResolverPipeline
                     {
                         effectivePath = macroPath;
                     }
+                    else
+                    {
+                        var samplePath = adapter.ResolveSamplePath(effectivePath);
+                        if (samplePath != null && File.Exists(samplePath))
+                        {
+                            effectivePath = samplePath;
+                        }
+                    }
                 }
                 else
                 {
@@ -142,6 +150,15 @@ public static class DependencyResolverPipeline
                     {
                         effectivePath = exp;
                     }
+                }
+            }
+
+            if ((string.IsNullOrWhiteSpace(effectivePath) || !File.Exists(effectivePath)) && adapter != null)
+            {
+                var byName = adapter.ResolveSamplePath(asset.Name);
+                if (byName != null && File.Exists(byName))
+                {
+                    effectivePath = byName;
                 }
             }
 

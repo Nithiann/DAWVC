@@ -1,3 +1,6 @@
+using System.Buffers.Binary;
+using System.Text;
+
 using DawVcs.Domain.Hashing;
 
 using FluentAssertions;
@@ -9,25 +12,11 @@ namespace DawVcs.EndToEndTests;
 public sealed class WalkingSkeletonAc001Tests : IDisposable
 {
     private readonly string _testWorkspace;
-    private readonly string _fixtureFlpPath;
+
     public WalkingSkeletonAc001Tests()
     {
         _testWorkspace = Path.Combine(Path.GetTempPath(), "dawvc_ac001_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_testWorkspace);
-
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !File.Exists(Path.Combine(dir.FullName, "DawVcs.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        var root = dir?.FullName ?? throw new InvalidOperationException("Could not find solution root.");
-        _fixtureFlpPath = Path.Combine(root, "fixtures", "flstudio", "Nithiann & Mr. Unit - ID", "Nithiann & Mr. Unit - ID.flp");
-
-        if (!File.Exists(_fixtureFlpPath))
-        {
-            throw new FileNotFoundException($"Fixture not found at expected path: {_fixtureFlpPath}");
-        }
     }
 
     public void Dispose()
@@ -57,10 +46,10 @@ public sealed class WalkingSkeletonAc001Tests : IDisposable
         Directory.CreateDirectory(repoDir);
 
         var originalProjectFile = Path.Combine(repoDir, "Track.flp");
-        File.Copy(_fixtureFlpPath, originalProjectFile);
+        var originalBytes = CreateFlp();
+        await File.WriteAllBytesAsync(originalProjectFile, originalBytes);
 
         var preHash = await Blake3ContentHasher.HashFileAsync(originalProjectFile);
-        var originalBytes = await File.ReadAllBytesAsync(originalProjectFile);
 
         // --- 2. dawvc init ---
         var initExitCode = await DawVcs.Cli.Program.Main(["init", "--dir", repoDir]);
@@ -120,5 +109,24 @@ public sealed class WalkingSkeletonAc001Tests : IDisposable
         File.Exists(prefixRestoredFile).Should().BeTrue();
         var prefixRestoredHash = await Blake3ContentHasher.HashFileAsync(prefixRestoredFile);
         prefixRestoredHash.Should().Be(preHash);
+    }
+
+    private static byte[] CreateFlp()
+    {
+        using var dataStream = new MemoryStream();
+        dataStream.WriteByte(199);
+        dataStream.WriteByte(11);
+        dataStream.Write(Encoding.ASCII.GetBytes("25.2.5.5319"));
+
+        var dataBytes = dataStream.ToArray();
+        using var flp = new MemoryStream();
+        flp.Write([0x46, 0x4C, 0x68, 0x64, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0A, 0x00, 0x60, 0x00]);
+        flp.Write([0x46, 0x4C, 0x64, 0x74]);
+        var lenBytes = new byte[4];
+        BinaryPrimitives.WriteUInt32LittleEndian(lenBytes, (uint)dataBytes.Length);
+        flp.Write(lenBytes);
+        flp.Write(dataBytes);
+
+        return flp.ToArray();
     }
 }

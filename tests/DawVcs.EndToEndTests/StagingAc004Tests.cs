@@ -1,3 +1,6 @@
+using System.Buffers.Binary;
+using System.Text;
+
 using DawVcs.Domain.Hashing;
 
 using FluentAssertions;
@@ -9,26 +12,11 @@ namespace DawVcs.EndToEndTests;
 public sealed class StagingAc004Tests : IDisposable
 {
     private readonly string _testWorkspace;
-    private readonly string _fixtureFlpPath;
 
     public StagingAc004Tests()
     {
         _testWorkspace = Path.Combine(Path.GetTempPath(), "dawvc_ac004_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_testWorkspace);
-
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !File.Exists(Path.Combine(dir.FullName, "DawVcs.slnx")))
-        {
-            dir = dir.Parent;
-        }
-
-        var root = dir?.FullName ?? throw new InvalidOperationException("Could not find solution root.");
-        _fixtureFlpPath = Path.Combine(root, "fixtures", "flstudio", "Nithiann & Mr. Unit - ID", "Nithiann & Mr. Unit - ID.flp");
-
-        if (!File.Exists(_fixtureFlpPath))
-        {
-            throw new FileNotFoundException($"Fixture not found at expected path: {_fixtureFlpPath}");
-        }
     }
 
     public void Dispose()
@@ -53,7 +41,7 @@ public sealed class StagingAc004Tests : IDisposable
         Directory.CreateDirectory(repoDir);
 
         var flpPath = Path.Combine(repoDir, "Song.flp");
-        File.Copy(_fixtureFlpPath, flpPath);
+        await File.WriteAllBytesAsync(flpPath, CreateFlp());
 
         // 1. Initialize and commit initial state
         var initCode = await DawVcs.Cli.Program.Main(["init", "--dir", repoDir]);
@@ -104,5 +92,24 @@ public sealed class StagingAc004Tests : IDisposable
 
         var restoredSampleHash = await Blake3ContentHasher.HashFileAsync(restoredSamplePath);
         restoredSampleHash.Should().Be(sampleHash);
+    }
+
+    private static byte[] CreateFlp()
+    {
+        using var dataStream = new MemoryStream();
+        dataStream.WriteByte(199);
+        dataStream.WriteByte(11);
+        dataStream.Write(Encoding.ASCII.GetBytes("25.2.5.5319"));
+
+        var dataBytes = dataStream.ToArray();
+        using var flp = new MemoryStream();
+        flp.Write([0x46, 0x4C, 0x68, 0x64, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0A, 0x00, 0x60, 0x00]);
+        flp.Write([0x46, 0x4C, 0x64, 0x74]);
+        var lenBytes = new byte[4];
+        BinaryPrimitives.WriteUInt32LittleEndian(lenBytes, (uint)dataBytes.Length);
+        flp.Write(lenBytes);
+        flp.Write(dataBytes);
+
+        return flp.ToArray();
     }
 }

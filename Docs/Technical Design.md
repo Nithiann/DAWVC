@@ -953,10 +953,11 @@ public enum PortabilityMode
 }
 ```
 
-Defaults:
-- Custom samples / recordings: `Bundle`
-- Plugin binaries: `ReferenceOnly`
-- Commercial libraries: `ReferenceOnly` or `UserChoice`
+Defaults & Evaluation:
+- **Project audio samples & recordings** (`.wav`, `.mp3`, `.ogg`, `.flac`, `.aif`, `.wv`, `.mid`): `Bundle`. Regardless of whether they reside in the local workspace or external sample-pack directories, DAWVC automatically bundles them into content-addressed repository storage (`Samples/<filename>`) during commit for zero-config reproducibility.
+- **Third-party instrument libraries** (Kontakt, Omnisphere, Nexus, Komplete): `UserChoice` or `ReferenceOnly`. Multi-gigabyte proprietary instrument libraries are excluded from automatic bundling to prevent repository bloat and copyright violations.
+- **Plugin binaries**: `ReferenceOnly`.
+- **System paths** (`C:\Windows`, `C:\Program Files`): `ReferenceOnly`.
 
 ---
 
@@ -1004,13 +1005,16 @@ All persisted contracts require schema versions. Repository migrations must be e
 3. Detect format and structural invariants;
 4. Scan modified files via index;
 5. Read-only validation;
-6. Scan dependencies via adapter;
-7. Hash new assets;
-8. Write missing blobs into loose object storage;
-9. Construct artifact tree and compute aggregate hash;
-10. Construct manifests and snapshot;
-11. Write commit object;
-12. Atomically update branch ref.
+6. Scan dependencies via adapter (with DAW search-path and registry auto-discovery);
+7. Auto-bundle project asset dependencies (`PortabilityMode.Bundle`): stream file to blob store, map to `Samples/<filename>` in artifact tree (with collision disambiguation), and update snapshot dependency graph;
+8. Optional local consolidation (`--consolidate`): copy bundled external assets to local `./Samples/`;
+9. Hash new assets;
+10. Write missing blobs into loose object storage;
+11. Construct artifact tree (`SingleFileArtifact` or `DirectoryArtifact`) and compute aggregate hash;
+12. Construct manifests and snapshot;
+13. Write commit object;
+14. Atomically update branch ref;
+15. Clear staging index.
 
 ---
 
@@ -1018,12 +1022,14 @@ All persisted contracts require schema versions. Repository migrations must be e
 
 1. Load commit and snapshot;
 2. Verify object hashes, artifact tree, and aggregate hash;
-3. Resolve local bindings;
-4. Download/materialize bundled blobs into staged directory on the same filesystem volume;
-5. Verify materialized bytes;
-6. Atomically install candidate directory into workspace (guarding against dirty trees);
-7. Verify host environment and plugin versions;
-8. Emit diagnostic report.
+3. Pre-materialization path security validation (guard against directory traversal);
+4. Stage materialization on the same volume (into `.staging_checkout_<guid>`);
+5. Materialize primary DAW project file and all bundled audio assets (`./Samples/<filename>`);
+6. Verify materialized bytes and BLAKE3 content hashes;
+7. Atomically install candidate directory into target workspace via `PublicationJournal` (guarding against dirty trees unless `--force` is specified);
+8. Automatically resolve dependencies against workspace relative paths (`./Samples/` highest priority `BindingMethod.RepositoryAsset`);
+9. Update machine-local bindings cache;
+10. Emit context-aware DAW checkout guidance (informing collaborator that project folder assets load automatically in FL Studio).
 
 ---
 
@@ -1224,8 +1230,18 @@ Reconstructing an FL Studio project across two machines with differing directory
 
 ---
 
-# 57. MVP v0.2 Scope
-Remote repository synchronization, central server, and project locks.
+# 57. MVP v0.2 Scope & WP-11 Implementation
+
+Remote repository synchronization, transports, and multi-machine collaboration:
+- **WP-11 Remote Synchronization:**
+  - Pluggable transport architecture via `IRemoteTransport` and `IRemoteTransportFactory`.
+  - Implemented `FileSystemRemoteTransport` supporting local paths, external drives, and UNC network shares (`\\server\share`).
+  - Quarantine-first ingestion (`.dawvc/incoming/<sessionId>/`) with envelope inspection, BLAKE3 payload verification, 2MB metadata size guard, and strict path traversal validation (`PathSecurityGuard`).
+  - Graph traversal via `ObjectGraphWalker` downloading only missing commits, snapshots, and audio blobs.
+  - Fast-forward-only integration in v0.2 via `AncestryService`; diverged branch histories are safely rejected with exit code `9` (`RejectedNonFastForwardException`) without risk of binary file loss.
+  - Safe workspace materialization via `CheckoutUseCase` and `PublicationJournal`, enforcing a dirty working tree guard (exit code `4`) bypassable via `--force` with automatic recovery snapshots.
+  - Zero-config clone (`dawvc clone <url> [<dir>]`) initializing upstream tracking references, materializing `./Samples/`, and verifying 100% environment reproducibility.
+  - Remote management via `dawvc remote add/rm/list`.
 
 ---
 

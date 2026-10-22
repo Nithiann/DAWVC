@@ -22,11 +22,13 @@ public static class PortabilityPolicyEngine
         "kontakt",
         "omnisphere",
         "nexus",
-        "splice",
-        "loopcloud",
-        "samplepack",
         "komplete"
     ];
+
+    private static readonly HashSet<string> AudioExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".wav", ".mp3", ".ogg", ".flac", ".aif", ".aiff", ".wv", ".mid", ".midi"
+    };
 
     /// <summary>
     /// Bepaalt de portability policy voor een asset op basis van relatieve/absolute locatie en werkdirectory.
@@ -77,7 +79,17 @@ public static class PortabilityPolicyEngine
             }
         }
 
-        // 4. Overige externe paden -> ReferenceOnly (externe schijf of gedeelde folder buiten project)
+        // 4. Audio-assets (WAV, MP3, OGG, FLAC, AIFF, WV, MIDI) buiten werkdirectory -> Bundle voor portabiliteit (TD §21)
+        var ext = Path.GetExtension(normAsset);
+        if (!string.IsNullOrEmpty(ext) && AudioExtensions.Contains(ext))
+        {
+            return new PortabilityPolicy(
+                PortabilityMode.Bundle,
+                "Audio asset used by project. Auto-bundled for portability.",
+                IsRedistributable: true);
+        }
+
+        // 5. Overige externe paden -> ReferenceOnly (externe schijf of gedeelde folder buiten project)
         return new PortabilityPolicy(
             PortabilityMode.ReferenceOnly,
             "Externe locatie buiten werkdirectory. Standaard ReferenceOnly.",

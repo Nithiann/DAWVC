@@ -51,6 +51,26 @@ public sealed class PortabilityPolicyEngineTests
     }
 
     [Fact]
+    public void DetermineAssetPolicy_ExternalAudioFile_ReturnsBundle()
+    {
+        var externalAudioPath = @"D:\SamplePacks\Cymatics\Kick01.wav";
+        var policy = PortabilityPolicyEngine.DetermineAssetPolicy(externalAudioPath, WorkspaceDir);
+
+        policy.Mode.Should().Be(PortabilityMode.Bundle);
+        policy.IsRedistributable.Should().BeTrue();
+    }
+
+    [Fact]
+    public void DetermineAssetPolicy_ExternalNonAudioFile_ReturnsReferenceOnly()
+    {
+        var externalDocPath = @"D:\SamplePacks\Cymatics\License.pdf";
+        var policy = PortabilityPolicyEngine.DetermineAssetPolicy(externalDocPath, WorkspaceDir);
+
+        policy.Mode.Should().Be(PortabilityMode.ReferenceOnly);
+        policy.IsRedistributable.Should().BeFalse();
+    }
+
+    [Fact]
     public void DeterminePluginPolicy_AlwaysReturnsReferenceOnly()
     {
         var identity = new PluginIdentity("Xfer Records", "Serum", PluginFormat.VST3);

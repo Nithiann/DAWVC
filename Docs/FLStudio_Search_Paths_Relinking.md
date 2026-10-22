@@ -24,7 +24,26 @@ A core architectural invariant of DAWVC is that **native project bytes are sacre
 
 ---
 
-## 3. Relinking Audio When Moving Between Machines
+---
+
+## 3. Automatic Host Search-Path Discovery (Producer Machine)
+
+When preparing or diagnosing a project on the authoring computer, samples are often scattered across external sample libraries (e.g. `D:\Sounds`, external SSDs, or Splice folders) and are referenced in the `.flp` solely by filename.
+
+DAWVC features **Automatic Host Search-Path Discovery**:
+- `FLStudioAdapter` automatically reads all configured **Browser extra search folders** from the Windows Registry:
+  - `HKCU\Software\Image-Line\FL Studio *\Search paths` (supports FL Studio 20, 21, 2024, 2025, 2026+)
+  - `HKCU\Software\Image-Line\Shared\Paths` (`Shared data` and `Install path`)
+- It also scans standard host paths:
+  - `%USERPROFILE%\Documents\Image-Line\Data`
+  - `%ProgramFiles%\Image-Line\FL Studio *\Data\Patches\Packs`
+  - Splice user directories (`%USERPROFILE%\Splice\sounds`)
+- **Fast O(1) In-Memory Indexing:** When resolving referenced audio samples, DAWVC builds a lazy index of available audio files across these folders. This enables resolving dozens of external samples across libraries with 50,000+ files in just a few milliseconds.
+- This allows `dawvc doctor` and `dawvc scan` to locate and verify assets immediately without requiring manual file copies or path changes by the producer.
+
+---
+
+## 4. Relinking Audio When Moving Between Machines (Collaborator Checkout)
 
 When you checkout a project on a second computer (or restore to a new folder), the absolute paths from the original machine (e.g., `D:\Samples\Kick.wav`) will not match the new machine's paths (e.g., `C:\Audio\Samples\Kick.wav`).
 
@@ -51,7 +70,7 @@ When FL Studio opens a restored `.flp`, it searches these configured folders rec
 
 ---
 
-## 4. Using `dawvc doctor` to Diagnose Asset Mismatches
+## 5. Using `dawvc doctor` to Diagnose Asset Mismatches
 
 If FL Studio warns that a sample or plugin is missing, use `dawvc doctor`:
 

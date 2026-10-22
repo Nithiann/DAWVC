@@ -11,11 +11,16 @@ using DawVcs.Application.Common;
 using DawVcs.Application.Dependencies;
 using DawVcs.Application.Diagnostics;
 using DawVcs.Application.Exceptions;
+using DawVcs.Application.Remotes;
 using DawVcs.Application.Repositories;
 using DawVcs.Application.Scanning;
 using DawVcs.Application.Staging;
+using DawVcs.Domain.Remotes;
 using DawVcs.Domain.Repositories;
+using DawVcs.Domain.Storage;
+using DawVcs.Infrastructure.Remotes;
 using DawVcs.Infrastructure.Repositories;
+using DawVcs.Infrastructure.Storage;
 
 using Microsoft.Extensions.DependencyInjection;
 
@@ -36,6 +41,16 @@ public static class Program
 
     public static async Task<int> Main(string[] args)
     {
+        try
+        {
+            Console.OutputEncoding = System.Text.Encoding.UTF8;
+            Console.InputEncoding = System.Text.Encoding.UTF8;
+        }
+        catch
+        {
+            // Ignore if console encoding cannot be changed
+        }
+
         var services = new ServiceCollection();
         services.AddSingleton<Func<string, IRepositoryContext>>(sp => dir => new FileSystemRepositoryContext(dir));
         services.AddSingleton<IDawAdapterRegistry>(sp => new DawAdapterRegistry([new FLStudioAdapter()]));
@@ -62,6 +77,24 @@ public static class Program
         services.AddTransient<FsckUseCase>(sp => new FsckUseCase(
             sp.GetRequiredService<Func<string, IRepositoryContext>>(),
             sp.GetRequiredService<IDawAdapterRegistry>()));
+        services.AddTransient<RemoteUseCase>();
+        services.AddSingleton<IRemoteTransportFactory, DefaultRemoteTransportFactory>();
+        services.AddTransient<Func<string, IQuarantineStore>>(_ => dir => new QuarantineObjectStore(dir));
+        services.AddTransient<ObjectGraphWalker>();
+        services.AddTransient<FetchUseCase>();
+        services.AddTransient<AncestryService>();
+        services.AddTransient<PullUseCase>(sp => new PullUseCase(
+            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
+            sp.GetRequiredService<FetchUseCase>(),
+            sp.GetRequiredService<CheckoutUseCase>(),
+            sp.GetRequiredService<AncestryService>(),
+            sp.GetRequiredService<DoctorUseCase>()));
+        services.AddTransient<CloneUseCase>(sp => new CloneUseCase(
+            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
+            sp.GetRequiredService<IRemoteTransportFactory>(),
+            sp.GetRequiredService<FetchUseCase>(),
+            sp.GetRequiredService<CheckoutUseCase>(),
+            sp.GetRequiredService<DoctorUseCase>()));
 
         using var serviceProvider = services.BuildServiceProvider();
 
@@ -110,18 +143,20 @@ public static class Program
         var commitAuthorOption = new Option<string?>("--author", "Author name/identity");
         var commitDirOption = new Option<string?>("--dir", "Repository directory");
         var commitAllowIncompleteOption = new Option<bool>("--allow-incomplete", "Allow commit even if required bundle dependencies are missing (marks snapshot incomplete)");
+        var commitConsolidateOption = new Option<bool>("--consolidate", "Copy bundled external audio samples to the local project './Samples/' directory");
         commitCommand.AddOption(commitMessageOption);
         commitCommand.AddOption(commitAuthorOption);
         commitCommand.AddOption(commitDirOption);
         commitCommand.AddOption(commitAllowIncompleteOption);
+        commitCommand.AddOption(commitConsolidateOption);
 
-        commitCommand.SetHandler(async (message, author, dir, allowIncomplete) =>
+        commitCommand.SetHandler(async (message, author, dir, allowIncomplete, consolidate) =>
         {
             try
             {
                 var repoDir = ResolveRepoDirectory(dir);
                 var useCase = serviceProvider.GetRequiredService<CommitUseCase>();
-                var result = await useCase.ExecuteAsync(new CommitRequest(repoDir, message, author, allowIncomplete));
+                var result = await useCase.ExecuteAsync(new CommitRequest(repoDir, message, author, allowIncomplete, consolidate));
 
                 AnsiConsole.MarkupLine($"[green]✓[/] ([yellow]{result.Branch.Value}[/] [bold]{result.CommitId.ToString()[..8]}[/]) {Markup.Escape(result.Message)}");
                 AnsiConsole.MarkupLine($"  [dim]Author:[/]   {Markup.Escape(result.Author)}");
@@ -145,7 +180,7 @@ public static class Program
             {
                 WriteError(ex.Message, 1);
             }
-        }, commitMessageOption, commitAuthorOption, commitDirOption, commitAllowIncompleteOption);
+        }, commitMessageOption, commitAuthorOption, commitDirOption, commitAllowIncompleteOption, commitConsolidateOption);
 
         // --- dawvc log ---
         var logCommand = new Command("log", "Show commit history");
@@ -210,9 +245,28 @@ public static class Program
                 }
 
                 AnsiConsole.MarkupLine($"[green]✓[/] Successfully checked out snapshot [dim]{result.SnapshotId.ToString()[..8]}[/] to [cyan]{Markup.Escape(PathRedactor.Redact(result.TargetDirectory))}[/]");
-                foreach (var file in result.RestoredFiles)
+
+                var sampleFiles = result.RestoredFiles.Where(f => f.StartsWith("Samples/", StringComparison.OrdinalIgnoreCase) || f.StartsWith("Samples\\", StringComparison.OrdinalIgnoreCase)).ToList();
+                var otherFiles = result.RestoredFiles.Except(sampleFiles).ToList();
+
+                foreach (var file in otherFiles)
                 {
                     AnsiConsole.MarkupLine($"  [green]+[/] {Markup.Escape(file)}");
+                }
+
+                if (sampleFiles.Count > 0)
+                {
+                    if (sampleFiles.Count <= 5)
+                    {
+                        foreach (var sample in sampleFiles)
+                        {
+                            AnsiConsole.MarkupLine($"  [green]+[/] {Markup.Escape(sample)}");
+                        }
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLine($"  [green]+[/] {sampleFiles.Count} bundled audio sample(s) materialized in [cyan]'./Samples/'[/]");
+                    }
                 }
 
                 if (result.ManualInstructions is not null && result.ManualInstructions.Count > 0)
@@ -918,17 +972,351 @@ public static class Program
             }
         }, fsckArtifactsOption, fsckJsonOption, fsckDirOption);
 
+        // --- dawvc remote ---
+        var remoteCommand = new Command("remote", "Manage configured remote repositories (FR-REM-001..004)");
+        var remoteDirOption = new Option<string?>("--dir", "Repository directory");
+
+        var remoteAddCommand = new Command("add", "Add a remote repository");
+        var remoteAddNameArg = new Argument<string>("name", "Name of the remote (e.g. origin)");
+        var remoteAddUrlArg = new Argument<string>("url", "URL or path of the remote repository");
+        remoteAddCommand.AddArgument(remoteAddNameArg);
+        remoteAddCommand.AddArgument(remoteAddUrlArg);
+        remoteAddCommand.AddOption(remoteDirOption);
+
+        remoteAddCommand.SetHandler((name, url, dir) =>
+        {
+            try
+            {
+                var repoDir = ResolveRepoDirectory(dir);
+                var useCase = serviceProvider.GetRequiredService<RemoteUseCase>();
+                var remote = useCase.AddRemote(new RemoteAddRequest(repoDir, name, url));
+                AnsiConsole.MarkupLine($"[green]✓[/] Added remote '[yellow]{Markup.Escape(remote.Name.Value)}[/]' -> [cyan]{Markup.Escape(PathRedactor.Redact(remote.Url))}[/]");
+            }
+            catch (Exception ex)
+            {
+                WriteError(ex.Message, 1);
+            }
+        }, remoteAddNameArg, remoteAddUrlArg, remoteDirOption);
+
+        var remoteRemoveCommand = new Command("remove", "Remove a remote repository");
+        remoteRemoveCommand.AddAlias("rm");
+        var remoteRemoveNameArg = new Argument<string>("name", "Name of the remote to remove");
+        remoteRemoveCommand.AddArgument(remoteRemoveNameArg);
+        remoteRemoveCommand.AddOption(remoteDirOption);
+
+        remoteRemoveCommand.SetHandler((name, dir) =>
+        {
+            try
+            {
+                var repoDir = ResolveRepoDirectory(dir);
+                var useCase = serviceProvider.GetRequiredService<RemoteUseCase>();
+                var removed = useCase.RemoveRemote(new RemoteRemoveRequest(repoDir, name));
+                if (removed)
+                {
+                    AnsiConsole.MarkupLine($"[green]✓[/] Removed remote '[yellow]{Markup.Escape(name)}[/]'");
+                }
+                else
+                {
+                    WriteError($"Remote '{name}' not found.", 1);
+                }
+            }
+            catch (Exception ex)
+            {
+                WriteError(ex.Message, 1);
+            }
+        }, remoteRemoveNameArg, remoteDirOption);
+
+        var remoteListCommand = new Command("list", "List configured remote repositories");
+        remoteListCommand.AddOption(remoteDirOption);
+
+        remoteListCommand.SetHandler((dir) =>
+        {
+            try
+            {
+                var repoDir = ResolveRepoDirectory(dir);
+                var useCase = serviceProvider.GetRequiredService<RemoteUseCase>();
+                var result = useCase.ListRemotes(new RemoteListRequest(repoDir));
+                if (result.Remotes.Count == 0)
+                {
+                    AnsiConsole.MarkupLine("[dim]No remotes configured.[/]");
+                    return;
+                }
+
+                foreach (var rem in result.Remotes)
+                {
+                    AnsiConsole.MarkupLine($"[yellow]{Markup.Escape(rem.Name.Value)}[/]\t{Markup.Escape(PathRedactor.Redact(rem.Url))}");
+                }
+            }
+            catch (Exception ex)
+            {
+                WriteError(ex.Message, 1);
+            }
+        }, remoteDirOption);
+
+        remoteCommand.AddCommand(remoteAddCommand);
+        remoteCommand.AddCommand(remoteRemoveCommand);
+        remoteCommand.AddCommand(remoteListCommand);
+        remoteCommand.SetHandler((dir) =>
+        {
+            var repoDir = ResolveRepoDirectory(dir);
+            var useCase = serviceProvider.GetRequiredService<RemoteUseCase>();
+            var result = useCase.ListRemotes(new RemoteListRequest(repoDir));
+            if (result.Remotes.Count == 0)
+            {
+                AnsiConsole.MarkupLine("[dim]No remotes configured.[/]");
+                return;
+            }
+
+            foreach (var rem in result.Remotes)
+            {
+                AnsiConsole.MarkupLine($"[yellow]{Markup.Escape(rem.Name.Value)}[/]\t{Markup.Escape(PathRedactor.Redact(rem.Url))}");
+            }
+        }, remoteDirOption);
+
+        // --- dawvc fetch ---
+        var fetchCommand = new Command("fetch", "Fetch remote commits, snapshots, and blobs into quarantine and update remote-tracking refs (FR-FET-001..008)");
+        var fetchRemoteArg = new Argument<string?>("remote", () => null, "Remote name to fetch from (default: origin)");
+        var fetchBranchArg = new Argument<string?>("branch", () => null, "Branch name to fetch (default: all branches)");
+        var fetchDryRunOption = new Option<bool>("--dry-run", "Simulate fetch and calculate missing objects without modifying store");
+        var fetchDirOption = new Option<string?>("--dir", "Repository directory");
+
+        fetchCommand.AddArgument(fetchRemoteArg);
+        fetchCommand.AddArgument(fetchBranchArg);
+        fetchCommand.AddOption(fetchDryRunOption);
+        fetchCommand.AddOption(fetchDirOption);
+
+        fetchCommand.SetHandler(async (remote, branch, dryRun, dir) =>
+        {
+            try
+            {
+                var repoDir = ResolveRepoDirectory(dir);
+                var useCase = serviceProvider.GetRequiredService<FetchUseCase>();
+                var result = await useCase.ExecuteAsync(new FetchRequest(repoDir, remote, branch, dryRun));
+
+                if (result.IsDryRun)
+                {
+                    AnsiConsole.MarkupLine($"[yellow]Dry run:[/] Would fetch {result.ObjectsFetched} object(s) ({FormatBytes(result.BytesFetched)}) from remote [bold]{Markup.Escape(result.RemoteName)}[/].");
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine($"[green]✓[/] Fetched from [bold]{Markup.Escape(result.RemoteName)}[/]: {result.ObjectsFetched} object(s) ({FormatBytes(result.BytesFetched)}).");
+                    if (result.UpdatedRefs.Count > 0)
+                    {
+                        foreach (var r in result.UpdatedRefs)
+                        {
+                            var oldStr = r.OldCommit?.ToString()[..8] ?? "<new>";
+                            var newStr = r.NewCommit.ToString()[..8];
+                            AnsiConsole.MarkupLine($"  [cyan]{Markup.Escape(result.RemoteName)}/{Markup.Escape(r.Branch.Value)}[/] [dim]{oldStr}..{newStr}[/]");
+                        }
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLine("  [dim]All remote branches already up to date.[/]");
+                    }
+                }
+            }
+            catch (RemoteException ex)
+            {
+                WriteError(ex.Message, 8);
+            }
+            catch (InvalidEnvelopeException ex)
+            {
+                WriteError($"Corrupt remote object (Exit Code 3): {ex.Message}", 3);
+            }
+            catch (PathSecurityException ex)
+            {
+                WriteError($"Security violation in remote snapshot (Exit Code 3): {ex.Message}", 3);
+            }
+            catch (Exception ex)
+            {
+                WriteError(ex.Message, 1);
+            }
+        }, fetchRemoteArg, fetchBranchArg, fetchDryRunOption, fetchDirOption);
+
+        // --- dawvc pull ---
+        var pullCommand = new Command("pull", "Fetch and integrate remote changes into the current branch (FR-PUL-001..012, AC-030..AC-037)");
+        var pullRemoteArg = new Argument<string?>("remote", () => null, "Remote name to pull from (default: configured upstream or origin)");
+        var pullBranchArg = new Argument<string?>("branch", () => null, "Branch to pull (default: active branch)");
+        var pullForceOption = new Option<bool>("--force", "Force pull on a dirty workspace after creating a full recovery copy");
+        var pullFfOnlyOption = new Option<bool>("--ff-only", () => true, "Refuse to merge and only allow fast-forward updates");
+        var pullDryRunOption = new Option<bool>("--dry-run", "Simulate pull without modifying workspace or tracking branches");
+        var pullDirOption = new Option<string?>("--dir", "Repository directory");
+
+        pullCommand.AddArgument(pullRemoteArg);
+        pullCommand.AddArgument(pullBranchArg);
+        pullCommand.AddOption(pullForceOption);
+        pullCommand.AddOption(pullFfOnlyOption);
+        pullCommand.AddOption(pullDryRunOption);
+        pullCommand.AddOption(pullDirOption);
+
+        pullCommand.SetHandler(async (remote, branch, force, ffOnly, dryRun, dir) =>
+        {
+            try
+            {
+                var repoDir = ResolveRepoDirectory(dir);
+                var useCase = serviceProvider.GetRequiredService<PullUseCase>();
+                var result = await useCase.ExecuteAsync(new PullRequest(repoDir, remote, branch, force, ffOnly, dryRun));
+
+                if (result.IsDryRun)
+                {
+                    AnsiConsole.MarkupLine($"[yellow]Dry run:[/] {Markup.Escape(result.Message)}");
+                    return;
+                }
+
+                if (result.State == SyncAncestryState.UpToDate)
+                {
+                    AnsiConsole.MarkupLine($"[green]✓[/] {Markup.Escape(result.Message)}");
+                    return;
+                }
+
+                if (result.State == SyncAncestryState.LocalAhead)
+                {
+                    AnsiConsole.MarkupLine($"[yellow]![/] {Markup.Escape(result.Message)}");
+                    return;
+                }
+
+                AnsiConsole.MarkupLine($"[green]✓[/] {Markup.Escape(result.Message)}");
+
+                if (!string.IsNullOrEmpty(result.RecoveryDirectory))
+                {
+                    AnsiConsole.MarkupLine($"  [yellow]⚠ Recovery copy created:[/] [dim]{Markup.Escape(PathRedactor.Redact(result.RecoveryDirectory))}[/]");
+                }
+
+                if (result.MaterializedFiles.Count > 0)
+                {
+                    var sampleFiles = result.MaterializedFiles.Where(f => f.StartsWith("Samples/", StringComparison.OrdinalIgnoreCase) || f.StartsWith("Samples\\", StringComparison.OrdinalIgnoreCase)).ToList();
+                    var otherFiles = result.MaterializedFiles.Except(sampleFiles).ToList();
+
+                    foreach (var file in otherFiles.Take(5))
+                    {
+                        AnsiConsole.MarkupLine($"  [green]+[/] {Markup.Escape(file)}");
+                    }
+                    if (otherFiles.Count > 5)
+                    {
+                        AnsiConsole.MarkupLine($"  [dim]... and {otherFiles.Count - 5} more files[/]");
+                    }
+
+                    if (sampleFiles.Count > 0)
+                    {
+                        AnsiConsole.MarkupLine($"  [green]+[/] {sampleFiles.Count} audio sample(s) materialized in [cyan]'./Samples/'[/]");
+                    }
+                }
+
+                if (result.DoctorSummary is not null)
+                {
+                    var doc = result.DoctorSummary;
+                    AnsiConsole.MarkupLine($"  [dim]Reproducibility score:[/] [bold]{doc.ReproducibilityScore:P1}[/] ([green]{doc.InstalledPluginsCount}/{doc.RequiredPluginsCount}[/] plugins, [green]{doc.ResolvedAssetsCount}/{doc.ResolvedAssetsCount + doc.MissingAssetsCount}[/] samples)");
+                }
+            }
+            catch (DirtyWorkspaceException ex)
+            {
+                WriteError($"Dirty working tree (Exit Code 4): {ex.Message}", 4);
+                AnsiConsole.MarkupLine("[yellow]Remediation:[/] Commit or stash your changes before pulling, or use [bold]dawvc pull --force[/] to create a recovery copy.");
+            }
+            catch (RejectedNonFastForwardException ex)
+            {
+                WriteError(ex.Message, 9);
+            }
+            catch (RemoteException ex)
+            {
+                WriteError(ex.Message, 8);
+            }
+            catch (InvalidEnvelopeException ex)
+            {
+                WriteError($"Corrupt remote object (Exit Code 3): {ex.Message}", 3);
+            }
+            catch (PathSecurityException ex)
+            {
+                WriteError($"Security violation in remote snapshot (Exit Code 3): {ex.Message}", 3);
+            }
+            catch (Exception ex)
+            {
+                WriteError(ex.Message, 1);
+            }
+        }, pullRemoteArg, pullBranchArg, pullForceOption, pullFfOnlyOption, pullDryRunOption, pullDirOption);
+
+        // --- dawvc clone ---
+        var cloneCommand = new Command("clone", "Clone a remote DAWVC repository into a new directory (FR-REM-001..012, FR-PUL-001..012)");
+        var cloneUrlArg = new Argument<string>("url", "URL, filesystem path, or network share of the remote repository to clone");
+        var cloneDirArg = new Argument<string?>("directory", () => null, "Target directory (default: folder name derived from repository)");
+        var cloneForceOption = new Option<bool>("--force", "Force clone into an existing directory");
+
+        cloneCommand.AddArgument(cloneUrlArg);
+        cloneCommand.AddArgument(cloneDirArg);
+        cloneCommand.AddOption(cloneForceOption);
+
+        cloneCommand.SetHandler(async (url, dir, force) =>
+        {
+            try
+            {
+                var useCase = serviceProvider.GetRequiredService<CloneUseCase>();
+                var result = await useCase.ExecuteAsync(new CloneRequest(url, dir, force));
+
+                AnsiConsole.MarkupLine($"[green]✓[/] Cloned project [bold]{Markup.Escape(result.ProjectName)}[/] into [cyan]{Markup.Escape(PathRedactor.Redact(result.TargetDirectory))}[/]");
+                if (result.HeadCommit.HasValue)
+                {
+                    AnsiConsole.MarkupLine($"  [dim]Branch:[/] [yellow]{result.DefaultBranch.Value}[/] ([bold]{result.HeadCommit.Value.ToString()[..8]}[/])");
+                }
+                AnsiConsole.MarkupLine($"  Fetched {result.ObjectsFetched} object(s) ({FormatBytes(result.BytesFetched)})");
+
+                if (result.MaterializedFiles.Count > 0)
+                {
+                    var sampleFiles = result.MaterializedFiles.Where(f => f.StartsWith("Samples/", StringComparison.OrdinalIgnoreCase) || f.StartsWith("Samples\\", StringComparison.OrdinalIgnoreCase)).ToList();
+                    if (sampleFiles.Count > 0)
+                    {
+                        AnsiConsole.MarkupLine($"  [green]+[/] {sampleFiles.Count} audio sample(s) materialized in [cyan]'./Samples/'[/]");
+                    }
+                }
+
+                if (result.DoctorSummary is not null)
+                {
+                    var doc = result.DoctorSummary;
+                    AnsiConsole.MarkupLine($"  [dim]Reproducibility score:[/] [bold]{doc.ReproducibilityScore:P1}[/] ([green]{doc.InstalledPluginsCount}/{doc.RequiredPluginsCount}[/] plugins, [green]{doc.ResolvedAssetsCount}/{doc.ResolvedAssetsCount + doc.MissingAssetsCount}[/] samples)");
+                }
+            }
+            catch (RemoteException ex)
+            {
+                WriteError(ex.Message, 8);
+            }
+            catch (InvalidEnvelopeException ex)
+            {
+                WriteError($"Corrupt remote object (Exit Code 3): {ex.Message}", 3);
+            }
+            catch (PathSecurityException ex)
+            {
+                WriteError($"Security violation in remote snapshot (Exit Code 3): {ex.Message}", 3);
+            }
+            catch (Exception ex)
+            {
+                WriteError(ex.Message, 1);
+            }
+        }, cloneUrlArg, cloneDirArg, cloneForceOption);
+
+        // Chronologically ordered workflow:
+        // 1. Getting started / Setup
         rootCommand.AddCommand(initCommand);
+        rootCommand.AddCommand(cloneCommand);
+
+        // 2. Daily development & staging
+        rootCommand.AddCommand(statusCommand);
         rootCommand.AddCommand(scanCommand);
+        rootCommand.AddCommand(addCommand);
         rootCommand.AddCommand(commitCommand);
         rootCommand.AddCommand(logCommand);
-        rootCommand.AddCommand(checkoutCommand);
-        rootCommand.AddCommand(bindCommand);
-        rootCommand.AddCommand(statusCommand);
-        rootCommand.AddCommand(addCommand);
+
+        // 3. Branching & navigation
         rootCommand.AddCommand(branchCommand);
         rootCommand.AddCommand(switchCommand);
+        rootCommand.AddCommand(checkoutCommand);
+
+        // 4. Remote collaboration & synchronization
+        rootCommand.AddCommand(remoteCommand);
+        rootCommand.AddCommand(fetchCommand);
+        rootCommand.AddCommand(pullCommand);
+
+        // 5. Diagnostics, reproducibility & maintenance
         rootCommand.AddCommand(doctorCommand);
+        rootCommand.AddCommand(bindCommand);
         rootCommand.AddCommand(fsckCommand);
 
         Environment.ExitCode = 0;
@@ -943,6 +1331,14 @@ public static class Program
         {
             Environment.ExitCode = exitCode.Value;
         }
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        if (bytes < 1024 * 1024 * 1024) return $"{bytes / (1024.0 * 1024.0):F1} MB";
+        return $"{bytes / (1024.0 * 1024.0 * 1024.0):F2} GB";
     }
 
     private static string ResolveRepoDirectory(string? explicitDir)

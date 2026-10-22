@@ -18,7 +18,8 @@ public sealed record CommitRequest(
     string RepositoryDirectory,
     string Message,
     string? Author = null,
-    bool AllowIncomplete = false);
+    bool AllowIncomplete = false,
+    bool Consolidate = false);
 
 public sealed record CommitResult(
     CommitId CommitId,
@@ -88,6 +89,98 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
         }
 
         var missingBundleDependencies = new List<AssetDependency>();
+        var updatedDependencies = new List<Dependency>();
+
+        // 2b. Auto-bundle project asset dependencies with PortabilityMode.Bundle (Fase 2)
+        foreach (var rawDep in dependencyGraph.Dependencies)
+        {
+            if (rawDep is AssetDependency assetDep && assetDep.Portability.Mode == PortabilityMode.Bundle)
+            {
+                string? sourceFilePath = null;
+                if (assetDep.RelativePath != null)
+                {
+                    var relFull = Path.Combine(context.RootPath, assetDep.RelativePath.Value.Value.Replace('/', Path.DirectorySeparatorChar));
+                    if (File.Exists(relFull))
+                    {
+                        sourceFilePath = relFull;
+                    }
+                }
+
+                if (sourceFilePath == null && !string.IsNullOrWhiteSpace(assetDep.OriginalPath) && File.Exists(assetDep.OriginalPath))
+                {
+                    sourceFilePath = assetDep.OriginalPath;
+                }
+
+                if (sourceFilePath != null && File.Exists(sourceFilePath))
+                {
+                    var fileInfo = new FileInfo(sourceFilePath);
+                    var currentBlobHash = await StreamFileToBlobStoreAsync(context, sourceFilePath, cancellationToken).ConfigureAwait(false);
+
+                    // Determine clean relative snapshot path (e.g. Samples/Kick.wav)
+                    ArtifactPath snapshotRelativePath;
+                    if (assetDep.RelativePath != null)
+                    {
+                        snapshotRelativePath = assetDep.RelativePath.Value;
+                    }
+                    else
+                    {
+                        var cleanFileName = Path.GetFileName(sourceFilePath);
+                        var targetRel = $"Samples/{cleanFileName}";
+
+                        // Collision handling: if a different file with same relative path already exists
+                        if (entriesByPath.TryGetValue(targetRel, out var existingEntry) && existingEntry.Hash != currentBlobHash)
+                        {
+                            targetRel = $"Samples/{currentBlobHash.ToString()[..8]}_{cleanFileName}";
+                        }
+
+                        snapshotRelativePath = new ArtifactPath(targetRel);
+                    }
+
+                    // Register in entriesByPath
+                    entriesByPath[snapshotRelativePath.Value] = ArtifactEntry.Create(
+                        snapshotRelativePath,
+                        currentBlobHash,
+                        fileInfo.Length,
+                        ArtifactRole.ProjectAsset);
+
+                    // Optional local consolidation: copy to workspace ./Samples/
+                    if (request.Consolidate)
+                    {
+                        var localDest = Path.Combine(context.RootPath, snapshotRelativePath.Value.Replace('/', Path.DirectorySeparatorChar));
+                        if (!File.Exists(localDest))
+                        {
+                            var localDestDir = Path.GetDirectoryName(localDest);
+                            if (!string.IsNullOrEmpty(localDestDir))
+                            {
+                                Directory.CreateDirectory(localDestDir);
+                            }
+                            File.Copy(sourceFilePath, localDest, overwrite: false);
+                        }
+                    }
+
+                    // Update dependency with resolved snapshot relative path and hash
+                    updatedDependencies.Add(assetDep with
+                    {
+                        RelativePath = snapshotRelativePath,
+                        Hash = currentBlobHash,
+                        FileSize = fileInfo.Length,
+                        IsMissing = false
+                    });
+                }
+                else
+                {
+                    // Bundle dependency is missing on disk
+                    missingBundleDependencies.Add(assetDep);
+                    updatedDependencies.Add(assetDep);
+                }
+            }
+            else
+            {
+                updatedDependencies.Add(rawDep);
+            }
+        }
+
+        dependencyGraph = new DependencyGraph(updatedDependencies);
 
         // 3. Preserve previously tracked assets from HEAD snapshot (FR-STG-002)
         var currentBranch = context.GetCurrentBranch();
@@ -107,6 +200,11 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
                     foreach (var tracked in parentSnapshot.Project.Root.GetEntries())
                     {
                         if (tracked.Path == config.PrimaryArtifact)
+                        {
+                            continue;
+                        }
+
+                        if (entriesByPath.ContainsKey(tracked.Path.Value))
                         {
                             continue;
                         }
@@ -208,7 +306,7 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
             DateTimeOffset.UtcNow,
             isComplete: isComplete,
             incompleteReason: incompleteReason,
-            dependencies: dependencyGraph);
+            dependencies: new DependencyGraph(updatedDependencies));
 
         // 7. Rejection of no-op commits (FR-COM-003)
         if (parentSnapshot is not null && parentSnapshot.Project.AggregateHash == projectArtifact.AggregateHash)

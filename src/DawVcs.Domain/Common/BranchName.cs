@@ -12,6 +12,8 @@ public readonly record struct BranchName : IEquatable<BranchName>, IComparable<B
 
     public static BranchName Main { get; } = new("main");
 
+    public static BranchName Parse(string value) => new(value);
+
     public string Value { get; }
 
     public BranchName(string value)
