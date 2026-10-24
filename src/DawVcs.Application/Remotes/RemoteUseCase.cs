@@ -24,7 +24,7 @@ public sealed class RemoteUseCase
     public RemoteConfig AddRemote(RemoteAddRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var context = _contextFactory(request.RepositoryDirectory);
+        using var context = _contextFactory(request.RepositoryDirectory);
 
         if (!RemoteName.TryCreate(request.Name, out var remoteName, out var error))
         {
@@ -50,14 +50,14 @@ public sealed class RemoteUseCase
     public bool RemoveRemote(RemoteRemoveRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var context = _contextFactory(request.RepositoryDirectory);
+        using var context = _contextFactory(request.RepositoryDirectory);
         return context.RemoveRemote(request.Name);
     }
 
     public RemoteListResult ListRemotes(RemoteListRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var context = _contextFactory(request.RepositoryDirectory);
+        using var context = _contextFactory(request.RepositoryDirectory);
         return new RemoteListResult(context.GetRemotes());
     }
 }

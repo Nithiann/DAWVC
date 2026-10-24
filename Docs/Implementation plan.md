@@ -8,6 +8,8 @@
 > **Team Model:** Single developer  
 > **Estimation Unit:** Ideal engineering days, without calendar deadlines
 
+> **GUI follow-up (24 October 2026):** This document retains its original CLI-MVP scope. Desktop GUI work is tracked separately in the [GUI implementation task list](GUI_Implementation_Tasks.md), with design and framework selection in the [GUI framework plan](DAWVC_GUI_Framework_Selection_and_Implementation_Plan.md).
+
 ---
 
 # 1. Objective

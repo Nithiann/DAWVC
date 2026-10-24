@@ -51,7 +51,7 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var context = _contextFactory(request.RepositoryDirectory);
+        using var context = _contextFactory(request.RepositoryDirectory);
         var config = context.LoadConfig();
 
         var primaryFile = Path.Combine(context.RootPath, config.PrimaryArtifact.Value);

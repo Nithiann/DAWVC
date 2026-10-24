@@ -46,7 +46,7 @@ public sealed class SwitchUseCase
             throw new ArgumentException(validationError ?? $"Invalid branch name '{request.BranchName}'.", nameof(request));
         }
 
-        var context = _contextFactory(request.RepositoryDirectory);
+        using var context = _contextFactory(request.RepositoryDirectory);
         var currentBranch = context.GetCurrentBranch();
 
         // 1. Reeds op de doelbranch?

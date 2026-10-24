@@ -43,6 +43,11 @@ A pull request may be merged only when:
 3. Code formatting conforms to `.editorconfig` (`dotnet format --verify-no-changes`).
 4. Error handling leverages domain-typed errors (no generic raw exceptions).
 5. Any modifications to persisted schemas or architectural boundaries are documented in an ADR.
+6. GUI changes update the [GUI implementation task list](Docs/GUI_Implementation_Tasks.md) in the same change: task IDs, work-package status, validation evidence, and relevant documentation. Mark tasks complete only after their acceptance criteria and required validation are satisfied. Record blocked validation explicitly rather than claiming completion.
+
+### GUI Documentation Maintenance
+
+The GUI task list is the central progress record; the [GUI framework plan](Docs/DAWVC_GUI_Framework_Selection_and_Implementation_Plan.md) records design and selection rationale. Follow the documentation update matrix in the task list when behavior, architecture, packaging, recovery, dependencies, or limitations change. Keep proposed features distinct from shipped functionality, and preserve the historical scope of the original CLI-MVP documents.
 
 ---
 

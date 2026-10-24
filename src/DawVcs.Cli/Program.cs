@@ -2,8 +2,7 @@ using System.CommandLine;
 using System.Text.Json;
 
 using DawVcs.Adapters.Abstractions;
-using DawVcs.Adapters.FLStudio;
-using DawVcs.Application.Adapters;
+
 using DawVcs.Application.Branches;
 using DawVcs.Application.Checkouts;
 using DawVcs.Application.Commits;
@@ -15,12 +14,13 @@ using DawVcs.Application.Remotes;
 using DawVcs.Application.Repositories;
 using DawVcs.Application.Scanning;
 using DawVcs.Application.Staging;
+using DawVcs.Bootstrap;
 using DawVcs.Domain.Remotes;
 using DawVcs.Domain.Repositories;
 using DawVcs.Domain.Storage;
-using DawVcs.Infrastructure.Remotes;
+
 using DawVcs.Infrastructure.Repositories;
-using DawVcs.Infrastructure.Storage;
+
 
 using Microsoft.Extensions.DependencyInjection;
 
@@ -52,49 +52,7 @@ public static class Program
         }
 
         var services = new ServiceCollection();
-        services.AddSingleton<Func<string, IRepositoryContext>>(sp => dir => new FileSystemRepositoryContext(dir));
-        services.AddSingleton<IDawAdapterRegistry>(sp => new DawAdapterRegistry([new FLStudioAdapter()]));
-        services.AddTransient<InitRepositoryUseCase>();
-        services.AddTransient<CommitUseCase>(sp => new CommitUseCase(
-            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
-            sp.GetRequiredService<IDawAdapterRegistry>()));
-        services.AddTransient<LogUseCase>();
-        services.AddTransient<CheckoutRestoreUseCase>();
-        services.AddTransient<CheckoutUseCase>(sp => new CheckoutUseCase(
-            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
-            sp.GetRequiredService<IDawAdapterRegistry>()));
-        services.AddTransient<BindDependencyUseCase>();
-        services.AddTransient<StatusUseCase>();
-        services.AddTransient<AddUseCase>();
-        services.AddTransient<ScanUseCase>();
-        services.AddTransient<BranchUseCase>();
-        services.AddTransient<SwitchUseCase>(sp => new SwitchUseCase(
-            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
-            sp.GetRequiredService<IDawAdapterRegistry>()));
-        services.AddTransient<DoctorUseCase>(sp => new DoctorUseCase(
-            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
-            sp.GetRequiredService<IDawAdapterRegistry>()));
-        services.AddTransient<FsckUseCase>(sp => new FsckUseCase(
-            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
-            sp.GetRequiredService<IDawAdapterRegistry>()));
-        services.AddTransient<RemoteUseCase>();
-        services.AddSingleton<IRemoteTransportFactory, DefaultRemoteTransportFactory>();
-        services.AddTransient<Func<string, IQuarantineStore>>(_ => dir => new QuarantineObjectStore(dir));
-        services.AddTransient<ObjectGraphWalker>();
-        services.AddTransient<FetchUseCase>();
-        services.AddTransient<AncestryService>();
-        services.AddTransient<PullUseCase>(sp => new PullUseCase(
-            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
-            sp.GetRequiredService<FetchUseCase>(),
-            sp.GetRequiredService<CheckoutUseCase>(),
-            sp.GetRequiredService<AncestryService>(),
-            sp.GetRequiredService<DoctorUseCase>()));
-        services.AddTransient<CloneUseCase>(sp => new CloneUseCase(
-            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
-            sp.GetRequiredService<IRemoteTransportFactory>(),
-            sp.GetRequiredService<FetchUseCase>(),
-            sp.GetRequiredService<CheckoutUseCase>(),
-            sp.GetRequiredService<DoctorUseCase>()));
+        services.AddDawVcs();
 
         using var serviceProvider = services.BuildServiceProvider();
 

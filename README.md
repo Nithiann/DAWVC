@@ -122,6 +122,10 @@ For options, exit codes, and JSON schemas, see the complete **[CLI Command Refer
 
 The solution adheres to Clean Architecture principles with strictly enforced dependency boundaries:
 
+`DawVcs.Bootstrap` supplies the shared `services.AddDawVcs()` composition root used by the CLI. It wires Application use cases to Infrastructure and the FL Studio adapter; Application and Domain remain independent of presentation frameworks. The host owns its service provider, while use cases dispose factory-created repository contexts and transport resources per operation. See [Technical Design](Docs/Technical%20Design.md#61-implemented-composition-root-and-ownership-24-october-2026) for lifetimes, metadata side effects and the adapter-cache limitation for future long-lived hosts.
+
+Desktop implementation and framework selection remain pending; progress is tracked in the [GUI task list](Docs/GUI_Implementation_Tasks.md).
+
 ```text
                   ┌──────────────────────┐
                   │      DawVcs.Cli      │ (Presentation / Host)

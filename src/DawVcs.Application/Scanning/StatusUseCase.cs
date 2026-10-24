@@ -38,7 +38,7 @@ public sealed class StatusUseCase : IUseCase<StatusRequest, StatusResult>
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.RepositoryDirectory);
 
-        var context = _contextFactory(request.RepositoryDirectory);
+        using var context = _contextFactory(request.RepositoryDirectory);
         var repoRoot = Path.GetFullPath(context.RootPath);
         var config = context.LoadConfig();
 

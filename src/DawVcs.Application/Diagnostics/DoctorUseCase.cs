@@ -33,7 +33,7 @@ public sealed class DoctorUseCase
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.RepositoryDirectory);
 
-        var context = _contextFactory(request.RepositoryDirectory);
+        using var context = _contextFactory(request.RepositoryDirectory);
         var config = context.LoadConfig();
 
         var artifactHealthList = new List<ArtifactHealth>();

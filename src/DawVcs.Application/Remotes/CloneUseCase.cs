@@ -85,7 +85,7 @@ public sealed class CloneUseCase
         Directory.CreateDirectory(Path.Combine(targetDir, ".dawvc", "refs", "remotes"));
 
         // 4. Write local config & HEAD
-        var context = _contextFactory(targetDir);
+        using var context = _contextFactory(targetDir);
         context.SaveConfig(remoteConfig);
 
         var defaultBranch = remoteConfig.DefaultBranch;
@@ -164,7 +164,7 @@ public sealed class CloneUseCase
 
         try
         {
-            var remoteContext = _contextFactory(path);
+            using var remoteContext = _contextFactory(path);
             var loaded = remoteContext?.LoadConfig();
             if (loaded != null)
             {

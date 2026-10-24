@@ -52,7 +52,7 @@ public class FetchUseCase
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var context = _contextFactory(request.RepositoryDirectory);
+        using var context = _contextFactory(request.RepositoryDirectory);
         var localConfig = context.LoadConfig();
 
         var remoteNameStr = !string.IsNullOrWhiteSpace(request.RemoteName) ? request.RemoteName : "origin";

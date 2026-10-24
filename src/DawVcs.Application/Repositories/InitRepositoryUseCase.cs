@@ -41,7 +41,7 @@ public sealed class InitRepositoryUseCase : IUseCase<InitRequest, InitResult>
         var targetDir = Path.GetFullPath(request.TargetDirectory);
         Directory.CreateDirectory(targetDir);
 
-        var context = _contextFactory(targetDir);
+        using var context = _contextFactory(targetDir);
         var dotDawvc = Path.Combine(targetDir, ".dawvc");
         var configPath = Path.Combine(targetDir, "dawvc.yaml");
 

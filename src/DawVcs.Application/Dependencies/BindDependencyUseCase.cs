@@ -33,7 +33,7 @@ public sealed class BindDependencyUseCase : IUseCase<BindDependencyRequest, Bind
         ArgumentException.ThrowIfNullOrWhiteSpace(request.DependencyId);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.LocalPath);
 
-        var context = _contextFactory(request.RepositoryDirectory);
+        using var context = _contextFactory(request.RepositoryDirectory);
         var depId = new DependencyId(request.DependencyId);
         var fullPath = Path.GetFullPath(request.LocalPath);
 

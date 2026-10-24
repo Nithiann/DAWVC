@@ -35,7 +35,7 @@ public sealed class LogUseCase : IUseCase<LogRequest, LogResult>
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var context = _contextFactory(request.RepositoryDirectory);
+        using var context = _contextFactory(request.RepositoryDirectory);
         var currentBranch = context.GetCurrentBranch();
         var headCommitId = context.GetBranchCommit(currentBranch);
 

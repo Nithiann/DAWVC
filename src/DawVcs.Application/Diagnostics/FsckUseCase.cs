@@ -33,7 +33,7 @@ public sealed class FsckUseCase
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.RepositoryDirectory);
 
-        var context = _contextFactory(request.RepositoryDirectory);
+        using var context = _contextFactory(request.RepositoryDirectory);
         var repoErrors = new List<IntegrityIssue>();
         var repoWarnings = new List<IntegrityIssue>();
 

@@ -31,7 +31,7 @@ public sealed class BranchUseCase
         ArgumentException.ThrowIfNullOrWhiteSpace(repositoryDirectory);
         cancellationToken.ThrowIfCancellationRequested();
 
-        var context = _contextFactory(repositoryDirectory);
+        using var context = _contextFactory(repositoryDirectory);
         var branches = context.GetBranches();
         return Task.FromResult(branches);
     }
@@ -48,7 +48,7 @@ public sealed class BranchUseCase
             throw new ArgumentException(validationError ?? $"Invalid branch name '{request.BranchName}'.", nameof(request));
         }
 
-        var context = _contextFactory(request.RepositoryDirectory);
+        using var context = _contextFactory(request.RepositoryDirectory);
 
         CommitId commitId;
         if (!string.IsNullOrWhiteSpace(request.StartPoint))
@@ -84,7 +84,7 @@ public sealed class BranchUseCase
             throw new ArgumentException(validationError ?? $"Invalid branch name '{request.BranchName}'.", nameof(request));
         }
 
-        var context = _contextFactory(request.RepositoryDirectory);
+        using var context = _contextFactory(request.RepositoryDirectory);
         var currentBranch = context.GetCurrentBranch();
 
         if (branchName == currentBranch)

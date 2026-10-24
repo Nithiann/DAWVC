@@ -74,7 +74,7 @@ public sealed class PullUseCase
             new FetchRequest(request.RepositoryDirectory, request.RemoteName, request.Branch, request.DryRun),
             cancellationToken).ConfigureAwait(false);
 
-        var context = _contextFactory(request.RepositoryDirectory);
+        using var context = _contextFactory(request.RepositoryDirectory);
         var currentBranch = context.GetCurrentBranch();
 
         var targetBranch = !string.IsNullOrWhiteSpace(request.Branch)

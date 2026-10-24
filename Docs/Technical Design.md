@@ -270,6 +270,29 @@ flowchart TD
 
 ---
 
+## 6.1 Implemented composition root and ownership (24 October 2026)
+
+`DawVcs.Bootstrap` provides `IServiceCollection.AddDawVcs()`. The CLI calls this extension instead of registering engine services in `Program.cs`. Bootstrap references Application, Infrastructure and the FL Studio adapter; Application and Domain do not reference Bootstrap, CLI or a desktop framework. The host builds and disposes its own service provider. No desktop host or framework decision has shipped yet; the diagram above includes future hosts.
+
+The registrations preserve the previous CLI construction paths, including explicit factories for use cases with optional constructor dependencies. Command presentation, arguments and exit-code handling remain in CLI. Package versions remain centrally managed; no new third-party dependency was introduced.
+
+| Service/resource | Lifetime and owner |
+| --- | --- |
+| `Func<string, IRepositoryContext>` | Singleton delegate; each invocation creates a fresh caller-owned `FileSystemRepositoryContext`. Never substitute a cached/shared context. |
+| `IDawAdapterRegistry` / `FLStudioAdapter` | One registry and adapter per provider. They are not disposable; the adapter retains search-path, sample-index and resolution caches. |
+| Use cases, `ObjectGraphWalker`, `AncestryService` | Transient; they borrow factories/services and retain no repository context between calls. |
+| `IRemoteTransportFactory` | Stateless singleton; returns a fresh caller-owned disposable transport. |
+| `Func<string, IQuarantineStore>` | Transient delegate; returns a new caller-owned quarantine session. |
+| Context internals | Context disposal releases its staging-index and local-binding-store semaphores. SQLite connections are opened/disposed per operation rather than retained by the provider. |
+
+Factory products are created outside DI tracking: disposing a provider does not dispose those products. Application entry points own acquired contexts with `using`, including early-return, failure and cancellation paths. Fetch/clone own their transports; fetch owns quarantine stores and returned streams. Graph helpers borrow contexts and dispose streams they open. Quarantine disposal removes empty sessions; interrupted nonempty sessions remain for stale-session pruning, rather than being unconditionally deleted.
+
+**Metadata side effects:** constructing a repository context already creates `.dawvc`, `objects` and `objects/.tmp` directories. The staging index creates `index.db` lazily on use. Resolving the registrations alone does not construct a context. A future repository-opening/viewer flow must validate its target before invoking the factory and must not describe these operations as strictly write-free.
+
+**Long-lived-host limitation:** the singleton FL Studio adapter caches successful and unsuccessful sample resolutions and lazily discovered search paths/indexes without invalidation. Changing files or search paths can leave stale results for the provider lifetime. WP1 deliberately preserves this CLI behavior; cache refresh/invalidation or an explicit adapter-lifetime policy must be implemented and tested with the desktop session lifecycle (WP4-05) before claiming fresh desktop rescans. A transient use case alone does not refresh the shared adapter.
+
+Validation is recorded in the [GUI implementation task list](GUI_Implementation_Tasks.md). Bootstrap tests cover all 19 shared use cases/helpers, provider-local singletons, fresh factory products, caller-owned disposal and constructor metadata side effects. Existing Application ownership tests exercise success, early return, exceptions, cancellation and pending asynchronous work.
+
 # 7. Solution Structure
 
 ```text
@@ -319,15 +342,19 @@ src/
     Validation/
     FlpParsing/
 
+  DawVcs.Bootstrap/
+    ServiceCollectionExtensions.cs
+
   DawVcs.Cli/
 
-  DawVcs.Desktop/
+  DawVcs.Desktop/  (planned)
 
-  DawVcs.Server/
+  DawVcs.Server/   (planned)
 
 tests/
   DawVcs.Domain.Tests/
   DawVcs.Application.Tests/
+  DawVcs.Bootstrap.Tests/
   DawVcs.Infrastructure.Tests/
   DawVcs.Adapters.FLStudio.Tests/
   DawVcs.IntegrationTests/
