@@ -20,6 +20,17 @@ In music production, losing uncommitted audio takes, recorded vocal recordings, 
 
 ---
 
+### Audit clarification: cancellation and partial recovery (24 October 2026)
+
+The safety model describes the intended normal workflow, not an unconditional transaction guarantee. The [operation audit](GUI_Operation_Inventory.md) identified open backend limitations:
+
+- Journal rollback is best-effort: restoration failures are suppressed, and remaining journal backups may still be deleted. A rollback message is not proof of complete recovery.
+- Cancellation during journal publication is currently wrapped as a staging failure. A failure after file/ref publication can also occur during dependency resolution or binding updates; it does not prove that the checkout was undone.
+- A forced recovery copy interrupted during creation may be incomplete and lack its final manifest. Fast-forward rollback also does not yet restore a previously absent ref in every failure path.
+- Commit, clone and fetch have no operation-wide rollback; partial objects, configuration, refs or workspace changes can remain.
+
+After an interrupted or failed mutation, stop further mutations and preserve a separate copy of the workspace and `.dawvc` before investigating. Inspect available recovery files and repository refs; do not delete recovery/quarantine data merely because the command returned an error. These findings remain open under WP2-05/06; no new recovery guarantee is delivered by adding progress reporting. See [Known Limitations](Known_Limitations.md).
+
 ## 2. Dirty Workspace Protection
 
 When you attempt to switch branches or checkout a commit while your workspace has unsaved modifications:

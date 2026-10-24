@@ -293,6 +293,18 @@ Factory products are created outside DI tracking: disposing a provider does not 
 
 Validation is recorded in the [GUI implementation task list](GUI_Implementation_Tasks.md). Bootstrap tests cover all 19 shared use cases/helpers, provider-local singletons, fresh factory products, caller-owned disposal and constructor metadata side effects. Existing Application ownership tests exercise success, early return, exceptions, cancellation and pending asynchronous work.
 
+## 6.2 Implemented operation progress contract (24 October 2026)
+
+Application now defines the immutable `Common.OperationProgress` record with `OperationStage`, nonnegative `long Completed`, nullable `long Total`, and `OperationProgressUnit` (`Items`/`Bytes`). A null total is indeterminate, zero is a known empty stage, and counters are stage-local with `Completed <= Total` when a total is known. There are no localized messages, paths, dispatcher types or desktop dependencies in the contract.
+
+`ScanUseCase` and `StatusUseCase` expose `ExecuteAsync(request, cancellationToken, IProgress<OperationProgress>? progress)` alongside their original optional-token signatures. All three parameters of the new overload are required, but the observer may be null; this preserves existing two-argument/default-literal calls, method groups and the unchanged `IUseCase` interface. Existing CLI presentation and exit-code handling are unchanged. Other operations do not yet expose/report this contract; their integration remains WP2-03.
+
+Scan reports discovery/inspection with unknown totals. Status reports candidate cache checks and completed hash/cache writes with known counts; concurrent hashing reports are serialized. Reports do not imply a UI-thread handoff or bounded update frequency. Observers must return promptly and must not throw: synchronous observer failures propagate rather than becoming adapter findings. A GUI consumer must marshal/throttle updates and discard stale-session notifications. The returned task, not an asynchronously delivered `Completed` report, determines lifecycle completion.
+
+Scan/status now check caller cancellation before context construction and before normal completion; status also checks enumeration/classification loops, and scan rechecks after adapter execution. Scan timeout remains a cooperative adapter-only `Invalid` detection result, not a typed timeout exception or hard execution deadline. Full cancellation, typed failure categories and rollback guarantees are not yet complete.
+
+The [operation inventory](GUI_Operation_Inventory.md) records per-use-case synchronous paths, cancellation gaps, actual errors, dry-run writes and publication/cleanup boundaries. Important open findings include diagnostic cancellation suppression, whole-index deletion during SQLite corruption recovery, journal best-effort recovery and post-publication failures. These remain explicit WP2/WP5 acceptance work, not guarantees supplied by progress reporting.
+
 # 7. Solution Structure
 
 ```text

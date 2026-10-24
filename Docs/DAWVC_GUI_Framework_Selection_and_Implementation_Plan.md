@@ -495,19 +495,17 @@ De bestaande use-cases zijn herbruikbaar, maar een GUI heeft andere interactione
 
 ### 9.1 Voortgang
 
-Langdurige operaties moeten optioneel voortgang publiceren:
+Langdurige operaties moeten optioneel voortgang publiceren. **Implementatiestand 24 oktober 2026 (WP2-02):** Application bevat nu `OperationProgress` met getypeerde `OperationStage`, `long Completed`, `long? Total` en `OperationProgressUnit` (`Items`/`Bytes`). Scan/status ontsluiten per aanroep `IProgress<OperationProgress>?` via een aanvullende overload; bestaande CLI- en `IUseCase`-aanroepen blijven ongewijzigd.
 
 ```csharp
-public sealed record OperationProgress(
-    string Phase,
-    int? CompletedItems,
-    int? TotalItems,
-    long? ProcessedBytes,
-    long? TotalBytes,
-    string? CurrentItem);
+var observation = new OperationProgress(
+    OperationStage.HashingFiles, completed: 3, total: 10);
+await statusUseCase.ExecuteAsync(request, cancellationToken, progress);
 ```
 
-Gebruik bijvoorbeeld `IProgress<OperationProgress>` of een eigen applicatiepoort. De Domain-laag mag hier niets van weten.
+Dit vervangt het oorspronkelijke schetscontract met vrije fase-/itemtekst: getypeerde fasen zijn vertaalbaar zonder backendteksten te parsen, `long` ondersteunt grote tellers en het ontbreken van `CurrentItem` voorkomt onbedoelde padverspreiding. Een teller geldt voor één fase; `null` totaal betekent onbekend en `0` een bekende lege fase. De Domain-laag kent dit contract niet.
+
+Commit, checkout/restore, diagnostiek en transfers moeten nog worden aangesloten (WP2-03). UI-threadmarshalling, throttling en sessiefiltering blijven werk van de toekomstige operatiecoördinator, niet van het voortgangsrecord. Zie [operatie-inventarisatie en contract](GUI_Operation_Inventory.md) en [Technical Design, sectie 6.2](Technical%20Design.md#62-implemented-operation-progress-contract-24-october-2026).
 
 ### 9.2 Annulering
 
@@ -520,6 +518,8 @@ Iedere langdurige opdracht moet een `CancellationToken` respecteren, met special
 - fetch;
 - pull;
 - `doctor` en `fsck`.
+
+**Auditstand 24 oktober 2026:** Scan/status hebben entry-/loop-/afrondingschecks gekregen. Andere paden onderdrukken of herclassificeren nog cancellation; publicatie en rollback hebben expliciete vervolgproblemen. De [operatie-inventarisatie](GUI_Operation_Inventory.md) scheidt deze bestaande beperkingen van bovenstaande doelstelling. WP2-04/05/06 blijven open.
 
 ### 9.3 Preflight in plaats van verrassingsdialogs
 

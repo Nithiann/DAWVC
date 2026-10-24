@@ -1,7 +1,8 @@
 # DAWVC GUI — Takenlijst en voortgang
 
 **Laatst bijgewerkt:** 24 oktober 2026  
-**Status:** WP1 voltooid; gedeelde Bootstrap in gebruik door CLI, desktopimplementatie nog niet gestart  
+**Status:** WP1 voltooid; WP2 in uitvoering met inventarisatie en scan/status-voortgangscontract, desktopimplementatie nog niet gestart
+
 **Ontwerpbron:** [GUI Framework Selection & Implementation Plan](DAWVC_GUI_Framework_Selection_and_Implementation_Plan.md)
 
 Dit document is de centrale voortgangsregistratie voor de desktop-GUI. Het oorspronkelijke GUI-document beschrijft de richting en afwegingen; deze takenlijst beschrijft de uitvoering. Het bestaande [MVP Implementation Plan](Implementation%20plan.md) blijft de historische CLI-MVP-baseline en wordt niet met terugwerkende kracht herschreven.
@@ -19,17 +20,19 @@ Dit document is de centrale voortgangsregistratie voor de desktop-GUI. Het oorsp
 
 ## 2. Actuele voortgang
 
-**Eerstvolgende taak:** WP2-01 — cancellation, synchronische werkpaden, fouttypen en dry-run-neveneffecten per langdurige use-case inventariseren.
+**Eerstvolgende taak:** WP2-03 — voortgang uitbreiden van scan/status naar commit, checkout/restore, doctor/fsck en transfers, aan de hand van de [operatie-inventarisatie](GUI_Operation_Inventory.md).
 
-**Lopende taken:** Geen.  
-**Blokkades:** Geen voor WP2; Windows x64 met .NET SDK 10.0.301, Release-build en volledige testsuite zijn gevalideerd.  
-**Aandachtspunten:** Contextconstructie maakt al metadatamappen aan. De singleton FL Studio-adapter heeft geen cache-invalidatie; neem cacheverversing/lifetimebeleid mee in WP4-05 vóór actuele desktoprescans worden opgeleverd.
+**Lopende taken:** WP2-03 en WP2-04 zijn gedeeltelijk uitgevoerd voor scan/status; overige operaties en onderliggende I/O-/adapterpaden blijven open.
+
+**Blokkades:** Geen voor verdere WP2-implementatie; Release-build en 412 tests zijn geslaagd. WP2 als geheel is nog niet voltooid.
+
+**Aandachtspunten:** Diagnostiek en publicatie kunnen cancellation onderdrukken/herclassificeren; rollback is best-effort en fouten kunnen na duurzame publicatie optreden. SQLite-corruptieherstel kan staged entries wissen: dit moet vóór vieweracceptatie worden aangepakt. Fetch/pull-dry-runs schrijven tijdelijke metadata en kunnen stale sessies verwijderen. Adaptercache-invalidatie blijft WP4-05. Zie de inventarisatie voor bronnen en vervolggrenzen.
 
 | Werkpakket | Status | Afhankelijkheden | Oplevering |
 | --- | --- | --- | --- |
 | WP0 — Planning en documentatie | Voltooid | Geen | Takenlijst, verwijzingen en onderhoudsafspraken |
 | WP1 — Gedeelde composition root | Voltooid | WP0 | Bootstrap en ongewijzigd CLI-gedrag |
-| WP2 — Operatiecontracten | Open | WP1 | Voortgang, cancellation en typed fouten |
+| WP2 — Operatiecontracten | In uitvoering | WP1 | Voortgang, cancellation en typed fouten |
 | WP3 — Frameworkspikes en ADR | Open | WP1; WP2 voor progress/cancellation | Onderbouwde frameworkkeuze |
 | WP4 — Desktop-shell en session | Open | WP2, WP3 | Responsieve shell en veilige lifecycle |
 | WP5 — Viewer-release | Open | WP4 | Geen mutaties aan projectinhoud, staging, branches of refs |
@@ -61,10 +64,10 @@ Werkpakketten zijn opleverbaar in kleine wijzigingen. Packaging, CI, privacy en 
 
 ### WP2 — GUI-geschikte operatiecontracten
 
-- [ ] WP2-01 — Bestaande cancellation, synchronische werkpaden, fouttypen en dry-run-neveneffecten inventariseren per langdurige use-case.
-- [ ] WP2-02 — `OperationProgress` in Application introduceren; optioneel per aanroep ontsluiten met behoud van bestaande CLI-call-sites.
-- [ ] WP2-03 — Voortgang aansluiten op scan/status, commit, checkout/restore, diagnostics en transfers waar zinvol; onbekende totalen ondersteunen.
-- [ ] WP2-04 — Cancellation tijdens enumeratie, hashing, adapterwerk en I/O controleren en ontbrekende checks toevoegen.
+- [x] WP2-01 — Bestaande cancellation, synchronische werkpaden, fouttypen en dry-run-neveneffecten inventariseren per langdurige use-case; vastgelegd in `GUI_Operation_Inventory.md`.
+- [x] WP2-02 — `OperationProgress` in Application introduceren; optioneel per aanroep ontsluiten met behoud van bestaande CLI-call-sites. Contract en aanvullende overloads geleverd voor scan/status; overige integratie valt onder WP2-03.
+- [ ] WP2-03 — Voortgang aansluiten op scan/status, commit, checkout/restore, diagnostics en transfers waar zinvol; onbekende totalen ondersteunen. **Deelopgeleverd:** scan/status met onbekende fasetotalen en bekende cache-/hashtellers; overige operaties open.
+- [ ] WP2-04 — Cancellation tijdens enumeratie, hashing, adapterwerk en I/O controleren en ontbrekende checks toevoegen. **Deelopgeleverd:** entry-/enumeratie-/classificatie-/afrondingschecks voor scan/status en callercheck na adapterwerk; onderliggende I/O-/adapterpaden en overige use-cases open.
 - [ ] WP2-05 — Typed fouten aanvullen en centrale gebruikerscategorieën definiëren zonder exceptiontekst te parsen; timeout, annulering en incomplete rollback onderscheiden.
 - [ ] WP2-06 — Veilige annuleringsgrenzen en rollbackbeleid vastleggen en testen; cleanup mag niet door een reeds geannuleerd token worden overgeslagen.
 - [ ] WP2-07 — Contract-, cancellation- en regressietests uitvoeren; Application-contracten en beperkingen documenteren.
@@ -104,7 +107,7 @@ Werkpakketten zijn opleverbaar in kleine wijzigingen. Packaging, CI, privacy en 
 - [ ] WP5-05 — Scan, doctor en fsck met voortgang, annulering en geredacteerde rapportexport aansluiten.
 - [ ] WP5-06 — Beschikbare dependencygegevens tonen en filteren zonder bindacties.
 - [ ] WP5-07 — Loading-, empty-, success- en errorstates testen; CLI/GUI-resultaten semantisch vergelijken met gedeelde fixtures.
-- [ ] WP5-08 — Cachewrites en overige metadata-neveneffecten controleren en documenteren; viewer-smoketest en Windows-previewpublicatie uitvoeren.
+- [ ] WP5-08 — Cachewrites en overige metadata-neveneffecten controleren en documenteren; voorkom dat SQLite-corruptieherstel staged entries wist bij viewer/statusgebruik. Viewer-smoketest en Windows-previewpublicatie uitvoeren.
 
 **Acceptatie:** Geen wijzigingen aan projectbestanden, staging, branches of refs. De status-hashcache kan wel worden bijgewerkt; de release wordt daarom niet als strikt schrijfloos beschreven. Init, restore en andere muterende acties ontbreken nog.
 
@@ -185,5 +188,20 @@ Bestaande historische plannen behouden hun oorspronkelijke releasescope. Voeg ve
   - `git diff --check`: geen whitespacefouten; Git meldt alleen CRLF/LF-normalisatie voor `DawVcs.slnx`.
   - Python-documentatiecontrole: alle 27 lokale linkdoelen in de vier bijgewerkte documenten bestaan; alle vijf WP1-taken staan afgevinkt. Ankerinhoud is niet automatisch gevalideerd.
 - **Beperkingen en vervolg:** Contextconstructie maakt `.dawvc/objects/.tmp` en bovenliggende mappen aan; `index.db` wordt pas op gebruik gemaakt. De bestaande singleton FL Studio-adapter houdt zoekpad-, index- en resolutiecaches zonder invalidatie vast. Dit gedrag is bewust behouden bij de DI-extractie en wordt vóór desktopgebruik in WP4-05 aangepakt. WP2-01 is de volgende uitvoeringstaak; packaging en GUI-validatie zijn nog niet uitgevoerd.
+
+### 24 oktober 2026 — WP2-inventarisatie en eerste voortgangscontract
+
+- **Taken:** WP2-01 en WP2-02 afgerond; WP2-03/WP2-04 gedeeltelijk uitgevoerd, WP2-05/06/07 blijven open.
+- **Opgeleverd:** `src/DawVcs.Application/Common/OperationProgress.cs` met immutable getypeerde fasen, `long` tellers, onbekende/lege totalen en item-/byte-eenheden. `Scanning/ScanUseCase.cs` en `StatusUseCase.cs` bieden aanvullende per-call progress-overloads; oorspronkelijke signatures, method groups, `IUseCase` en CLI-call-sites blijven behouden. Progress bevat geen paden/vrije tekst; parallelle hashupdates zijn geserialiseerd. Scan/status checken caller cancellation vóór contextconstructie en vóór succes; status ook tijdens enumeratie/classificatie en scan na adapterwerk.
+- **Tests:** `tests/DawVcs.Application.Tests/Common/OperationProgressTests.cs` en `Scanning/OperationProgressUseCaseTests.cs`: 27 nieuwe tests voor contractinvarianten, onbekende/lege totalen, grote tellers, legacy-aanroepen, semantisch gelijke resultaten met/zonder observer, oplopende parallelle hashtellers, cachehits, empty state, precancellation, faseannulering, adapter die cancellation negeert en observerfouten zonder foutmaskering.
+- **Documentatie:** Nieuwe `GUI_Operation_Inventory.md` met broncontrole per langdurige use-case en ondersteunende beheeroperaties. `Technical Design.md` (6.2), GUI-ontwerp (9.1/9.2), `Known_Limitations.md`, `Recovery_Guide.md`, `Collaborator_Workflow.md` en deze takenlijst bijgewerkt. Bestaande overclaims over exact rollbackherstel aangescherpt; dry-runwrites en postpublicatiefouten expliciet gemaakt. Geen framework-/packagekeuze of persistent schema gewijzigd.
+- **Uitgevoerde validatie:**
+  - `dotnet test tests/DawVcs.Application.Tests/DawVcs.Application.Tests.csproj -c Release --filter "FullyQualifiedName~OperationProgress|FullyQualifiedName~ScanUseCaseTests|FullyQualifiedName~StatusUseCaseTests" --logger "console;verbosity=minimal"`: 33/33 geslaagd. Eerste uitvoeringen vereisten correcties in nieuwe testcode voor analyzerregels en een `DateTimeOffset`-matcher; die zijn opgelost vóór de geslaagde uitvoering.
+  - `dotnet build DawVcs.slnx -c Release --no-restore`: geslaagd zonder compilerwaarschuwingen of fouten.
+  - `dotnet test DawVcs.slnx -c Release --no-build --no-restore --logger "console;verbosity=minimal"`: 412/412 geslaagd, geen overgeslagen tests, inclusief 42 E2E-tests.
+  - `dotnet format DawVcs.slnx --verify-no-changes --no-restore --include` met de vijf gewijzigde/nieuwe Application- en testcodebestanden: geslaagd.
+  - `git diff --check`: Markdown-eindspaties uit gewijzigde statusregels verwijderd; hercontrole zonder whitespacefouten.
+  - Python-documentatiecontrole: alle 50 lokale linkdoelen in de zeven betrokken documenten bestaan; WP2-01/02 zijn afgevinkt en WP2-03 t/m WP2-07 blijven open. Ankerinhoud is niet automatisch gevalideerd.
+- **Beperkingen en vervolg:** Alleen scan/status rapporteert nu voortgang; geen throttling, desktopdispatching of complete typed foutvertaling. Scan-timeout blijft coöperatief en adapter-only. Inventarisatie is broncodebewijs, geen fault-injectionvalidatie van open backendrisico's. WP2-03 is de volgende uitvoeringstaak. Annuleringsmaskering, rollback/backupretentie, afwezige-refherstel, gedeeltelijke clone/transfer en SQLite-stagingbehoud moeten nog worden geïmplementeerd/getest voordat WP2 of de viewer kan worden afgetekend.
 
 Gebruik bij volgende updates hetzelfde formaat: datum, taak-ID's, bestanden/resultaten, uitgevoerde validatie en open beperkingen.

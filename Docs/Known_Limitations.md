@@ -60,6 +60,17 @@
 ## 7. Automatic Rollback on Handled Publication Failure
 
 - In v0.1, the `PublicationJournal` provides automatic, in-memory rollback of file operations when an exception occurs during staging, candidate installation, reference updates, or index clearing.
-- If a handled error is encountered, temporary file-level backups are restored in reverse order, returning the workspace to its exact pre-checkout state.
+- Temporary file-level backups are restored in reverse order on handled publication failure. **Audit clarification (24 October 2026): rollback is best-effort, not proof that the exact previous state was restored.** Restoration errors are currently suppressed, and backup cleanup may still run after a failed restoration. Incomplete recovery does not yet have a dedicated typed outcome.
 - **Crash Recovery Scope:** Unhandled terminations (e.g. `SIGKILL`, abrupt power outage, or OS panic) mid-publication cannot be rolled back until persistent on-disk transaction manifests (`.dawvc/transactions/<id>/`) are implemented in a future release.
+
+## 8. Operation Audit for Desktop Preparation (24 October 2026)
+
+These are audited backend limitations, not delivered GUI features. See the [operation inventory](GUI_Operation_Inventory.md) and [GUI task list](GUI_Implementation_Tasks.md) for implementation status.
+
+- **Cancellation is not uniformly preserved:** doctor/fsck findings, dependency-search fallbacks, publication exception wrapping, and optional post-transfer doctor summaries can mask or reclassify cancellation. Scan/status now check cancellation before context construction and before normal completion, but underlying synchronous work is not yet uniformly interruptible.
+- **Progress is currently scan/status-only:** the optional per-call Application contract is implemented without changing existing CLI calls. Other operations, typed timeout outcomes and complete cancellation/rollback guarantees remain WP2 work. A scan timeout is cooperative and adapter-only, not hard process isolation.
+- **Metadata writes during inspection:** constructing a repository context can create metadata directories. Status warms the hash cache and may initialize SQLite. Corruption recovery currently deletes/recreates the entire local index, which can also discard staged entries; this must be addressed before accepting a viewer that promises no staging changes.
+- **Dry-run is not write-free:** fetch/pull dry-run creates quarantine sessions, downloads commit/snapshot metadata and prunes stale incoming sessions. It does not download blobs, promote objects or update tracking refs. Pull's classification can still use stale local tracking refs rather than the prospective remote tip.
+- **Partial durable results:** fetch can retain promoted objects and partially updated tracking refs; clone can leave a partially initialized target. Commit can publish its ref before index clearing fails. Checkout/restore can finish file publication before dependency resolution fails or is cancelled. A failed/cancelled task therefore does not universally mean 'nothing changed'.
+- **Long-lived adapter caches:** the shared FL Studio adapter has no invalidation for search paths, file indexes or positive/negative sample resolutions. Lifetime/refresh policy is still required before desktop rescans can be advertised as fresh.
 

@@ -118,3 +118,15 @@ To prevent repository bloat and respect software licenses:
 - Large multi-gigabyte instrument libraries (e.g. Native Instruments Kontakt, Spectrasonics Omnisphere, reFX Nexus) are **not** bundled by default.
 - They are classified as `UserChoice` or `ReferenceOnly`.
 - If Collaborator B does not have a required commercial library installed, `dawvc doctor` will clearly flag it as a missing plugin or content dependency without corrupting or breaking the project file.
+
+---
+
+## 5. Transfer Preview and Interruption Limits (24 October 2026)
+
+Filesystem, external-drive and UNC collaboration is supported; HTTPS and push are not supplied by these workflows. The desktop client is still planned.
+
+A fetch/pull dry-run is **not a write-free preview**: it creates local quarantine directories, downloads/verifies commit and snapshot metadata, and prunes stale incoming sessions. It skips blob download, object promotion and tracking-ref updates. A failed/interrupted preview may leave quarantine files. Pull dry-run can classify against existing local tracking refs rather than the prospective remote tip; do not treat it as an authoritative preflight for a later integration.
+
+Normal fetch promotes verified objects incrementally and updates tracking refs separately. A failed transfer can therefore leave useful objects and partially updated refs. Clone has no whole-target rollback, and a post-checkout diagnostic/dependency failure can happen after workspace publication. Preserve the target/recovery data and inspect the actual state before retrying destructive actions; see [Recovery Guide](Recovery_Guide.md) and the [operation inventory](GUI_Operation_Inventory.md).
+
+These are source-audit findings recorded for WP2/WP7, not newly implemented transfer or recovery behavior.

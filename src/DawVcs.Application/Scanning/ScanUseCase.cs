@@ -1,5 +1,6 @@
 using DawVcs.Adapters.Abstractions;
 using DawVcs.Application.Adapters;
+using DawVcs.Application.Common;
 using DawVcs.Domain.Artifacts;
 using DawVcs.Domain.Configuration;
 using DawVcs.Domain.Repositories;
@@ -20,7 +21,7 @@ public sealed record ScanResult(
     TimeSpan Duration);
 
 /// <summary>
-/// Orchestreert de inspectie en validatie van DAW-projectbestanden met geïsoleerde adapter-executie en timeoutbeleid (FR-SCAN-001..007, IMP-0510).
+/// Orchestreert de inspectie en validatie van DAW-projectbestanden met coöperatieve adapterannulering en timeoutbeleid (FR-SCAN-001..007, IMP-0510).
 /// </summary>
 public sealed class ScanUseCase
 {
@@ -37,13 +38,20 @@ public sealed class ScanUseCase
         _adapterRegistry = adapterRegistry ?? throw new ArgumentNullException(nameof(adapterRegistry));
     }
 
-    public async Task<ScanResult> ExecuteAsync(ScanRequest request, CancellationToken cancellationToken = default)
+    public Task<ScanResult> ExecuteAsync(ScanRequest request, CancellationToken cancellationToken = default)
+        => ExecuteAsync(request, cancellationToken, null);
+
+    public async Task<ScanResult> ExecuteAsync(ScanRequest request, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
     {
         ArgumentNullException.ThrowIfNull(request);
         var startTime = DateTimeOffset.UtcNow;
         var timeout = request.Timeout ?? DefaultTimeout;
 
+        progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
+        cancellationToken.ThrowIfCancellationRequested();
         using var repo = _contextFactory(request.WorkingDirectory);
+
+        progress?.Report(new OperationProgress(OperationStage.DiscoveringFiles));
 
         string artifactFullPath;
         ArtifactPath relPath;
@@ -64,9 +72,14 @@ public sealed class ScanUseCase
             {
                 config = repo.LoadConfig();
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
             catch
             {
                 // Not an initialized repo or config not found
+                cancellationToken.ThrowIfCancellationRequested();
             }
 
             if (config != null)
@@ -88,6 +101,9 @@ public sealed class ScanUseCase
             }
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
+        progress?.Report(new OperationProgress(OperationStage.InspectingArtifact));
+
         if (!File.Exists(artifactFullPath))
         {
             throw new FileNotFoundException($"Projectbestand niet gevonden op: '{artifactFullPath}'.", artifactFullPath);
@@ -101,6 +117,8 @@ public sealed class ScanUseCase
             var unknownResult = ProjectDetectionResult.Unknown(
                 $"Geen DAW-adapter geregistreerd voor bestandsextensie '{extension}'. Project kan uitsluitend opaque worden beheerd.");
 
+            cancellationToken.ThrowIfCancellationRequested();
+            progress?.Report(new OperationProgress(OperationStage.Completed));
             return new ScanResult(
                 artifactFullPath,
                 relPath,
@@ -110,7 +128,7 @@ public sealed class ScanUseCase
                 DateTimeOffset.UtcNow - startTime);
         }
 
-        // Bounded isolated execution via CancellationTokenSource timeout policy (IMP-0510)
+        // The timeout is cooperative: adapters must observe the linked token (IMP-0510).
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(timeout);
 
@@ -135,8 +153,10 @@ public sealed class ScanUseCase
                 $"Fout tijdens uitvoeren van DAW-adapter '{adapter.DawName}': {ex.Message}");
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         var duration = DateTimeOffset.UtcNow - startTime;
 
+        progress?.Report(new OperationProgress(OperationStage.Completed));
         return new ScanResult(
             artifactFullPath,
             relPath,
