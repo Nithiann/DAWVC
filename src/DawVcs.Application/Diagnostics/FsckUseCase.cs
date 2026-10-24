@@ -1,5 +1,6 @@
 using DawVcs.Adapters.Abstractions;
 using DawVcs.Application.Adapters;
+using DawVcs.Application.Common;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Hashing;
 using DawVcs.Domain.Repositories;
@@ -28,12 +29,28 @@ public sealed class FsckUseCase
         _adapterRegistry = adapterRegistry;
     }
 
-    public async Task<FsckReport> ExecuteAsync(FsckRequest request, CancellationToken cancellationToken = default)
+    public Task<FsckReport> ExecuteAsync(FsckRequest request, CancellationToken cancellationToken = default)
+        => ExecuteAsync(request, cancellationToken, null);
+
+    public async Task<FsckReport> ExecuteAsync(FsckRequest request, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.RepositoryDirectory);
 
-        using var context = _contextFactory(request.RepositoryDirectory);
+        cancellationToken.ThrowIfCancellationRequested();
+        progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
+        FsckReport report;
+        using (var context = _contextFactory(request.RepositoryDirectory))
+        {
+            report = await ExecuteCoreAsync(request, context, cancellationToken, progress).ConfigureAwait(false);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        progress?.Report(new OperationProgress(OperationStage.Completed));
+        return report;
+    }
+
+    private async Task<FsckReport> ExecuteCoreAsync(FsckRequest request, IRepositoryContext context, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
+    {
         var repoErrors = new List<IntegrityIssue>();
         var repoWarnings = new List<IntegrityIssue>();
 
@@ -42,6 +59,8 @@ public sealed class FsckUseCase
 
         // 1. Scan en verifieer alle loose objects in de object store
         var storedEntries = context.ObjectStore.EnumerateStoredObjects();
+        var verifiedEntries = 0;
+        progress?.Report(new OperationProgress(OperationStage.VerifyingObjects, 0, storedEntries.Count));
         foreach (var entry in storedEntries)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -53,6 +72,8 @@ public sealed class FsckUseCase
                     Target: entry.RelativePath,
                     Message: $"File name '{entry.RelativePath}' is not a valid 64-character BLAKE3 hex object path.",
                     IsError: true));
+                verifiedEntries++;
+                progress?.Report(new OperationProgress(OperationStage.VerifyingObjects, verifiedEntries, storedEntries.Count));
                 continue;
             }
 
@@ -88,7 +109,7 @@ public sealed class FsckUseCase
                     Message: ex.Message,
                     IsError: true));
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 repoErrors.Add(new IntegrityIssue(
                     Code: "ObjectReadError",
@@ -96,6 +117,8 @@ public sealed class FsckUseCase
                     Message: ex.Message,
                     IsError: true));
             }
+            verifiedEntries++;
+            progress?.Report(new OperationProgress(OperationStage.VerifyingObjects, verifiedEntries, storedEntries.Count));
         }
 
         // 2. Doorkruis de objectgraph vanaf refs en HEAD
@@ -104,6 +127,8 @@ public sealed class FsckUseCase
         var visitedCommits = new HashSet<CommitId>();
         var artifactBlobsToCheck = new List<(string Path, ContentHash BlobHash)>();
 
+        progress?.Report(new OperationProgress(OperationStage.TraversingHistory));
+        var traversedCommits = 0;
         var branches = context.GetBranches();
         foreach (var branch in branches)
         {
@@ -125,6 +150,7 @@ public sealed class FsckUseCase
         while (commitQueue.Count > 0)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            progress?.Report(new OperationProgress(OperationStage.TraversingHistory, traversedCommits++));
             var currentCommitId = commitQueue.Dequeue();
             reachableHashes.Add(currentCommitId.Value);
 
@@ -208,6 +234,8 @@ public sealed class FsckUseCase
             }
         }
 
+        progress?.Report(new OperationProgress(OperationStage.TraversingHistory, traversedCommits));
+
         // Wezen (Orphan objects) identificeren
         int orphanCount = 0;
         foreach (var validObj in validObjects)
@@ -246,6 +274,8 @@ public sealed class FsckUseCase
                 .DistinctBy(a => a.BlobHash)
                 .ToList();
 
+            var inspectedArtifacts = 0;
+            progress?.Report(new OperationProgress(OperationStage.InspectingArtifacts, 0, distinctArtifacts.Count));
             foreach (var (relPath, blobHash) in distinctArtifacts)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -259,6 +289,8 @@ public sealed class FsckUseCase
                         Target: relPath,
                         Message: $"No DAW adapter registered for artifact '{relPath}'.",
                         IsError: false));
+                    inspectedArtifacts++;
+                    progress?.Report(new OperationProgress(OperationStage.InspectingArtifacts, inspectedArtifacts, distinctArtifacts.Count));
                     continue;
                 }
 
@@ -291,7 +323,7 @@ public sealed class FsckUseCase
                         }
                     }
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     failedArtifacts++;
                     // AC-012: Adapter exception wordt gerapporteerd onder Artifact Integrity, NOOIT onder Repository Integrity!
@@ -301,6 +333,8 @@ public sealed class FsckUseCase
                         Message: $"Exception during adapter inspection of '{relPath}': {ex.Message}",
                         IsError: true));
                 }
+                inspectedArtifacts++;
+                progress?.Report(new OperationProgress(OperationStage.InspectingArtifacts, inspectedArtifacts, distinctArtifacts.Count));
             }
 
             artifactIntegrity = new ArtifactIntegrityReport(

@@ -1,5 +1,6 @@
 using DawVcs.Adapters.Abstractions;
 using DawVcs.Application.Adapters;
+using DawVcs.Application.Common;
 using DawVcs.Application.Diagnostics;
 using DawVcs.Domain.Artifacts;
 using DawVcs.Domain.Common;
@@ -12,6 +13,7 @@ using DawVcs.Domain.Repositories;
 using FluentAssertions;
 
 using NSubstitute;
+using NSubstitute.ExceptionExtensions;
 
 using Xunit;
 
@@ -55,6 +57,161 @@ public sealed class DoctorUseCaseTests : IDisposable
         }
 
         GC.SuppressFinalize(this);
+    }
+
+    private async Task PrepareValidArtifactAsync()
+    {
+        _context.LoadConfig().Returns(new RepositoryConfig(
+            RepositoryId.New(), "Test Project", new ArtifactPath("Project.flp"), BranchName.Main));
+        await File.WriteAllBytesAsync(Path.Combine(_tempDir, "Project.flp"), [1, 2, 3]);
+        _mockAdapter.DetectAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+            .Returns(ProjectDetectionResult.Valid("FL Studio", "2024.1", 1.0));
+        _adapterRegistry.GetAllAdapters().Returns([_mockAdapter]);
+    }
+
+    [Fact]
+    public async Task Progress_ReportsKnownCountsAndUnknownDiscovery_AndPreservesLegacyResults()
+    {
+        await PrepareValidArtifactAsync();
+        var useCase = new DoctorUseCase(_ => _context, _adapterRegistry);
+        var progress = new DiagnosticProgress();
+
+        var report = await useCase.ExecuteAsync(new DoctorRequest(_tempDir), default, progress);
+        var legacy = await useCase.ExecuteAsync(new DoctorRequest(_tempDir));
+
+        report.Should().BeEquivalentTo(legacy);
+        progress.Reports.Should().ContainSingle(p => p.Stage == OperationStage.Completed);
+        progress.Reports.Last().Stage.Should().Be(OperationStage.Completed);
+        progress.Reports.Where(p => p.Stage == OperationStage.InspectingArtifacts)
+            .Select(p => (p.Completed, p.Total)).Should().Equal((0L, (long?)1), (1L, (long?)1));
+        progress.Reports.Should().ContainSingle(p => p.Stage == OperationStage.DiscoveringDependencies && p.Total == null);
+        progress.Reports.Should().ContainSingle(p => p.Stage == OperationStage.ResolvingDependencies && p.Completed == 0 && p.Total == 0);
+        progress.Reports.Where(p => p.Stage == OperationStage.ProbingEnvironment)
+            .Select(p => (p.Completed, p.Total)).Should().Equal((0L, (long?)1), (1L, (long?)1));
+        progress.Reports.Should().OnlyContain(p => p.Unit == OperationProgressUnit.Items);
+    }
+
+    [Fact]
+    public async Task Progress_FindingsAndEmptyEnvironment_StillComplete()
+    {
+        _context.LoadConfig().Returns(new RepositoryConfig(
+            RepositoryId.New(), "Test", new ArtifactPath("Missing.flp"), BranchName.Main));
+        var progress = new DiagnosticProgress();
+
+        var report = await new DoctorUseCase(_ => _context)
+            .ExecuteAsync(new DoctorRequest(_tempDir), default, progress);
+
+        report.IsHealthy.Should().BeFalse();
+        progress.Reports.Should().ContainSingle(p => p.Stage == OperationStage.Completed);
+        progress.Reports.Should().ContainSingle(p => p.Stage == OperationStage.ProbingEnvironment && p.Completed == 0 && p.Total == 0);
+    }
+
+    [Theory]
+    [InlineData(OperationStage.InspectingArtifacts, 1)]
+    [InlineData(OperationStage.DiscoveringDependencies, 0)]
+    [InlineData(OperationStage.ResolvingDependencies, 0)]
+    [InlineData(OperationStage.ProbingEnvironment, 1)]
+    public async Task Progress_ObserverExceptionsEscapeWithoutCompletion(OperationStage stage, long completed)
+    {
+        await PrepareValidArtifactAsync();
+        var failure = new InvalidOperationException("Observer failed");
+        var progress = new DiagnosticProgress(p =>
+        {
+            if (p.Stage == stage && p.Completed == completed) throw failure;
+        });
+        var action = () => new DoctorUseCase(_ => _context, _adapterRegistry)
+            .ExecuteAsync(new DoctorRequest(_tempDir), default, progress);
+
+        (await action.Should().ThrowAsync<InvalidOperationException>()).Which.Should().BeSameAs(failure);
+        progress.Reports.Should().NotContain(p => p.Stage == OperationStage.Completed);
+    }
+
+    [Fact]
+    public async Task Progress_PreCanceledCaller_DoesNotOpenContextOrComplete()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var opened = false;
+        var progress = new DiagnosticProgress();
+        var action = () => new DoctorUseCase(_ => { opened = true; return _context; })
+            .ExecuteAsync(new DoctorRequest(_tempDir), cancellation.Token, progress);
+
+        await action.Should().ThrowAsync<OperationCanceledException>();
+        opened.Should().BeFalse();
+        progress.Reports.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Progress_CancellationInDiagnosticCatches_IsNotConvertedToFindings(bool duringHeadLoad)
+    {
+        await PrepareValidArtifactAsync();
+        if (duringHeadLoad)
+        {
+            var commit = new CommitId(Blake3ContentHasher.Hash([42]));
+            _context.GetCurrentBranch().Returns(BranchName.Main);
+            _context.GetBranchCommit(BranchName.Main).Returns(commit);
+            _context.LoadCommitAsync(commit, Arg.Any<CancellationToken>()).ThrowsAsync(new OperationCanceledException());
+        }
+        else
+        {
+            _mockAdapter.DetectAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+                .ThrowsAsync(new OperationCanceledException());
+        }
+        var progress = new DiagnosticProgress();
+        var action = () => new DoctorUseCase(_ => _context, _adapterRegistry)
+            .ExecuteAsync(new DoctorRequest(_tempDir), default, progress);
+
+        await action.Should().ThrowAsync<OperationCanceledException>();
+        progress.Reports.Should().NotContain(p => p.Stage == OperationStage.Completed);
+    }
+
+    [Fact]
+    public async Task Progress_CallerCanceledDuringOperation_DoesNotComplete()
+    {
+        await PrepareValidArtifactAsync();
+        using var cancellation = new CancellationTokenSource();
+        var progress = new DiagnosticProgress(p =>
+        {
+            if (p.Stage == OperationStage.ProbingEnvironment && p.Completed == 1) cancellation.Cancel();
+        });
+        var action = () => new DoctorUseCase(_ => _context, _adapterRegistry)
+            .ExecuteAsync(new DoctorRequest(_tempDir), cancellation.Token, progress);
+
+        await action.Should().ThrowAsync<OperationCanceledException>();
+        progress.Reports.Should().NotContain(p => p.Stage == OperationStage.Completed);
+    }
+
+    [Fact]
+    public async Task Progress_AdapterFailureBecomesFinding_AndCompletes()
+    {
+        await PrepareValidArtifactAsync();
+        _mockAdapter.DetectAsync(Arg.Any<Stream>(), Arg.Any<CancellationToken>())
+            .ThrowsAsync(new IOException("Inspection failed"));
+        var progress = new DiagnosticProgress();
+
+        var report = await new DoctorUseCase(_ => _context, _adapterRegistry)
+            .ExecuteAsync(new DoctorRequest(_tempDir), default, progress);
+
+        report.ArtifactHealth.Should().ContainSingle(a => a.IsBlocking);
+        progress.Reports.Should().ContainSingle(p => p.Stage == OperationStage.Completed);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Progress_TaskFailure_DoesNotComplete(bool duringDisposal)
+    {
+        await PrepareValidArtifactAsync();
+        if (duringDisposal) _context.When(c => c.Dispose()).Do(_ => throw new IOException("Dispose failed"));
+        else _context.LoadConfig().Returns(_ => throw new IOException("Config failed"));
+        var progress = new DiagnosticProgress();
+        var action = () => new DoctorUseCase(_ => _context, _adapterRegistry)
+            .ExecuteAsync(new DoctorRequest(_tempDir), default, progress);
+
+        await action.Should().ThrowAsync<IOException>();
+        progress.Reports.Should().NotContain(p => p.Stage == OperationStage.Completed);
     }
 
     [Fact]
@@ -160,8 +317,12 @@ public sealed class DoctorUseCaseTests : IDisposable
         _context.LoadSnapshotAsync(snapshot.Id, Arg.Any<CancellationToken>()).Returns(snapshot);
 
         var useCase = new DoctorUseCase(_ => _context, _adapterRegistry);
-        var report = await useCase.ExecuteAsync(new DoctorRequest(_tempDir));
+        var progress = new DiagnosticProgress();
+        var report = await useCase.ExecuteAsync(new DoctorRequest(_tempDir), default, progress);
 
+        progress.Reports.Where(p => p.Stage == OperationStage.ResolvingDependencies)
+            .Select(p => (p.Completed, p.Total)).Should().Equal((0L, (long?)1), (1L, (long?)1));
+        progress.Reports.Should().ContainSingle(p => p.Stage == OperationStage.Completed);
         report.DependencyHealth.Should().ContainSingle();
         var dep = report.DependencyHealth[0];
         dep.Name.Should().Be("Kickstart 2");

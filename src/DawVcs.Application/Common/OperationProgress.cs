@@ -12,7 +12,24 @@ public enum OperationStage
     HashingFiles,
     ClassifyingChanges,
     InspectingArtifact,
-    Completed
+    Completed,
+    DiscoveringDependencies,
+    ResolvingDependencies,
+    WritingObjects,
+    PlanningCheckout,
+    CreatingRecoveryCopy,
+    StagingFiles,
+    PublishingFiles,
+    UpdatingReferences,
+    UpdatingIndex,
+    VerifyingObjects,
+    TraversingHistory,
+    InspectingArtifacts,
+    ProbingEnvironment,
+    ConnectingRemote,
+    ReadingRemoteReferences,
+    TransferringObjects,
+    PromotingObjects
 }
 
 public enum OperationProgressUnit

@@ -1,4 +1,5 @@
 using DawVcs.Application.Checkouts;
+using DawVcs.Application.Common;
 using DawVcs.Application.Diagnostics;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Dependencies;
@@ -64,17 +65,35 @@ public sealed class PullUseCase
         _doctorUseCase = doctorUseCase;
     }
 
-    public async Task<PullResult> ExecuteAsync(PullRequest request, CancellationToken cancellationToken = default)
+    public Task<PullResult> ExecuteAsync(PullRequest request, CancellationToken cancellationToken = default)
+        => ExecuteAsync(request, cancellationToken, null);
+
+    public async Task<PullResult> ExecuteAsync(
+        PullRequest request, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
+    {
+        var result = await ExecuteCoreAsync(request, cancellationToken, progress).ConfigureAwait(false);
+        progress?.Report(new OperationProgress(OperationStage.Completed));
+        return result;
+    }
+
+    private async Task<PullResult> ExecuteCoreAsync(
+        PullRequest request, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.RepositoryDirectory);
 
-        // 1. Fetch remote changes into quarantine & update remote-tracking refs (FR-PUL-001)
-        var fetchResult = await _fetchUseCase.ExecuteAsync(
-            new FetchRequest(request.RepositoryDirectory, request.RemoteName, request.Branch, request.DryRun),
-            cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        var nestedProgress = progress is null ? null : new NestedOperationProgress(progress);
 
+        // 1. Fetch remote changes into quarantine & update remote-tracking refs (FR-PUL-001)
+        var fetchRequest = new FetchRequest(request.RepositoryDirectory, request.RemoteName, request.Branch, request.DryRun);
+        var fetchResult = nestedProgress is null
+            ? await _fetchUseCase.ExecuteAsync(fetchRequest, cancellationToken).ConfigureAwait(false)
+            : await _fetchUseCase.ExecuteAsync(fetchRequest, cancellationToken, nestedProgress).ConfigureAwait(false);
+
+        progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
         using var context = _contextFactory(request.RepositoryDirectory);
+        progress?.Report(new OperationProgress(OperationStage.LoadingMetadata));
         var currentBranch = context.GetCurrentBranch();
 
         var targetBranch = !string.IsNullOrWhiteSpace(request.Branch)
@@ -102,6 +121,7 @@ public sealed class PullUseCase
         }
 
         // 2. Classify sync ancestry state (FR-PUL-003..005)
+        progress?.Report(new OperationProgress(OperationStage.TraversingHistory));
         var classification = await _ancestryService.DetermineSyncStateAsync(
             localTip,
             remoteTip.Value,
@@ -164,12 +184,15 @@ public sealed class PullUseCase
 
                 // 3. Fast-forward workspace update via PublicationJournal (FR-PUL-006..008, AC-030)
                 var ffTarget = new FastForwardTarget(request.RepositoryDirectory, targetBranch, localTip, remoteTip.Value);
-                var checkoutResult = await _checkoutUseCase.ExecuteFastForwardAsync(ffTarget, request.Force, cancellationToken).ConfigureAwait(false);
+                var checkoutResult = nestedProgress is null
+                    ? await _checkoutUseCase.ExecuteFastForwardAsync(ffTarget, request.Force, cancellationToken).ConfigureAwait(false)
+                    : await _checkoutUseCase.ExecuteFastForwardAsync(ffTarget, request.Force, cancellationToken, nestedProgress).ConfigureAwait(false);
 
                 // 4. Non-blocking Doctor summary (FR-PUL-009)
                 DoctorReportSummary? doctorSummary = null;
                 if (_doctorUseCase is not null)
                 {
+                    progress?.Report(new OperationProgress(OperationStage.ProbingEnvironment));
                     try
                     {
                         var docReport = await _doctorUseCase.ExecuteAsync(new DoctorRequest(request.RepositoryDirectory), cancellationToken).ConfigureAwait(false);

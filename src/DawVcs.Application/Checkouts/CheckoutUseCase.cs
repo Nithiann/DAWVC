@@ -51,18 +51,31 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
         _adapterRegistry = adapterRegistry;
     }
 
-    public virtual async Task<CheckoutResult> ExecuteAsync(CheckoutRequest request, CancellationToken cancellationToken = default)
+    public virtual Task<CheckoutResult> ExecuteAsync(CheckoutRequest request, CancellationToken cancellationToken = default)
+        => ExecuteAsync(request, cancellationToken, null);
+
+    public virtual async Task<CheckoutResult> ExecuteAsync(CheckoutRequest request, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
+    {
+        var result = await ExecuteCoreAsync(request, cancellationToken, progress).ConfigureAwait(false);
+        progress?.Report(new OperationProgress(OperationStage.Completed));
+        return result;
+    }
+
+    private async Task<CheckoutResult> ExecuteCoreAsync(CheckoutRequest request, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.RepositoryDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.Reference);
 
+        progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
         using var context = _contextFactory(request.RepositoryDirectory);
         var repoRoot = !string.IsNullOrWhiteSpace(context.RootPath)
             ? Path.GetFullPath(context.RootPath)
             : Path.GetFullPath(request.RepositoryDirectory);
 
         var isExternalRestore = !string.IsNullOrWhiteSpace(request.RestoreToDirectory);
+
+        progress?.Report(new OperationProgress(OperationStage.LoadingMetadata));
 
         // Guard: in-place checkout of a loose commit hash is disallowed (Option 2 for MVP)
         // to prevent accidentally mutating the active branch pointer.
@@ -95,6 +108,8 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
         // 3. Pre-materialization guards: path security (FR-CHK-012)
         PathSecurityGuard.ValidateAll(entryPaths);
 
+        progress?.Report(new OperationProgress(OperationStage.VerifyingObjects));
+
         // 4. Pre-materialization object store check: alle benodigde blobs moeten intact zijn (FR-CHK-001..003)
         foreach (var entry in entries)
         {
@@ -112,6 +127,7 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
 
         if (isExternalRestore)
         {
+            progress?.Report(new OperationProgress(OperationStage.PlanningCheckout));
             // --restore-to: herstel naar aparte directory; active workspace blijft onaangeraakt (AC-009)
             targetDir = Path.GetFullPath(request.RestoreToDirectory!);
             Directory.CreateDirectory(targetDir);
@@ -135,9 +151,11 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
             }
 
             var statusUseCase = new StatusUseCase(_contextFactory);
-            var statusResult = await statusUseCase.ExecuteAsync(new StatusRequest(repoRoot), cancellationToken).ConfigureAwait(false);
+            var statusResult = await statusUseCase.ExecuteAsync(new StatusRequest(repoRoot), cancellationToken,
+                progress is null ? null : new NestedOperationProgress(progress)).ConfigureAwait(false);
             var status = statusResult.Status;
 
+            progress?.Report(new OperationProgress(OperationStage.PlanningCheckout));
             plan = await CheckoutPlanner.PlanAsync(repoRoot, currentSnapshot, snapshot, status, cancellationToken).ConfigureAwait(false);
 
             if (plan.HasConflicts || status.HasStagedChanges || status.HasWorkingTreeModifications)
@@ -156,9 +174,14 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
                     .Concat(entryPaths.Where(p => File.Exists(Path.Combine(repoRoot, p))))
                     .Distinct(StringComparer.OrdinalIgnoreCase);
 
+                progress?.Report(new OperationProgress(OperationStage.CreatingRecoveryCopy));
                 recoveryDir = await RecoveryCopyService.CreateRecoveryCopyAsync(repoRoot, filesToBackup, cancellationToken).ConfigureAwait(false);
             }
         }
+
+        var stagingActions = plan.Actions.Where(a => a.Kind is CheckoutActionKind.Create or CheckoutActionKind.Replace).ToList();
+        var stagedCount = 0;
+        progress?.Report(new OperationProgress(OperationStage.StagingFiles, 0, stagingActions.Count));
 
         // 6. Staged materialization op hetzelfde volume (FR-CHK-004, ADR-IO-001)
         var stagingBaseDir = isExternalRestore ? targetDir : Path.Combine(repoRoot, ".dawvc");
@@ -170,7 +193,7 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
         try
         {
             // Materialiseer alleen bestanden die gecreëerd of vervangen moeten worden
-            foreach (var action in plan.Actions.Where(a => a.Kind is CheckoutActionKind.Create or CheckoutActionKind.Replace))
+            foreach (var action in stagingActions)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -195,7 +218,11 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
                 {
                     throw new CheckoutStagingException($"Integrity verification failed for staged artifact '{entry.Path.Value}'. Expected hash {entry.Hash}, but got {actualHash}.");
                 }
+                stagedCount++;
+                progress?.Report(new OperationProgress(OperationStage.StagingFiles, stagedCount, stagingActions.Count));
             }
+
+            progress?.Report(new OperationProgress(OperationStage.PublishingFiles));
 
             // 8. Installatie van de geverifieerde candidate met rollback journal (FR-CHK-006, ADR-IO-001)
             await using var journal = new PublicationJournal(targetDir, Path.Combine(repoRoot, ".dawvc"));
@@ -272,6 +299,8 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
                 }
             }
         }
+
+        progress?.Report(new OperationProgress(OperationStage.ResolvingDependencies));
 
         // 10. Dependency Resolution & Local Bindings (FR-BND-001..009, FR-CHK-014, FR-CHK-015, AC-013)
         var resolvedBindings = new List<DependencyBinding>();
@@ -350,18 +379,39 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
     /// Executes a safe fast-forward update of an active branch to a new commit tip (FR-PUL-001..012, AC-030).
     /// Enforces dirty workspace guard, atomic PublicationJournal staging, and branch pointer progression.
     /// </summary>
-    public virtual async Task<CheckoutResult> ExecuteFastForwardAsync(
+    public virtual Task<CheckoutResult> ExecuteFastForwardAsync(
         FastForwardTarget target,
         bool force = false,
         CancellationToken cancellationToken = default)
+        => ExecuteFastForwardAsync(target, force, cancellationToken, null);
+
+    public virtual async Task<CheckoutResult> ExecuteFastForwardAsync(
+        FastForwardTarget target,
+        bool force,
+        CancellationToken cancellationToken,
+        IProgress<OperationProgress>? progress)
+    {
+        var result = await ExecuteFastForwardCoreAsync(target, force, cancellationToken, progress).ConfigureAwait(false);
+        progress?.Report(new OperationProgress(OperationStage.Completed));
+        return result;
+    }
+
+    private async Task<CheckoutResult> ExecuteFastForwardCoreAsync(
+        FastForwardTarget target,
+        bool force,
+        CancellationToken cancellationToken,
+        IProgress<OperationProgress>? progress)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentException.ThrowIfNullOrWhiteSpace(target.RepositoryDirectory);
 
+        progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
         using var context = _contextFactory(target.RepositoryDirectory);
         var repoRoot = !string.IsNullOrWhiteSpace(context.RootPath)
             ? context.RootPath
             : Path.GetFullPath(target.RepositoryDirectory);
+
+        progress?.Report(new OperationProgress(OperationStage.LoadingMetadata));
 
         // 1. Load new commit and snapshot
         var newCommit = await context.LoadCommitAsync(target.NewCommitId, cancellationToken).ConfigureAwait(false)
@@ -375,6 +425,8 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
 
         // 2. Pre-materialization path security (FR-CHK-012)
         PathSecurityGuard.ValidateAll(entryPaths);
+
+        progress?.Report(new OperationProgress(OperationStage.VerifyingObjects));
 
         // 3. Pre-materialization blob existence
         foreach (var entry in entries)
@@ -398,9 +450,11 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
         }
 
         var statusUseCase = new StatusUseCase(_contextFactory);
-        var statusResult = await statusUseCase.ExecuteAsync(new StatusRequest(repoRoot), cancellationToken).ConfigureAwait(false);
+        var statusResult = await statusUseCase.ExecuteAsync(new StatusRequest(repoRoot), cancellationToken,
+            progress is null ? null : new NestedOperationProgress(progress)).ConfigureAwait(false);
         var status = statusResult.Status;
 
+        progress?.Report(new OperationProgress(OperationStage.PlanningCheckout));
         var plan = await CheckoutPlanner.PlanAsync(repoRoot, oldSnapshot, newSnapshot, status, cancellationToken).ConfigureAwait(false);
 
         string? recoveryDir = null;
@@ -419,8 +473,13 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
                 .Concat(entryPaths.Where(p => File.Exists(Path.Combine(repoRoot, p))))
                 .Distinct(StringComparer.OrdinalIgnoreCase);
 
+            progress?.Report(new OperationProgress(OperationStage.CreatingRecoveryCopy));
             recoveryDir = await RecoveryCopyService.CreateRecoveryCopyAsync(repoRoot, filesToBackup, cancellationToken).ConfigureAwait(false);
         }
+
+        var stagingActions = plan.Actions.Where(a => a.Kind is CheckoutActionKind.Create or CheckoutActionKind.Replace).ToList();
+        var stagedCount = 0;
+        progress?.Report(new OperationProgress(OperationStage.StagingFiles, 0, stagingActions.Count));
 
         // 5. Staged materialization
         var stagingBaseDir = Path.Combine(repoRoot, ".dawvc");
@@ -431,7 +490,7 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
 
         try
         {
-            foreach (var action in plan.Actions.Where(a => a.Kind is CheckoutActionKind.Create or CheckoutActionKind.Replace))
+            foreach (var action in stagingActions)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
@@ -455,7 +514,11 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
                 {
                     throw new CheckoutStagingException($"Integrity verification failed for staged artifact '{entry.Path.Value}'. Expected hash {entry.Hash}, but got {actualHash}.");
                 }
+                stagedCount++;
+                progress?.Report(new OperationProgress(OperationStage.StagingFiles, stagedCount, stagingActions.Count));
             }
+
+            progress?.Report(new OperationProgress(OperationStage.PublishingFiles));
 
             // 6. PublicationJournal & branch advance (atomic publication)
             await using var journal = new PublicationJournal(repoRoot, Path.Combine(repoRoot, ".dawvc"));
@@ -513,6 +576,8 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
                 try { Directory.Delete(stagingDir, recursive: true); } catch { }
             }
         }
+
+        progress?.Report(new OperationProgress(OperationStage.ResolvingDependencies));
 
         // 7. Dependency Resolution & Local Bindings
         var resolvedBindings = new List<DependencyBinding>();

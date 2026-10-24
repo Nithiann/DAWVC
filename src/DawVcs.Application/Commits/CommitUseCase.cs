@@ -47,11 +47,24 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
         _adapterRegistry = adapterRegistry;
     }
 
-    public async Task<CommitResult> ExecuteAsync(CommitRequest request, CancellationToken cancellationToken = default)
+    public Task<CommitResult> ExecuteAsync(CommitRequest request, CancellationToken cancellationToken = default)
+        => ExecuteAsync(request, cancellationToken, null);
+
+    public async Task<CommitResult> ExecuteAsync(CommitRequest request, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
+    {
+        var result = await ExecuteCoreAsync(request, cancellationToken, progress).ConfigureAwait(false);
+        progress?.Report(new OperationProgress(OperationStage.Completed));
+        return result;
+    }
+
+    private async Task<CommitResult> ExecuteCoreAsync(CommitRequest request, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
     {
         ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
+        progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
 
         using var context = _contextFactory(request.RepositoryDirectory);
+        progress?.Report(new OperationProgress(OperationStage.LoadingMetadata));
         var config = context.LoadConfig();
 
         var primaryFile = Path.Combine(context.RootPath, config.PrimaryArtifact.Value);
@@ -61,6 +74,7 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
         }
 
         // 1. Primary artifact (auto-tracked)
+        progress?.Report(new OperationProgress(OperationStage.WritingObjects, 0, 1));
         long primaryFileSize;
         ContentHash primaryBlobHash;
         await using (var fileStream = new FileStream(primaryFile, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.Asynchronous))
@@ -69,12 +83,14 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
             primaryBlobHash = await context.ObjectStore.WriteBlobAsync(fileStream, cancellationToken).ConfigureAwait(false);
         }
 
+        progress?.Report(new OperationProgress(OperationStage.WritingObjects, 1, 1));
         var entriesByPath = new Dictionary<string, ArtifactEntry>(StringComparer.OrdinalIgnoreCase)
         {
             [config.PrimaryArtifact.Value] = ArtifactEntry.Create(config.PrimaryArtifact, primaryBlobHash, primaryFileSize, ArtifactRole.PrimaryProjectFile)
         };
 
         // 2. Discover and evaluate dependencies from adapter (WP-06, FR-DEP-001..015)
+        progress?.Report(new OperationProgress(OperationStage.DiscoveringDependencies));
         var dependencyGraph = DependencyGraph.Empty;
         if (_adapterRegistry != null)
         {
@@ -92,6 +108,9 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
         var updatedDependencies = new List<Dependency>();
 
         // 2b. Auto-bundle project asset dependencies with PortabilityMode.Bundle (Fase 2)
+        var dependencyTotal = dependencyGraph.Dependencies.Count;
+        var processedDependencies = 0;
+        progress?.Report(new OperationProgress(OperationStage.ResolvingDependencies, 0, dependencyTotal));
         foreach (var rawDep in dependencyGraph.Dependencies)
         {
             if (rawDep is AssetDependency assetDep && assetDep.Portability.Mode == PortabilityMode.Bundle)
@@ -178,11 +197,13 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
             {
                 updatedDependencies.Add(rawDep);
             }
+            progress?.Report(new OperationProgress(OperationStage.ResolvingDependencies, ++processedDependencies, dependencyTotal));
         }
 
         dependencyGraph = new DependencyGraph(updatedDependencies);
 
         // 3. Preserve previously tracked assets from HEAD snapshot (FR-STG-002)
+        progress?.Report(new OperationProgress(OperationStage.WritingObjects));
         var currentBranch = context.GetCurrentBranch();
         var headCommitId = context.GetBranchCommit(currentBranch);
         var parents = new List<CommitId>();
@@ -315,8 +336,10 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
         }
 
         // 8. Store snapshot object in object store
+        progress?.Report(new OperationProgress(OperationStage.WritingObjects, 0, 2));
         var snapshotBytes = snapshot.ToCanonicalBytes();
         await context.ObjectStore.WriteObjectAsync(ObjectType.Snapshot, snapshotBytes, cancellationToken).ConfigureAwait(false);
+        progress?.Report(new OperationProgress(OperationStage.WritingObjects, 1, 2));
 
         // 9. Build and store commit object
         var author = !string.IsNullOrWhiteSpace(request.Author)
@@ -332,7 +355,10 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
 
         var commitBytes = commit.ToCanonicalBytes();
         await context.ObjectStore.WriteObjectAsync(ObjectType.Commit, commitBytes, cancellationToken).ConfigureAwait(false);
+        progress?.Report(new OperationProgress(OperationStage.WritingObjects, 2, 2));
 
+        // Keep observer callbacks outside the ref-update/index-clear publication sequence.
+        progress?.Report(new OperationProgress(OperationStage.UpdatingReferences));
         // 10. Atomically update branch ref pointer (FR-COM-006)
         await context.UpdateBranchCommitAsync(currentBranch, commit.Id, cancellationToken).ConfigureAwait(false);
 

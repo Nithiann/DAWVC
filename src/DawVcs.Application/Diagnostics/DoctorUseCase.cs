@@ -28,12 +28,29 @@ public sealed class DoctorUseCase
         _adapterRegistry = adapterRegistry;
     }
 
-    public async Task<DoctorReport> ExecuteAsync(DoctorRequest request, CancellationToken cancellationToken = default)
+    public Task<DoctorReport> ExecuteAsync(DoctorRequest request, CancellationToken cancellationToken = default)
+        => ExecuteAsync(request, cancellationToken, null);
+
+    public async Task<DoctorReport> ExecuteAsync(DoctorRequest request, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.RepositoryDirectory);
 
-        using var context = _contextFactory(request.RepositoryDirectory);
+        cancellationToken.ThrowIfCancellationRequested();
+        progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
+        DoctorReport report;
+        using (var context = _contextFactory(request.RepositoryDirectory))
+        {
+            report = await ExecuteCoreAsync(context, cancellationToken, progress).ConfigureAwait(false);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        progress?.Report(new OperationProgress(OperationStage.Completed));
+        return report;
+    }
+
+    private async Task<DoctorReport> ExecuteCoreAsync(IRepositoryContext context, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
+    {
+        progress?.Report(new OperationProgress(OperationStage.LoadingMetadata));
         var config = context.LoadConfig();
 
         var artifactHealthList = new List<ArtifactHealth>();
@@ -45,6 +62,7 @@ public sealed class DoctorUseCase
         var primaryRel = config.PrimaryArtifact.Value;
         var primaryFull = Path.Combine(context.RootPath, primaryRel);
 
+        progress?.Report(new OperationProgress(OperationStage.InspectingArtifacts, 0, 1));
         if (!File.Exists(primaryFull))
         {
             artifactHealthList.Add(new ArtifactHealth(
@@ -97,7 +115,7 @@ public sealed class DoctorUseCase
                         IsBlocking: isBlocking,
                         Findings: PathRedactor.RedactAll(detectResult.Findings)));
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     artifactHealthList.Add(new ArtifactHealth(
                         Path: primaryRel,
@@ -109,6 +127,8 @@ public sealed class DoctorUseCase
                 }
             }
         }
+
+        progress?.Report(new OperationProgress(OperationStage.InspectingArtifacts, 1, 1));
 
         // 2. Domein 2: Dependency Integrity & Reproduceerbaarheid
         if (primaryDetection != null)
@@ -127,18 +147,22 @@ public sealed class DoctorUseCase
                     }
                 }
             }
-            catch
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 // In uncommitted / newly initialized repositories, headSnapshot may not exist yet
             }
 
+            progress?.Report(new OperationProgress(OperationStage.DiscoveringDependencies));
             var depGraph = await DependencyDiscoveryService.DiscoverAsync(
                 context.RootPath,
                 primaryDetection,
                 primaryAdapter,
                 cancellationToken).ConfigureAwait(false);
 
-            foreach (var rawDep in depGraph.Dependencies)
+            var dependencies = depGraph.Dependencies;
+            var resolvedDependencies = 0;
+            progress?.Report(new OperationProgress(OperationStage.ResolvingDependencies, 0, dependencies.Count));
+            foreach (var rawDep in dependencies)
             {
                 var dep = rawDep;
 
@@ -205,6 +229,8 @@ public sealed class DoctorUseCase
                     ExpectedVersion: expectedVersion,
                     DetectedVersion: detectedVersion,
                     Location: location));
+                resolvedDependencies++;
+                progress?.Report(new OperationProgress(OperationStage.ResolvingDependencies, resolvedDependencies, dependencies.Count));
             }
         }
 
@@ -219,27 +245,29 @@ public sealed class DoctorUseCase
         var dawInstallations = new List<DawInstallation>();
         var envFindings = new List<string>();
 
-        if (_adapterRegistry != null)
+        var adapters = _adapterRegistry?.GetAllAdapters() ?? Array.Empty<IDawAdapter>();
+        var probedAdapters = 0;
+        progress?.Report(new OperationProgress(OperationStage.ProbingEnvironment, 0, adapters.Count));
+        foreach (var adapter in adapters)
         {
-            foreach (var adapter in _adapterRegistry.GetAllAdapters())
+            var findings = await adapter.ProbeEnvironmentAsync(cancellationToken).ConfigureAwait(false);
+            foreach (var f in findings)
             {
-                var findings = await adapter.ProbeEnvironmentAsync(cancellationToken).ConfigureAwait(false);
-                foreach (var f in findings)
+                if (f.IsInstalled && !string.IsNullOrWhiteSpace(f.InstallationPath))
                 {
-                    if (f.IsInstalled && !string.IsNullOrWhiteSpace(f.InstallationPath))
-                    {
-                        dawInstallations.Add(new DawInstallation(
-                            DawName: f.DawName,
-                            Version: f.Version ?? "Unknown",
-                            ExecutablePath: PathRedactor.Redact(f.InstallationPath),
-                            IsDetected: true));
-                    }
-                    else if (!string.IsNullOrWhiteSpace(f.StatusMessage))
-                    {
-                        envFindings.Add(PathRedactor.Redact(f.StatusMessage));
-                    }
+                    dawInstallations.Add(new DawInstallation(
+                        DawName: f.DawName,
+                        Version: f.Version ?? "Unknown",
+                        ExecutablePath: PathRedactor.Redact(f.InstallationPath),
+                        IsDetected: true));
+                }
+                else if (!string.IsNullOrWhiteSpace(f.StatusMessage))
+                {
+                    envFindings.Add(PathRedactor.Redact(f.StatusMessage));
                 }
             }
+            probedAdapters++;
+            progress?.Report(new OperationProgress(OperationStage.ProbingEnvironment, probedAdapters, adapters.Count));
         }
 
         var envHealth = new EnvironmentHealth(

@@ -1,4 +1,5 @@
 using DawVcs.Application.Checkouts;
+using DawVcs.Application.Common;
 using DawVcs.Application.Diagnostics;
 using DawVcs.Domain.Artifacts;
 using DawVcs.Domain.Common;
@@ -50,11 +51,26 @@ public sealed class CloneUseCase
         _doctorUseCase = doctorUseCase;
     }
 
-    public async Task<CloneResult> ExecuteAsync(CloneRequest request, CancellationToken cancellationToken = default)
+    public Task<CloneResult> ExecuteAsync(CloneRequest request, CancellationToken cancellationToken = default)
+        => ExecuteAsync(request, cancellationToken, null);
+
+    public async Task<CloneResult> ExecuteAsync(
+        CloneRequest request, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
+    {
+        var result = await ExecuteCoreAsync(request, cancellationToken, progress).ConfigureAwait(false);
+        progress?.Report(new OperationProgress(OperationStage.Completed));
+        return result;
+    }
+
+    private async Task<CloneResult> ExecuteCoreAsync(
+        CloneRequest request, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.Url);
 
+        cancellationToken.ThrowIfCancellationRequested();
+        var nestedProgress = progress is null ? null : new NestedOperationProgress(progress);
+        progress?.Report(new OperationProgress(OperationStage.ConnectingRemote));
         var remoteUrl = request.Url.Trim();
         using var transport = _transportFactory.CreateTransport(remoteUrl);
 
@@ -66,6 +82,7 @@ public sealed class CloneUseCase
         }
 
         // 2. Read remote config from remote transport or path
+        progress?.Report(new OperationProgress(OperationStage.LoadingMetadata));
         RepositoryConfig remoteConfig = ReadRemoteConfig(remoteUrl, handshake.RepositoryId);
 
         // 3. Determine target directory
@@ -78,6 +95,7 @@ public sealed class CloneUseCase
             throw new InvalidOperationException($"Destination path '{targetDir}' already exists and is not an empty directory.");
         }
 
+        progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
         Directory.CreateDirectory(targetDir);
         Directory.CreateDirectory(Path.Combine(targetDir, ".dawvc"));
         Directory.CreateDirectory(Path.Combine(targetDir, ".dawvc", "objects"));
@@ -86,6 +104,7 @@ public sealed class CloneUseCase
 
         // 4. Write local config & HEAD
         using var context = _contextFactory(targetDir);
+        progress?.Report(new OperationProgress(OperationStage.UpdatingReferences));
         context.SaveConfig(remoteConfig);
 
         var defaultBranch = remoteConfig.DefaultBranch;
@@ -97,9 +116,10 @@ public sealed class CloneUseCase
         context.SetUpstream(defaultBranch, "origin", defaultBranch);
 
         // 6. Fetch all remote branches into quarantine & objects
-        var fetchResult = await _fetchUseCase.ExecuteAsync(
-            new FetchRequest(targetDir, "origin"),
-            cancellationToken).ConfigureAwait(false);
+        var fetchRequest = new FetchRequest(targetDir, "origin");
+        var fetchResult = nestedProgress is null
+            ? await _fetchUseCase.ExecuteAsync(fetchRequest, cancellationToken).ConfigureAwait(false)
+            : await _fetchUseCase.ExecuteAsync(fetchRequest, cancellationToken, nestedProgress).ConfigureAwait(false);
 
         // 7. Initial checkout of default branch
         var trackingCommit = context.GetRemoteTrackingCommit("origin", defaultBranch);
@@ -108,7 +128,9 @@ public sealed class CloneUseCase
         if (trackingCommit.HasValue)
         {
             var target = new FastForwardTarget(targetDir, defaultBranch, null, trackingCommit.Value);
-            var checkoutResult = await _checkoutUseCase.ExecuteFastForwardAsync(target, force: true, cancellationToken).ConfigureAwait(false);
+            var checkoutResult = nestedProgress is null
+                ? await _checkoutUseCase.ExecuteFastForwardAsync(target, force: true, cancellationToken).ConfigureAwait(false)
+                : await _checkoutUseCase.ExecuteFastForwardAsync(target, true, cancellationToken, nestedProgress).ConfigureAwait(false);
             materializedFiles.AddRange(checkoutResult.RestoredFiles);
         }
 
@@ -116,6 +138,7 @@ public sealed class CloneUseCase
         DoctorReportSummary? doctorSummary = null;
         if (_doctorUseCase is not null)
         {
+            progress?.Report(new OperationProgress(OperationStage.ProbingEnvironment));
             try
             {
                 var docReport = await _doctorUseCase.ExecuteAsync(new DoctorRequest(targetDir), cancellationToken).ConfigureAwait(false);

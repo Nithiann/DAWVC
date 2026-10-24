@@ -495,7 +495,7 @@ De bestaande use-cases zijn herbruikbaar, maar een GUI heeft andere interactione
 
 ### 9.1 Voortgang
 
-Langdurige operaties moeten optioneel voortgang publiceren. **Implementatiestand 24 oktober 2026 (WP2-02):** Application bevat nu `OperationProgress` met getypeerde `OperationStage`, `long Completed`, `long? Total` en `OperationProgressUnit` (`Items`/`Bytes`). Scan/status ontsluiten per aanroep `IProgress<OperationProgress>?` via een aanvullende overload; bestaande CLI- en `IUseCase`-aanroepen blijven ongewijzigd.
+Langdurige operaties moeten optioneel voortgang publiceren. **Implementatiestand 24 oktober 2026 (WP2-02/03):** Application bevat `OperationProgress` met getypeerde `OperationStage`, `long Completed`, `long? Total` en `OperationProgressUnit` (`Items`/`Bytes`). Scan/status, commit, checkout/restore en fast-forward, doctor/fsck en fetch/clone/pull ontsluiten per aanroep `IProgress<OperationProgress>?` via aanvullende overloads; bestaande CLI- en `IUseCase`-aanroepen blijven ongewijzigd.
 
 ```csharp
 var observation = new OperationProgress(
@@ -505,7 +505,7 @@ await statusUseCase.ExecuteAsync(request, cancellationToken, progress);
 
 Dit vervangt het oorspronkelijke schetscontract met vrije fase-/itemtekst: getypeerde fasen zijn vertaalbaar zonder backendteksten te parsen, `long` ondersteunt grote tellers en het ontbreken van `CurrentItem` voorkomt onbedoelde padverspreiding. Een teller geldt voor één fase; `null` totaal betekent onbekend en `0` een bekende lege fase. De Domain-laag kent dit contract niet.
 
-Commit, checkout/restore, diagnostiek en transfers moeten nog worden aangesloten (WP2-03). UI-threadmarshalling, throttling en sessiefiltering blijven werk van de toekomstige operatiecoördinator, niet van het voortgangsrecord. Zie [operatie-inventarisatie en contract](GUI_Operation_Inventory.md) en [Technical Design, sectie 6.2](Technical%20Design.md#62-implemented-operation-progress-contract-24-october-2026).
+WP2-03 is aangesloten en getest. Fasen gebruiken bekende totalen voor afgehandelde bestanden/objecten/controles en onbekende totalen voor groeiende graphs of adapterwerk. Samengestelde operaties filteren child-`Completed`; een afgeronde fetch is niet hetzelfde als een afgeronde pull. Observercallbacks veranderen de bestaande journal-/ref-/indexpublicatiegrenzen niet. UI-threadmarshalling, throttling en sessiefiltering blijven werk van de toekomstige operatiecoördinator, niet van het voortgangsrecord. Zie [operatie-inventarisatie en contract](GUI_Operation_Inventory.md) en [Technical Design, sectie 6.2](Technical%20Design.md#62-implemented-operation-progress-contract-24-october-2026).
 
 ### 9.2 Annulering
 
@@ -519,7 +519,7 @@ Iedere langdurige opdracht moet een `CancellationToken` respecteren, met special
 - pull;
 - `doctor` en `fsck`.
 
-**Auditstand 24 oktober 2026:** Scan/status hebben entry-/loop-/afrondingschecks gekregen. Andere paden onderdrukken of herclassificeren nog cancellation; publicatie en rollback hebben expliciete vervolgproblemen. De [operatie-inventarisatie](GUI_Operation_Inventory.md) scheidt deze bestaande beperkingen van bovenstaande doelstelling. WP2-04/05/06 blijven open.
+**Auditstand 24 oktober 2026:** Scan/status hebben entry-/loop-/afrondingschecks gekregen. Doctor/fsck bewaren cancellation door hun eigen diagnostische catches en controleren entry/afronding; commit en transfers hebben entrychecks. Dependencyzoekwerk, optionele doctorsamenvattingen en publicatie onderdrukken of herclassificeren nog cancellation; rollback heeft expliciete vervolgproblemen. De [operatie-inventarisatie](GUI_Operation_Inventory.md) scheidt deze bestaande beperkingen van bovenstaande doelstelling. WP2-04/05/06 blijven open.
 
 ### 9.3 Preflight in plaats van verrassingsdialogs
 

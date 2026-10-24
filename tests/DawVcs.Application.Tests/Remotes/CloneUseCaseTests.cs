@@ -1,4 +1,6 @@
 using DawVcs.Application.Checkouts;
+using DawVcs.Application.Common;
+using DawVcs.Application.Diagnostics;
 using DawVcs.Application.Remotes;
 using DawVcs.Domain.Artifacts;
 using DawVcs.Domain.Common;
@@ -69,6 +71,80 @@ public sealed class CloneUseCaseTests : IDisposable
         {
             try { Directory.Delete(_tempDir, recursive: true); } catch { }
         }
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_Progress_ForwardsChildrenButCompletesOnlyOnce()
+    {
+        ConfigureChildProgress();
+        var progress = new RecordingRemoteProgress();
+
+        var result = await _useCase.ExecuteAsync(
+            new CloneRequest("https://example.com/Song.git", Path.Combine(_tempDir, "progress")), default, progress);
+
+        result.MaterializedFiles.Should().Contain("Song.flp");
+        progress.Reports.Should().Contain(p => p.Stage == OperationStage.TransferringObjects);
+        progress.Reports.Should().Contain(p => p.Stage == OperationStage.PublishingFiles);
+        progress.Reports.Count(p => p.Stage == OperationStage.Completed).Should().Be(1);
+        progress.Reports[^1].Stage.Should().Be(OperationStage.Completed);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_EmptyRemote_CompletesWithoutCheckout()
+    {
+        ConfigureChildProgress();
+        _context.GetRemoteTrackingCommit("origin", BranchName.Main).Returns((CommitId?)null);
+        var progress = new RecordingRemoteProgress();
+
+        await _useCase.ExecuteAsync(new CloneRequest("https://example.com/Song.git", Path.Combine(_tempDir, "empty")), default, progress);
+
+        progress.Reports.Count(p => p.Stage == OperationStage.Completed).Should().Be(1);
+        progress.Reports.Should().NotContain(p => p.Stage == OperationStage.PublishingFiles);
+        await _checkoutUseCase.DidNotReceiveWithAnyArgs().ExecuteFastForwardAsync(default!, default, default, default);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ExplicitNullProgress_RemainsCompatible()
+    {
+        var result = await _useCase.ExecuteAsync(
+            new CloneRequest("https://example.com/Song.git", Path.Combine(_tempDir, "null")), default, null);
+        result.ObjectsFetched.Should().Be(5);
+        result.MaterializedFiles.Should().Contain("Song.flp");
+        await _fetchUseCase.Received(1).ExecuteAsync(Arg.Any<FetchRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_DoctorStageObserverFailure_IsNotSwallowed()
+    {
+        ConfigureChildProgress();
+        var doctor = new DoctorUseCase(_ => throw new InvalidOperationException("Doctor should not run"));
+        var useCase = new CloneUseCase(_ => _context, _transportFactory, _fetchUseCase, _checkoutUseCase, doctor);
+        var progress = new RecordingRemoteProgress { ThrowOn = OperationStage.ProbingEnvironment };
+        var act = () => useCase.ExecuteAsync(
+            new CloneRequest("https://example.com/Song.git", Path.Combine(_tempDir, "doctor")), default, progress);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).Which.Should().BeSameAs(progress.ObserverFailure);
+        progress.Reports.Should().NotContain(p => p.Stage == OperationStage.Completed);
+    }
+
+    private void ConfigureChildProgress()
+    {
+        _fetchUseCase.ExecuteAsync(Arg.Any<FetchRequest>(), Arg.Any<CancellationToken>(), Arg.Any<IProgress<OperationProgress>>())
+            .Returns(call =>
+            {
+                var child = call.Arg<IProgress<OperationProgress>>();
+                child.Report(new OperationProgress(OperationStage.TransferringObjects, 5, 5));
+                child.Report(new OperationProgress(OperationStage.Completed));
+                return new FetchResult("origin", Array.Empty<UpdatedRemoteRef>(), 5, 1024, false);
+            });
+        _checkoutUseCase.ExecuteFastForwardAsync(Arg.Any<FastForwardTarget>(), Arg.Any<bool>(), Arg.Any<CancellationToken>(), Arg.Any<IProgress<OperationProgress>>())
+            .Returns(call =>
+            {
+                var child = call.Arg<IProgress<OperationProgress>>();
+                child.Report(new OperationProgress(OperationStage.PublishingFiles, 1, 1));
+                child.Report(new OperationProgress(OperationStage.Completed));
+                return new CheckoutResult(_headCommit, SnapshotId.Parse(new string('a', 64)), "C:\\repo", new List<string> { "Song.flp" });
+            });
     }
 
     [Fact]
