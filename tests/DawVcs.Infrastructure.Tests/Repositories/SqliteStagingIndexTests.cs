@@ -102,4 +102,24 @@ public sealed class SqliteStagingIndexTests : IDisposable
         staged.Should().HaveCount(1);
         staged[0].Path.Value.Should().Be("Recovered.wav");
     }
+
+    [Fact]
+    public async Task PreCancelledToken_ThrowsOperationCanceledExceptionAcrossAllMethods()
+    {
+        using var index = new SqliteStagingIndex(_testDir);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var token = cts.Token;
+
+        var path = new ArtifactPath("Test.wav");
+        var hash = new ContentHash(new byte[32]);
+        var entry = ArtifactEntry.Create(path, hash, 100);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => index.StageEntryAsync(entry, token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => index.UnstageEntryAsync(path, token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => index.GetStagedEntriesAsync(token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => index.ClearStagedEntriesAsync(token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => index.TryGetCachedHashAsync(path, 100, DateTimeOffset.UtcNow, token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => index.SetCachedHashAsync(path, 100, DateTimeOffset.UtcNow, hash, token));
+    }
 }

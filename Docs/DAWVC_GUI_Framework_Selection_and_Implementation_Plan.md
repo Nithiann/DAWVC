@@ -519,7 +519,7 @@ Iedere langdurige opdracht moet een `CancellationToken` respecteren, met special
 - pull;
 - `doctor` en `fsck`.
 
-**Auditstand 24 oktober 2026:** Scan/status hebben entry-/loop-/afrondingschecks gekregen. Doctor/fsck bewaren cancellation door hun eigen diagnostische catches en controleren entry/afronding; commit en transfers hebben entrychecks. Dependencyzoekwerk, optionele doctorsamenvattingen en publicatie onderdrukken of herclassificeren nog cancellation; rollback heeft expliciete vervolgproblemen. De [operatie-inventarisatie](GUI_Operation_Inventory.md) scheidt deze bestaande beperkingen van bovenstaande doelstelling. WP2-04/05/06 blijven open.
+**Auditstand 25 oktober 2026 (WP2-04 afgerond):** Alle use-cases (Scan, Status, Commit, Checkout, Doctor, Fsck, Fetch, Pull, Clone, Add, Log, Bind, Init, Switch, Remotes) controleren nu cancellation bij entry en in enumeratie-/hashing-loops. `LooseObjectStore` garandeert stream-disposal bij gefaalde of geannuleerde header-reads om Windows file-locks te voorkomen. `PublicationJournal` hergooit cancellation direct en voert rollback uit met een onafhankelijk token. Clone/pull doctor reporting en dependency discovery/resolutie slikken caller cancellation niet meer in. `SqliteStagingIndex` observeert cancellation via Dapper `CommandDefinition`. WP2-05/06 blijven open.
 
 ### 9.3 Preflight in plaats van verrassingsdialogs
 

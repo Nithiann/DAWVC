@@ -207,6 +207,10 @@ public sealed class PullUseCase
                             ResolvedAssetsCount: assets.Count(a => a.Status == BindingStatus.Verified),
                             MissingAssetsCount: assets.Count(a => a.Status != BindingStatus.Verified));
                     }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
                     catch
                     {
                         // Diagnostic evaluation must not block successful pull

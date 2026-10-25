@@ -118,4 +118,33 @@ public sealed class PublicationJournalTests : IDisposable
         (await File.ReadAllTextAsync(fileB)).Should().Be("Original B content (should be restored)");
         File.Exists(Path.Combine(_targetDir, "FileC.txt")).Should().BeFalse("failed create file must not exist");
     }
+
+    [Fact]
+    [Trait("Requirement", "FR-CHK-006")]
+    public async Task ApplyAsync_WhenCancelled_RollsBackAndRethrowsOperationCanceledException()
+    {
+        var fileA = Path.Combine(_targetDir, "FileA.txt");
+        await File.WriteAllTextAsync(fileA, "Original A content");
+
+        var stagedA = Path.Combine(_stagingDir, "FileA.txt");
+        await File.WriteAllTextAsync(stagedA, "New A content");
+
+        var plan = new CheckoutPlan(
+            [
+                new CheckoutAction(new ArtifactPath("FileA.txt"), CheckoutActionKind.Replace)
+            ],
+            []);
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await using (var journal = new PublicationJournal(_targetDir, _dotDawvcDir))
+        {
+            var act = () => journal.ApplyAsync(_stagingDir, plan, cts.Token);
+            await act.Should().ThrowAsync<OperationCanceledException>();
+        }
+
+        // Workspace must be rolled back / preserved
+        (await File.ReadAllTextAsync(fileA)).Should().Be("Original A content");
+    }
 }

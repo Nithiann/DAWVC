@@ -35,10 +35,12 @@ public sealed class LogUseCase : IUseCase<LogRequest, LogResult>
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        cancellationToken.ThrowIfCancellationRequested();
         using var context = _contextFactory(request.RepositoryDirectory);
         var currentBranch = context.GetCurrentBranch();
         var headCommitId = context.GetBranchCommit(currentBranch);
 
+        cancellationToken.ThrowIfCancellationRequested();
         if (!headCommitId.HasValue)
         {
             return new LogResult(Array.Empty<CommitLogEntry>());
@@ -49,6 +51,7 @@ public sealed class LogUseCase : IUseCase<LogRequest, LogResult>
 
         while (currentId.HasValue && (!request.Limit.HasValue || entries.Count < request.Limit.Value))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var commit = await context.LoadCommitAsync(currentId.Value, cancellationToken).ConfigureAwait(false);
             if (commit is null)
             {
@@ -66,6 +69,7 @@ public sealed class LogUseCase : IUseCase<LogRequest, LogResult>
             currentId = commit.Parents.Count > 0 ? commit.Parents[0] : null;
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return new LogResult(entries);
     }
 }

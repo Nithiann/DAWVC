@@ -48,7 +48,7 @@ public sealed class SqliteStagingIndex : IStagingIndex, IDisposable
                 await using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
 
-                await connection.ExecuteAsync("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;").ConfigureAwait(false);
+                await connection.ExecuteAsync(new CommandDefinition("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;", cancellationToken: cancellationToken)).ConfigureAwait(false);
 
                 const string createSql = @"
 CREATE TABLE IF NOT EXISTS staging_entries (
@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS filesystem_cache (
     checked_at INTEGER NOT NULL
 );
 ";
-                await connection.ExecuteAsync(createSql).ConfigureAwait(false);
+                await connection.ExecuteAsync(new CommandDefinition(createSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
                 _initialized = true;
             }
             catch (SqliteException ex) when (ex.SqliteErrorCode == 11 /* SQLITE_CORRUPT */ || ex.SqliteErrorCode == 26 /* SQLITE_NOTADB */)
@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS filesystem_cache (
                 await using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
 
-                await connection.ExecuteAsync("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;").ConfigureAwait(false);
+                await connection.ExecuteAsync(new CommandDefinition("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;", cancellationToken: cancellationToken)).ConfigureAwait(false);
                 const string createSql = @"
 CREATE TABLE IF NOT EXISTS staging_entries (
     path TEXT PRIMARY KEY,
@@ -99,7 +99,7 @@ CREATE TABLE IF NOT EXISTS filesystem_cache (
     checked_at INTEGER NOT NULL
 );
 ";
-                await connection.ExecuteAsync(createSql).ConfigureAwait(false);
+                await connection.ExecuteAsync(new CommandDefinition(createSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
                 _initialized = true;
             }
         }
@@ -119,6 +119,7 @@ CREATE TABLE IF NOT EXISTS filesystem_cache (
     public async Task StageEntryAsync(ArtifactEntry entry, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(entry);
+        cancellationToken.ThrowIfCancellationRequested();
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
         await using var connection = new SqliteConnection(_connectionString);
@@ -128,7 +129,7 @@ CREATE TABLE IF NOT EXISTS filesystem_cache (
 INSERT OR REPLACE INTO staging_entries (path, blob_id, hash, size, role, staged_at)
 VALUES (@path, @blob_id, @hash, @size, @role, @staged_at);
 ";
-        await connection.ExecuteAsync(sql, new
+        await connection.ExecuteAsync(new CommandDefinition(sql, new
         {
             path = entry.Path.Value,
             blob_id = entry.Blob.ToString(),
@@ -136,29 +137,31 @@ VALUES (@path, @blob_id, @hash, @size, @role, @staged_at);
             size = entry.Size,
             role = (int)entry.Role,
             staged_at = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-        }).ConfigureAwait(false);
+        }, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
     public async Task UnstageEntryAsync(ArtifactPath path, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
         await using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
 
         const string sql = "DELETE FROM staging_entries WHERE path = @path;";
-        await connection.ExecuteAsync(sql, new { path = path.Value }).ConfigureAwait(false);
+        await connection.ExecuteAsync(new CommandDefinition(sql, new { path = path.Value }, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<ArtifactEntry>> GetStagedEntriesAsync(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
         await using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
 
         const string sql = "SELECT path, blob_id, hash, size, role FROM staging_entries ORDER BY path;";
-        var rows = await connection.QueryAsync<StagedEntryRow>(sql).ConfigureAwait(false);
+        var rows = await connection.QueryAsync<StagedEntryRow>(new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         var entries = new List<ArtifactEntry>();
         foreach (var row in rows)
@@ -176,29 +179,31 @@ VALUES (@path, @blob_id, @hash, @size, @role, @staged_at);
 
     public async Task ClearStagedEntriesAsync(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
         await using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
 
         const string sql = "DELETE FROM staging_entries;";
-        await connection.ExecuteAsync(sql).ConfigureAwait(false);
+        await connection.ExecuteAsync(new CommandDefinition(sql, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
     public async Task<ContentHash?> TryGetCachedHashAsync(ArtifactPath path, long size, DateTimeOffset lastModifiedUtc, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
         await using var connection = new SqliteConnection(_connectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
 
         const string sql = "SELECT blake3_hash FROM filesystem_cache WHERE path = @path AND file_length = @size AND last_modified_utc = @lastModified;";
-        var hashHex = await connection.QuerySingleOrDefaultAsync<string>(sql, new
+        var hashHex = await connection.QuerySingleOrDefaultAsync<string>(new CommandDefinition(sql, new
         {
             path = path.Value,
             size = size,
             lastModified = lastModifiedUtc.ToUnixTimeMilliseconds()
-        }).ConfigureAwait(false);
+        }, cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         if (string.IsNullOrEmpty(hashHex))
         {
@@ -210,6 +215,7 @@ VALUES (@path, @blob_id, @hash, @size, @role, @staged_at);
 
     public async Task SetCachedHashAsync(ArtifactPath path, long size, DateTimeOffset lastModifiedUtc, ContentHash hash, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
 
         await using var connection = new SqliteConnection(_connectionString);
@@ -219,14 +225,14 @@ VALUES (@path, @blob_id, @hash, @size, @role, @staged_at);
 INSERT OR REPLACE INTO filesystem_cache (path, file_length, last_modified_utc, blake3_hash, checked_at)
 VALUES (@path, @size, @lastModified, @hash, @checked_at);
 ";
-        await connection.ExecuteAsync(sql, new
+        await connection.ExecuteAsync(new CommandDefinition(sql, new
         {
             path = path.Value,
             size = size,
             lastModified = lastModifiedUtc.ToUnixTimeMilliseconds(),
             hash = hash.ToString(),
             checked_at = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-        }).ConfigureAwait(false);
+        }, cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
     public void Dispose()

@@ -215,6 +215,7 @@ public sealed class FsckUseCase
             // Entries in snapshot
             foreach (var entry in snapshot.Project.Root.GetEntries())
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var blobHash = entry.Blob.Value;
                 reachableHashes.Add(blobHash);
 
@@ -240,6 +241,7 @@ public sealed class FsckUseCase
         int orphanCount = 0;
         foreach (var validObj in validObjects)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!reachableHashes.Contains(validObj))
             {
                 orphanCount++;
@@ -251,6 +253,7 @@ public sealed class FsckUseCase
             }
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         var repoIntegrity = new RepositoryIntegrityReport(
             TotalObjectsScanned: scannedObjects.Count,
             ValidObjectsCount: validObjects.Count,

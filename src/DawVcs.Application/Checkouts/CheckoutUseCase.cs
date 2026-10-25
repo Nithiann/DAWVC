@@ -67,6 +67,7 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
         ArgumentException.ThrowIfNullOrWhiteSpace(request.RepositoryDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.Reference);
 
+        cancellationToken.ThrowIfCancellationRequested();
         progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
         using var context = _contextFactory(request.RepositoryDirectory);
         var repoRoot = !string.IsNullOrWhiteSpace(context.RootPath)
@@ -405,6 +406,7 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
         ArgumentNullException.ThrowIfNull(target);
         ArgumentException.ThrowIfNullOrWhiteSpace(target.RepositoryDirectory);
 
+        cancellationToken.ThrowIfCancellationRequested();
         progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
         using var context = _contextFactory(target.RepositoryDirectory);
         var repoRoot = !string.IsNullOrWhiteSpace(context.RootPath)

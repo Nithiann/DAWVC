@@ -105,6 +105,7 @@ public static class DependencyDiscoveryService
                 int index = 0;
                 foreach (var element in doc.RootElement.EnumerateArray())
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     index++;
                     var rawName = element.GetProperty("Name").GetString() ?? "Unknown";
                     string? vendor = element.TryGetProperty("Vendor", out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String ? v.GetString() : null;
@@ -164,6 +165,10 @@ public static class DependencyDiscoveryService
                     handledOccurrences = true;
                 }
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch
             {
                 // Fallback to legacy PluginNames if parsing fails
@@ -175,6 +180,7 @@ public static class DependencyDiscoveryService
             var rawPlugins = pluginsStr.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             foreach (var rawPlugin in rawPlugins)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var identity = adapter != null ? adapter.NormalizePlugin(rawPlugin) : NormalizePluginIdentity(rawPlugin);
                 var role = adapter != null ? adapter.DeterminePluginRole(rawPlugin) : DeterminePluginRole(rawPlugin);
                 var policy = PortabilityPolicyEngine.DeterminePluginPolicy(identity);

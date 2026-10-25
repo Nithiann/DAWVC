@@ -130,6 +130,11 @@ public sealed class PublicationJournal : IAsyncDisposable
 
             return modifiedFiles;
         }
+        catch (OperationCanceledException)
+        {
+            await RollbackAsync().ConfigureAwait(false);
+            throw;
+        }
         catch (Exception ex)
         {
             await RollbackAsync().ConfigureAwait(false);

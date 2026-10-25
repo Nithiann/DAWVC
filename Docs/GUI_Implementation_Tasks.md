@@ -1,7 +1,7 @@
 <!--  --># DAWVC GUI — Takenlijst en voortgang
 
-**Laatst bijgewerkt:** 24 oktober 2026  
-**Status:** WP1 en WP2-01 t/m WP2-03 voltooid; voortgang aangesloten op alle geplande operaties, volledige cancellation/foutvertaling/recovery nog in uitvoering
+**Laatst bijgewerkt:** 25 oktober 2026
+**Status:** WP1 en WP2-01 t/m WP2-04 voltooid; voortgang en cancellation/disposal aangesloten op alle use cases en storage/indices, typed foutvertaling en rollback-borging in uitvoering
 
 **Ontwerpbron:** [GUI Framework Selection & Implementation Plan](DAWVC_GUI_Framework_Selection_and_Implementation_Plan.md)
 
@@ -20,13 +20,13 @@ Dit document is de centrale voortgangsregistratie voor de desktop-GUI. Het oorsp
 
 ## 2. Actuele voortgang
 
-**Eerstvolgende taak:** WP2-04 — resterende cancellation- en disposaltekorten in enumeratie, dependencyzoekwerk, adapters en I/O oplossen volgens de [operatie-inventarisatie](GUI_Operation_Inventory.md); begin met cancellationbehoud en cleanup van gedeeltelijk geopende streams.
+**Eerstvolgende taak:** WP2-05 — typed fouten aanvullen en centrale gebruikerscategorieën definiëren zonder exceptiontekst te parsen; timeout, annulering en incomplete rollback onderscheiden.
 
-**Lopende taken:** WP2-04 is gedeeltelijk uitgevoerd: scan/status-checks, cancellationbehoud en entry-/afrondingschecks in doctor/fsck, entrychecks in commit/transfers. Overige entrypoints en onderliggende I/O-/adapterpaden blijven open.
+**Lopende taken:** WP2-04 voltooid; WP2-05 t/m WP2-07 nog open binnen WP2.
 
-**Blokkades:** Geen voor verdere WP2-implementatie; Release-build en 510 tests zijn geslaagd. WP2 als geheel is nog niet voltooid.
+**Blokkades:** Geen; 527 tests geslaagd in Release-configuratie.
 
-**Aandachtspunten:** Onderliggend dependencyzoekwerk, optionele doctorsamenvattingen en publicatie kunnen cancellation nog onderdrukken/herclassificeren; doctor/fsck-catches zelf bewaren cancellation nu. Rollback is best-effort en fouten kunnen na duurzame publicatie optreden. SQLite-corruptieherstel kan staged entries wissen: dit moet vóór vieweracceptatie worden aangepakt. Fetch/pull-dry-runs schrijven tijdelijke metadata en kunnen stale sessies verwijderen. Adaptercache-invalidatie blijft WP4-05. Zie de inventarisatie voor bronnen en vervolggrenzen.
+**Aandachtspunten:** Rollback is best-effort en fouten kunnen na duurzame publicatie optreden. SQLite-corruptieherstel kan staged entries wissen: dit moet vóór vieweracceptatie worden aangepakt (WP5-08). Fetch/pull-dry-runs schrijven tijdelijke metadata en kunnen stale sessies verwijderen. Adaptercache-invalidatie blijft WP4-05. Zie de inventarisatie voor bronnen en vervolggrenzen.
 
 | Werkpakket | Status | Afhankelijkheden | Oplevering |
 | --- | --- | --- | --- |
@@ -67,7 +67,7 @@ Werkpakketten zijn opleverbaar in kleine wijzigingen. Packaging, CI, privacy en 
 - [x] WP2-01 — Bestaande cancellation, synchronische werkpaden, fouttypen en dry-run-neveneffecten inventariseren per langdurige use-case; vastgelegd in `GUI_Operation_Inventory.md`.
 - [x] WP2-02 — `OperationProgress` in Application introduceren; optioneel per aanroep ontsluiten met behoud van bestaande CLI-call-sites. Contract en aanvullende overloads geleverd voor scan/status; overige integratie valt onder WP2-03.
 - [x] WP2-03 — Voortgang aansluiten op scan/status, commit, checkout/restore, diagnostics en transfers waar zinvol; onbekende totalen ondersteunen. Geleverd voor scan/status, commit, checkout/restore en fast-forward, doctor/fsck en fetch/clone/pull; nested completion en legacy-overloads getest.
-- [ ] WP2-04 — Cancellation tijdens enumeratie, hashing, adapterwerk en I/O controleren en ontbrekende checks toevoegen. **Deelopgeleverd:** entry-/enumeratie-/classificatie-/afrondingschecks voor scan/status en callercheck na adapterwerk; doctor/fsck sluiten cancellation uit van hun diagnostische catches en checken entry/afronding. Commit en transfers hebben entrychecks. Onderliggende I/O-/adapter-/resolverpaden en overige entrypoints blijven open.
+- [x] WP2-04 — Cancellation tijdens enumeratie, hashing, adapterwerk en I/O controleren en ontbrekende checks toevoegen. Stream-disposal bij gefaalde/geannuleerde header-read gerealiseerd in LooseObjectStore. Cancellationbehoud in PublicationJournal (rollback met uncancelled token en directe rethrow), Clone/Pull optionele doctor reporting en Dependency Discovery/Resolver. Entry- en loop-checks toegevoegd aan alle use cases (Checkout, Commit, Add, Log, Bind, Switch, Init, Fsck, Doctor, Remotes), SQLite-stagingindex (Dapper CommandDefinition) en QuarantineObjectStore.
 - [ ] WP2-05 — Typed fouten aanvullen en centrale gebruikerscategorieën definiëren zonder exceptiontekst te parsen; timeout, annulering en incomplete rollback onderscheiden.
 - [ ] WP2-06 — Veilige annuleringsgrenzen en rollbackbeleid vastleggen en testen; cleanup mag niet door een reeds geannuleerd token worden overgeslagen.
 - [ ] WP2-07 — Contract-, cancellation- en regressietests uitvoeren; Application-contracten en beperkingen documenteren.
@@ -220,5 +220,39 @@ Bestaande historische plannen behouden hun oorspronkelijke releasescope. Voeg ve
   - `git diff --check`: geslaagd zonder whitespacefouten.
   - Python-documentatiecontrole: alle 46 lokale linkdoelen in de vijf bijgewerkte documenten bestaan; WP2-01 t/m WP2-03 afgevinkt en WP2-04 t/m WP2-07 open. Ankerinhoud niet automatisch gevalideerd.
 - **Beperkingen en vervolg:** Volledige cancellation, typed timeout-/foutuitkomsten en aantoonbaar veilige rollback zijn nog niet geleverd; WP2-04 is de volgende taak. Geen UI-threadmarshalling/throttling, verse adaptercaches, strikt schrijfloze dry-runs of stagingbehoud bij SQLite-corruptieherstel beloofd. Een callbackfout of postpublicatiefout kan nog steeds optreden nadat al duurzame wijzigingen zijn gemaakt; de operatietaak/resultaat blijft leidend.
+
+### 25 oktober 2026 — WP2-04 afgerond: cancellation en stream-disposal in alle use cases en storage
+
+- **Taken:** WP2-04 afgerond; WP2-05 t/m WP2-07 blijven open.
+- **Opgeleverd:**
+  - `LooseObjectStore.OpenPayloadStreamAsync`: Stream-disposal gegarandeerd via `try ... catch { await stream.DisposeAsync(); throw; }` tijdens het lezen van object headers. Hiermee worden open file-handles op Windows voorkomen bij hash mismatches, corrupte headers of caller cancellation.
+  - `PublicationJournal.ApplyAsync`: Vangt `OperationCanceledException` expliciet op, voert best-effort rollback uit via een uncancelled token (`CancellationToken.None`) zodat opruiming niet wordt afgebroken door de actieve cancellation, en hergooit direct `OperationCanceledException` (in plaats van deze in te kapselen in `CheckoutStagingException`).
+  - `CloneUseCase` & `PullUseCase`: Optionele doctor-rapportage vangt en hergooit `OperationCanceledException` expliciet, zodat caller cancellation nooit meer wordt onderdrukt als een niet-fatale diagnostische fout.
+  - `DependencyDiscoveryService.DiscoverAsync` & `DependencyResolverPipeline.SearchByHashAsync`: Cancellation-checks toegevoegd aan JSON-element loops, legacy plugin enumeratie en directory scanning. `OperationCanceledException` wordt niet meer ingeslikt of omgezet in ontbrekende dependencies/fallback.
+  - Entry- en loop-cancellationchecks toegevoegd aan alle resterende use cases:
+    - `CheckoutUseCase.cs`: Pre-context checks in `ExecuteCoreAsync` en `ExecuteFastForwardCoreAsync`.
+    - `CommitUseCase.cs`: Loop checks bij dependency discovery/consolidation, tracked entries, staged entries en vóór snapshot creation.
+    - `AddUseCase.cs`: Pre-context check, cancellation check vóór directory enumeratie en per kandidaatbestand.
+    - `LogUseCase.cs`: Pre-context check (inclusief lege HEAD), loop check per commit in de first-parent history en vóór afronding.
+    - `BindDependencyUseCase.cs`: Pre-context check en check vóór het wegschrijven van de lokale binding.
+    - `SwitchUseCase.cs`: Pre-context check en check vóór early-return op reeds actieve branch.
+    - `InitRepositoryUseCase.cs`: Pre-context check en cancellation rethrow in de idempotency controle.
+    - `FsckUseCase.cs`: Loop checks bij snapshot entries en orphan objects.
+    - `RemoteUseCase.cs`: Asynchrone overloads toegevoegd voor `AddRemoteAsync`, `RemoveRemoteAsync` en `ListRemotesAsync` met actieve `CancellationToken`-observatie.
+    - `QuarantineObjectStore.cs`: Tokens geobserveerd in streamcreatie en sessiepromotie.
+    - `SqliteStagingIndex.cs`: Token checks bij methode-entry op alle publieke API's en `CommandDefinition` met cancellation token doorgegeven aan Dapper queries en executions.
+    - `DoctorUseCase.cs`: Unsealed en `ExecuteAsync` virtueel gemaakt; loop checks toegevoegd bij dependency inspecties, health probes en adapter enumeration.
+- **Tests:** 17 nieuwe gerichte tests toegevoegd (totaal 527 tests in de solution, 100% geslaagd):
+  - `LooseObjectStoreTests.cs`: Verificatie dat streams direct worden disposed bij hashmismatch en cancellation, zodat bestanden onmiddellijk kunnen worden verwijderd zonder file locks.
+  - `PublicationJournalTests.cs`: Verificatie dat cancellation leidt tot rollback en directe `OperationCanceledException`.
+  - `SqliteStagingIndexTests.cs`: Pre-cancellation test over alle index-methoden.
+  - `OperationCancellationTests.cs`: 11 tests voor pre-cancellation op Checkout, Fast-Forward, Add, Log, BindDependency, Switch, InitRepository, RemoteUseCase, Clone/Pull doctor reporting, DependencyDiscovery en Resolver search.
+- **Documentatie:** `GUI_Implementation_Tasks.md`, `GUI_Operation_Inventory.md` en `Technical Design.md` geactualiseerd met de geleverde garanties.
+- **Uitgevoerde validatie:**
+  - `dotnet build DawVcs.slnx -c Release --no-restore`: geslaagd met 0 waarschuwingen en 0 fouten.
+  - `dotnet test DawVcs.slnx -c Release --no-build --no-restore --logger "console;verbosity=minimal"`: 527/527 geslaagd, geen overgeslagen tests.
+  - `dotnet format DawVcs.slnx --verify-no-changes --no-restore`: geslaagd zonder codestijlwijzigingen.
+  - `git diff --check`: geslaagd zonder whitespacefouten.
+- **Beperkingen en vervolg:** Rollback blijft best-effort; fouten na duurzame refpublicatie kunnen de repository in een inconsistente toestand achterlaten als rollback faalt. SQLite-corruptieherstel wist nog steeds staged entries (WP5-08). WP2-05 (typed fouten en centrale categorieën) is de volgende stap.
 
 Gebruik bij volgende updates hetzelfde formaat: datum, taak-ID's, bestanden/resultaten, uitgevoerde validatie en open beperkingen.

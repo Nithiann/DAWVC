@@ -15,7 +15,7 @@ public sealed record DoctorRequest(string RepositoryDirectory);
 /// <summary>
 /// Voert een 3-domeinen integriteitsdiagnose uit: Artifact, Dependency en Environment (FR-DOC-001..010, TD §31).
 /// </summary>
-public sealed class DoctorUseCase
+public class DoctorUseCase
 {
     private readonly Func<string, IRepositoryContext> _contextFactory;
     private readonly IDawAdapterRegistry? _adapterRegistry;
@@ -28,10 +28,10 @@ public sealed class DoctorUseCase
         _adapterRegistry = adapterRegistry;
     }
 
-    public Task<DoctorReport> ExecuteAsync(DoctorRequest request, CancellationToken cancellationToken = default)
+    public virtual Task<DoctorReport> ExecuteAsync(DoctorRequest request, CancellationToken cancellationToken = default)
         => ExecuteAsync(request, cancellationToken, null);
 
-    public async Task<DoctorReport> ExecuteAsync(DoctorRequest request, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
+    public virtual async Task<DoctorReport> ExecuteAsync(DoctorRequest request, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.RepositoryDirectory);
@@ -164,6 +164,7 @@ public sealed class DoctorUseCase
             progress?.Report(new OperationProgress(OperationStage.ResolvingDependencies, 0, dependencies.Count));
             foreach (var rawDep in dependencies)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var dep = rawDep;
 
                 // Als er een gecommitte snapshot is, gebruik dan de gecommitteerde vereisten (hashes en plugin requirements)
@@ -250,6 +251,7 @@ public sealed class DoctorUseCase
         progress?.Report(new OperationProgress(OperationStage.ProbingEnvironment, 0, adapters.Count));
         foreach (var adapter in adapters)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var findings = await adapter.ProbeEnvironmentAsync(cancellationToken).ConfigureAwait(false);
             foreach (var f in findings)
             {
@@ -278,6 +280,7 @@ public sealed class DoctorUseCase
             Findings: envFindings);
 
         // Aggregatie
+        cancellationToken.ThrowIfCancellationRequested();
         var blockingCount = artifactHealthList.Count(a => a.IsBlocking) + dependencyHealthList.Count(d => d.IsBlocking);
         var warningsCount = artifactHealthList.Count(a => a.Status == HealthStatus.Warning)
             + dependencyHealthList.Count(d => !d.IsBlocking && d.Status != BindingStatus.Verified)

@@ -46,12 +46,14 @@ public sealed class SwitchUseCase
             throw new ArgumentException(validationError ?? $"Invalid branch name '{request.BranchName}'.", nameof(request));
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         using var context = _contextFactory(request.RepositoryDirectory);
         var currentBranch = context.GetCurrentBranch();
 
         // 1. Reeds op de doelbranch?
         if (targetBranch == currentBranch && !request.CreateBranch)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var headCommit = context.GetBranchCommit(currentBranch);
             return new SwitchResult(
                 Branch: currentBranch,

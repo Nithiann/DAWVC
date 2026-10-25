@@ -40,6 +40,7 @@ public sealed class AddUseCase : IUseCase<AddRequest, AddResult>
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.RepositoryDirectory);
 
+        cancellationToken.ThrowIfCancellationRequested();
         using var context = _contextFactory(request.RepositoryDirectory);
         var repoRoot = Path.GetFullPath(context.RootPath);
         var config = context.LoadConfig();
@@ -51,6 +52,7 @@ public sealed class AddUseCase : IUseCase<AddRequest, AddResult>
             var files = Directory.GetFiles(repoRoot, "*", SearchOption.AllDirectories);
             foreach (var file in files)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var relPath = Path.GetRelativePath(repoRoot, file);
                 var segments = relPath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                 if (segments.Any(s => IgnoredDirectoryNames.Contains(s) || s.StartsWith('.')))
@@ -65,6 +67,7 @@ public sealed class AddUseCase : IUseCase<AddRequest, AddResult>
         {
             foreach (var path in request.Paths)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var fullPath = Path.IsPathRooted(path) ? Path.GetFullPath(path) : Path.GetFullPath(Path.Combine(repoRoot, path));
 
                 if (!fullPath.StartsWith(repoRoot, StringComparison.OrdinalIgnoreCase))
@@ -77,6 +80,7 @@ public sealed class AddUseCase : IUseCase<AddRequest, AddResult>
                     var files = Directory.GetFiles(fullPath, "*", SearchOption.AllDirectories);
                     foreach (var f in files)
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
                         var rel = Path.GetRelativePath(repoRoot, f);
                         var segments = rel.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                         if (!segments.Any(s => IgnoredDirectoryNames.Contains(s) || s.StartsWith('.')))
@@ -104,6 +108,7 @@ public sealed class AddUseCase : IUseCase<AddRequest, AddResult>
 
         foreach (var filePath in candidateFiles.Distinct(StringComparer.OrdinalIgnoreCase))
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var relPath = Path.GetRelativePath(repoRoot, filePath);
             if (!ArtifactPath.TryCreate(relPath, out var artifactPath, out var error))
             {

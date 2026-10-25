@@ -113,6 +113,7 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
         progress?.Report(new OperationProgress(OperationStage.ResolvingDependencies, 0, dependencyTotal));
         foreach (var rawDep in dependencyGraph.Dependencies)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (rawDep is AssetDependency assetDep && assetDep.Portability.Mode == PortabilityMode.Bundle)
             {
                 string? sourceFilePath = null;
@@ -220,6 +221,7 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
                 {
                     foreach (var tracked in parentSnapshot.Project.Root.GetEntries())
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
                         if (tracked.Path == config.PrimaryArtifact)
                         {
                             continue;
@@ -259,6 +261,7 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
         var stagedEntries = await context.StagingIndex.GetStagedEntriesAsync(cancellationToken).ConfigureAwait(false);
         foreach (var staged in stagedEntries)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var stagedFullPath = Path.Combine(context.RootPath, staged.Path.Value);
             if (File.Exists(stagedFullPath))
             {
@@ -297,6 +300,7 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
         }
 
         // 6. Build ProjectArtifact (SingleFileArtifact or DirectoryArtifact)
+        cancellationToken.ThrowIfCancellationRequested();
         var entriesList = entriesByPath.Values.ToList();
         ArtifactRoot root = entriesList.Count == 1
             ? new SingleFileArtifact(entriesList[0])

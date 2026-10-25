@@ -33,6 +33,7 @@ public sealed class BindDependencyUseCase : IUseCase<BindDependencyRequest, Bind
         ArgumentException.ThrowIfNullOrWhiteSpace(request.DependencyId);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.LocalPath);
 
+        cancellationToken.ThrowIfCancellationRequested();
         using var context = _contextFactory(request.RepositoryDirectory);
         var depId = new DependencyId(request.DependencyId);
         var fullPath = Path.GetFullPath(request.LocalPath);
@@ -89,6 +90,7 @@ public sealed class BindDependencyUseCase : IUseCase<BindDependencyRequest, Bind
             DateTimeOffset.UtcNow);
 
         // 3. Sla lokaal op (buiten commits)
+        cancellationToken.ThrowIfCancellationRequested();
         await context.LocalBindings.SaveAsync(binding, cancellationToken).ConfigureAwait(false);
 
         return new BindDependencyResult(binding);
