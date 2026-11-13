@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+  <PropertyGroup><OutputType>WinExe</OutputType><AssemblyName>DawVcs.GuiSpike.Photino</AssemblyName><RootNamespace>DawVcs.GuiSpike.PhotinoHost</RootNamespace></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Shared/Shared.csproj" />
+    <PackageReference Include="Photino.Blazor" />
+    <Content Update="wwwroot/**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

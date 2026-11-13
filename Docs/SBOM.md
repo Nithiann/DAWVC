@@ -43,3 +43,26 @@
   - `blake3` native C acceleration is dual-licensed under CC0 and Apache-2.0.
 - **Single-File Bundling**:
   All assemblies and required native libraries are compressed into the single `dawvc.exe` binary without external runtime obligations.
+
+## GUI WP3 experiment inventory (13 November 2026)
+
+These dependencies are confined to `spikes/gui/Directory.Packages.props` and the
+isolated spike solution. They are not a production Desktop framework selection.
+
+| Dependency | Pinned version | NuGet license metadata | Scope |
+| --- | --- | --- | --- |
+| Avalonia / Avalonia.Desktop / Avalonia.Themes.Fluent | 12.1.6 | MIT | Avalonia prototype |
+| Photino.Blazor | 4.0.13 | Apache-2.0 | Photino prototype |
+| Photino.NET (resolved) | 4.0.16 | Apache-2.0 | Native window/dialog wrapper |
+| Photino.Native (resolved) | 4.0.22 | Apache-2.0 | Native Photino binaries |
+| Avalonia.Headless.XUnit | 12.1.6 | MIT | Prototype tests only |
+| xunit.v3 | 3.2.2 | Apache-2.0 | Avalonia 12 test requirement; production tests unchanged |
+
+WPF uses the WindowsDesktop framework; Photino additionally requires the Windows
+WebView2 runtime. That runtime is not bundled by .NET self-contained publication.
+The resolved [package-license metadata](gui/evidence/package-license-metadata.json)
+records all three prototypes' NuGet package graphs. ANGLE's native license is a
+file containing BSD-style redistribution/attribution requirements; preserve its
+notices in a future distributable. This inventory is not a full native/OS license
+or vulnerability audit. No commercial Avalonia controls are referenced. The
+historical product audit above is not extended to these experimental dependencies.

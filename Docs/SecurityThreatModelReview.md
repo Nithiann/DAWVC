@@ -105,3 +105,21 @@ All runtime dependencies in `src/` were analyzed for licensing terms and potenti
 - **Bounded Concurrency (`NFR-PERF-006`):**
   - Hashing and filesystem scanning leverage `ConcurrencyLimiter` bounded to `Math.Clamp(ProcessorCount, 1, 8)`.
 
+
+## GUI WP3 prototype review (13 November 2026)
+
+The three experimental hosts in `spikes/gui` call the shared engine directly and
+show only sanitized failure categories. They offer no staging, commit, checkout,
+branch or remote mutators. Opening a path validates repository markers before
+context construction; real status/doctor still have metadata side effects. Use
+only disposable generated fixtures until WP5-08 cache recovery is resolved.
+
+Photino hosts only packaged local HTML/CSS/Blazor content and has no external
+links, remote content feature or custom JavaScript-to-filesystem bridge in this
+prototype. WebView file-system access is disabled; the native folder dialog remains a host
+service. The upstream Photino.Blazor `PhotinoWebViewManager` explicitly notes
+that incoming message origins are treated as the app origin, rather than being
+reported by the native window. Treat navigation/origin isolation as an unresolved
+framework security review item before any production choice; do not enable remote
+navigation or untrusted HTML. This spike is not approval of a general web bridge.
+WebView2 availability and native runtime notices also require Windows validation.

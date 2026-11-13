@@ -1,0 +1,58 @@
+@implements IDisposable
+@inject SpikeSession Session
+@inject Photino.NET.PhotinoWindow Window
+
+<main class="@(_dark ? "dark" : "light")">
+    <h1>Photino WP3 prototype</h1>
+    <p>Disposable repository only; 10,000 synthetic rows below are not repository data.</p>
+    <div class="toolbar">
+        <input aria-label="Repository directory" @bind="_path" disabled="@(!Session.CanOpen)" />
+        <button @onclick="Choose" disabled="@(!Session.CanOpen)">Choose folder</button>
+        <button @onclick="Open" disabled="@(!Session.CanOpen)">Open path</button>
+    </div>
+    <div class="toolbar">
+        @foreach (var operation in new[] { "Status", "Scan", "Doctor" })
+        {
+            <button @onclick="() => Session.RunAsync(operation)" disabled="@(!Session.CanStart)">@operation</button>
+        }
+        <button @onclick="Session.Cancel" disabled="@(!Session.Busy)">Cancel</button>
+        <button @onclick="() => _dark = !_dark">Dark / light</button>
+    </div>
+    <p role="status">@Session.Summary</p>
+    <p>@Session.ProgressText</p>
+    <input aria-label="Filter synthetic assets" placeholder="Filter synthetic assets" value="@Session.Filter" @oninput="Filter" />
+    <p>@Session.RowCount synthetic rows</p>
+    <div class="rows" tabindex="0" aria-label="Synthetic asset list">
+        <Virtualize Items="_rows" Context="row" ItemSize="32">
+            <div class="row"><span>@row.Path</span><span>@row.State</span><span>@row.Bytes</span></div>
+        </Virtualize>
+    </div>
+</main>
+
+@code {
+    private string _path = "";
+    private bool _dark;
+    private ICollection<AssetRow> _rows = Array.Empty<AssetRow>();
+    protected override void OnInitialized()
+    {
+        _rows = Session.Rows.ToArray();
+        Session.PropertyChanged += Changed;
+    }
+    private void Changed(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        => _ = InvokeAsync(() =>
+        {
+            if (e.PropertyName == nameof(SpikeSession.Rows)) _rows = Session.Rows.ToArray();
+            StateHasChanged();
+        });
+    private void Filter(ChangeEventArgs e) => Session.Filter = e.Value?.ToString() ?? "";
+    private void Open() => Session.Open(_path);
+    private void Choose()
+    {
+        Window.Invoke(() =>
+        {
+            var paths = Window.ShowOpenFolder("Disposable DAWVC repository");
+            if (paths is { Length: > 0 }) _ = InvokeAsync(() => { _path = paths[0]; Session.Open(_path); });
+        });
+    }
+    public void Dispose() => Session.PropertyChanged -= Changed;
+}

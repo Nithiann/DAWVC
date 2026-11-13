@@ -1,0 +1,21 @@
+<Window x:Class="DawVcs.GuiSpike.WpfHost.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="DAWVC — WPF WP3 spike" Width="1100" Height="760" AllowDrop="True" Drop="DropFolder" Background="{DynamicResource SpikeBackground}" Foreground="{DynamicResource SpikeForeground}">
+  <Window.Resources>
+    <SolidColorBrush x:Key="SpikeBackground" Color="#FAFAFA"/><SolidColorBrush x:Key="SpikeForeground" Color="#171717"/>
+    <Style TargetType="Button"><Setter Property="Background" Value="{DynamicResource SpikeBackground}"/><Setter Property="Foreground" Value="{DynamicResource SpikeForeground}"/><Setter Property="Padding" Value="8"/></Style>
+    <Style TargetType="TextBox"><Setter Property="Background" Value="{DynamicResource SpikeBackground}"/><Setter Property="Foreground" Value="{DynamicResource SpikeForeground}"/><Setter Property="Padding" Value="8"/></Style>
+    <Style TargetType="ListBox"><Setter Property="Background" Value="{DynamicResource SpikeBackground}"/><Setter Property="Foreground" Value="{DynamicResource SpikeForeground}"/></Style>
+  </Window.Resources>
+  <Grid Margin="16">
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+    <TextBlock Text="WP3 prototype — disposable repository; 10,000 synthetic rows" />
+    <DockPanel Grid.Row="1"><Button DockPanel.Dock="Right" Content="Choose folder" Click="Choose" IsEnabled="{Binding CanOpen}"/><TextBox x:Name="RepositoryPath" IsEnabled="{Binding CanOpen}" /></DockPanel>
+    <StackPanel Grid.Row="2" Orientation="Horizontal">
+      <Button Content="Open path" Click="OpenPath" IsEnabled="{Binding CanOpen}"/><Button Content="Status" Click="Run" IsEnabled="{Binding CanStart}"/><Button Content="Scan" Click="Run" IsEnabled="{Binding CanStart}"/><Button Content="Doctor" Click="Run" IsEnabled="{Binding CanStart}"/><Button Content="Cancel" Click="Cancel" IsEnabled="{Binding Busy}"/><Button Content="Dark / light" Click="ToggleTheme"/>
+    </StackPanel>
+    <TextBlock Grid.Row="3" Text="{Binding Summary}" TextWrapping="Wrap"/><TextBlock Grid.Row="4" Text="{Binding ProgressText}"/>
+    <TextBox Grid.Row="5" Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Filter synthetic assets"/>
+    <ListBox Grid.Row="6" x:Name="Assets" ItemsSource="{Binding Rows}" ScrollViewer.CanContentScroll="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+      <ListBox.ItemTemplate><DataTemplate><Grid Width="980"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="120"/><ColumnDefinition Width="120"/></Grid.ColumnDefinitions><TextBlock Text="{Binding Path}"/><TextBlock Grid.Column="1" Text="{Binding State}"/><TextBlock Grid.Column="2" Text="{Binding Bytes}"/></Grid></DataTemplate></ListBox.ItemTemplate>
+    </ListBox>
+  </Grid>
+</Window>

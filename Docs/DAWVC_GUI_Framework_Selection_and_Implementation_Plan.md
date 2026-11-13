@@ -6,6 +6,9 @@
 **Doel:** Een zelfstandig beslis- en implementatiedocument voor het toevoegen van een desktop-GUI aan DAWVC.  
 **Uitvoering en voortgang:** [GUI-takenlijst per werkpakket](GUI_Implementation_Tasks.md). Deze takenlijst is de centrale statusregistratie; dit document blijft de ontwerp- en besluitvormingsbron.
 
+**WP3-stand 13 november 2026:** Geïsoleerde Avalonia-, WPF- en Photino.Blazor-prototypes staan in `spikes/gui`. Het [meetprotocol](gui/WP3_Measurement_Protocol.md) is vooraf vastgelegd; [resultaten en ontbrekend Windows-bewijs](gui/WP3_Results.md) worden apart bijgehouden. [ADR-GUI-001](adr/ADR-GUI-001-desktop-framework.md) is Proposed: er is nog geen definitieve frameworkkeuze en geen productie-Desktop-project.
+
+
 ---
 
 ## 1. Samenvatting

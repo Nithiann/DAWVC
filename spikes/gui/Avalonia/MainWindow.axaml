@@ -1,0 +1,27 @@
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="DawVcs.GuiSpike.AvaloniaHost.MainWindow" Title="DAWVC — Avalonia WP3 spike" Width="1100" Height="760">
+  <Grid Margin="16" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*">
+    <TextBlock Text="WP3 prototype — use a disposable repository. 10,000 synthetic rows." />
+    <Grid Grid.Row="1" ColumnDefinitions="*,Auto">
+      <TextBox x:Name="RepositoryPath" PlaceholderText="Repository directory" IsEnabled="{Binding CanOpen}" />
+      <Button Grid.Column="1" Content="Choose folder" Click="Choose" IsEnabled="{Binding CanOpen}" />
+    </Grid>
+    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
+      <Button Content="Open path" Click="OpenPath" IsEnabled="{Binding CanOpen}" />
+      <Button Content="Status" Click="Run" IsEnabled="{Binding CanStart}" />
+      <Button Content="Scan" Click="Run" IsEnabled="{Binding CanStart}" />
+      <Button Content="Doctor" Click="Run" IsEnabled="{Binding CanStart}" />
+      <Button Content="Cancel" Click="Cancel" IsEnabled="{Binding Busy}" />
+      <Button Content="Dark / light" Click="ToggleTheme" />
+    </StackPanel>
+    <TextBlock Grid.Row="3" Text="{Binding Summary}" TextWrapping="Wrap" />
+    <TextBlock Grid.Row="4" Text="{Binding ProgressText}" />
+    <TextBox Grid.Row="5" PlaceholderText="Filter synthetic assets" Text="{Binding Filter, Mode=TwoWay}" />
+    <ListBox Grid.Row="6" x:Name="Assets" ItemsSource="{Binding Rows}">
+      <ListBox.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate></ListBox.ItemsPanel>
+      <ListBox.ItemTemplate><DataTemplate>
+        <Grid ColumnDefinitions="*,120,120"><TextBlock Text="{Binding Path}" /><TextBlock Grid.Column="1" Text="{Binding State}" /><TextBlock Grid.Column="2" Text="{Binding Bytes}" /></Grid>
+      </DataTemplate></ListBox.ItemTemplate>
+    </ListBox>
+  </Grid>
+</Window>

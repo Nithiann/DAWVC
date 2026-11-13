@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><AssemblyName>DawVcs.GuiSpike.Harness</AssemblyName></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Shared/Shared.csproj" />
+    <Compile Include="../../../tests/DawVcs.Adapters.FLStudio.Tests/Fixtures/FlpFixtureGenerator.cs" Link="FlpFixtureGenerator.cs" />
+  </ItemGroup>
+</Project>

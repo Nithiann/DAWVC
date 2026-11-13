@@ -1,7 +1,7 @@
 <!--  --># DAWVC GUI — Takenlijst en voortgang
 
 **Laatst bijgewerkt:** 13 november 2026
-**Status:** WP1 en WP2 voltooid; frameworkspikes (WP3) zijn de volgende stap.
+**Status:** WP1 en WP2 voltooid; WP3 in uitvoering met drie geïsoleerde frameworkprototypes.
 
 **Ontwerpbron:** [GUI Framework Selection & Implementation Plan](DAWVC_GUI_Framework_Selection_and_Implementation_Plan.md)
 
@@ -20,11 +20,11 @@ Dit document is de centrale voortgangsregistratie voor de desktop-GUI. Het oorsp
 
 ## 2. Actuele voortgang
 
-**Eerstvolgende taak:** WP3-02 — Avalonia-spike en gedeelde meetfixtures uitvoeren volgens `gui/WP3_Measurement_Protocol.md`.
+**Eerstvolgende taak:** WP3-02 t/m WP3-05 — native Windows-slices en vergelijkingsmetingen uitvoeren volgens `gui/WP3_Measurement_Protocol.md`; daarna pas het frameworkbesluit (WP3-06).
 
-**Lopende taken:** WP3; WP3-01 afgerond vóór implementatie en metingen.
+**Lopende taken:** WP3-02/03/04: prototypes geïmplementeerd; native Windows-validatie open. WP3-05/06 blijven open.
 
-**Blokkades:** Implementatievalidatie geslaagd (534 Release-tests). PR-aanmaak via GitHub API geblokkeerd: `gh auth status` meldt een ongeldig token en `gh pr list` krijgt `Forbidden`.
+**Blokkades:** Deze Linux-omgeving heeft geen native Windows-runtime. Avalonia native start faalt op `XOpenDisplay`; Photino native start mist `libwebkit2gtk-4.1.so.0`. Windows-interactie/performance kan hier niet worden afgetekend. GitHub API-toegang voor PR-aanmaak was in WP2 geblokkeerd (`Forbidden`); branchpush werkt.
 
 **Aandachtspunten:** Rollback probeert alle herstelacties; falen wordt typed gemeld en beschikbare journalback-ups blijven bewaard. Fouten kunnen na duurzame publicatie optreden. SQLite-corruptieherstel kan staged entries wissen: dit moet vóór vieweracceptatie worden aangepakt (WP5-08). Fetch/pull-dry-runs schrijven tijdelijke metadata en kunnen stale sessies verwijderen. Adaptercache-invalidatie blijft WP4-05. Zie de inventarisatie voor bronnen en vervolggrenzen.
 
@@ -274,3 +274,14 @@ Gebruik bij volgende updates hetzelfde formaat: datum, taak-ID's, bestanden/resu
 - Budgetten, fixtures, meetherhalingen en Windows-knock-outchecks vooraf vastgelegd in `gui/WP3_Measurement_Protocol.md`.
 - Nieuwe branch `spike/gui-wp3-framework-comparison` expliciet op verzoek aangemaakt vanaf `feat/gui-wp2-operation-errors` (`6976c5b`). Geen extra branches per prototype.
 - Geen framework gekozen; WP3-02 t/m WP3-06 blijven open tot hun bewijs beschikbaar is.
+
+
+### 13 november 2026 — WP3-prototypes geïmplementeerd; Windows-validatie open
+
+- **Taken:** WP3-02/03/04 gedeeltelijk; WP3-05/06 nog open. Alleen WP3-01 is volledig afgevinkt.
+- **Opgeleverd:** `spikes/gui/GuiSpikes.slnx` met Shared, Avalonia, Wpf, Photino, Harness en Tests; frameworkpackages alleen in de lokale `Directory.Packages.props`. Bestaande productieprojecten en productiepackages ongewijzigd. Echte status/scan/doctor, native folderpickers, 10.000 synthetische rijen, filtering/virtualisatie, thema en cancellation/close-coördinatie. Avalonia/WPF hebben folderdrop; Photino-drop blijft open.
+- **Veiligheid/lifecycle:** Worker-thread inclusief synchronische backendstart, verse providers per operatie, gesamplede progress en operatie-ID voor late updates, geblokkeerde repositorywissels tijdens werk, invalid-foldercheck vóór contextconstructie, annuleren en afwachten bij sluiten. Photino-webviewfilesystemtoegang uitgeschakeld; upstream oorsprongvalidatie als reviewpunt vastgelegd.
+- **Fixture/metingen:** Harness genereert uitsluitend synthetische FLP/WAV en optioneel een echte 256 MiB asset; bestaande doelen worden geweigerd. Backendfouten leveren een niet-nul exitcode. `--cancel-status` accepteert alleen de gemarkeerde grote fixture en meet vanaf vóór tokenannulering tot einde taak.
+- **Windows-vervolg:** `publish.ps1` publiceert tweemaal en vergelijkt hashes; `smoke-windows.ps1` controleert native openen/sluiten. `.github/workflows/gui-spikes.yml` bouwt/test/publiceert op Windows en bewaart artifacts. Het workflow is geleverd, niet lokaal op Windows uitgevoerd; smoke-vensterhandle is geen first-render/performancebewijs.
+- **Validatie:** 4/4 geïsoleerde tests geslaagd, inclusief headless Avalonia-virtualisatie (10.000 items, 1–200 gerealiseerde containers), filtering, veilig sluiten en echte status/lifecycle. Bestaande regressiesuite: 534/534 geslaagd. Definitieve build/format-, publicatie- en meetresultaten worden in de aansluitende bewijsregistratie vastgelegd.
+- **Documentatie:** Ontwerpdocument, Technical Design, SBOM, SecurityThreatModelReview, spike-README en Proposed ADR-GUI-001 bijgewerkt. Native Windows-toetsenbord/DPI/folderpicker-/cancelchecks en frameworkkeuze zijn niet als voltooid gepresenteerd.

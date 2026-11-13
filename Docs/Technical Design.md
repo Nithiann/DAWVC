@@ -1412,3 +1412,20 @@ The original exception is retained for local diagnostics. Recovery paths and exc
 Cancellation is cooperative: clients must await the operation before declaring it stopped or disposing its session. Checkout/fast-forward stage and verify before file publication, compensate applied files in reverse order, and restore refs/staged entries with `CancellationToken.None`. Cleanup never inherits an already cancelled caller token. A successful rollback preserves the original cancellation exception. Failed rollback reports incomplete recovery and retains available file backups, including after disposal. Cleanup failure after successful publication is best-effort; it does not reverse a committed journal.
 
 These contracts do not make every operation transactional. Commit may have published its branch ref before an index-clear error; fetch may have promoted objects or updated a subset of tracking refs; pull retains fetch effects if integration fails; clone can leave a partial destination. Cancellation is not proof that no changes were made. No extra final cancellation check is added after a durable mutation. Progress callbacks can throw, including after publication, so consumers should be non-throwing. No-op outcomes remain existing typed use-case results. Desktop coordination, preflight, session isolation, and user recovery flows remain WP4/WP6/WP7 work.
+
+### 6.4 Isolated GUI framework spikes (13 November 2026)
+
+`spikes/gui/GuiSpikes.slnx` contains experimental Avalonia, WPF and Photino hosts,
+a shared `SpikeSession`, deterministic fixture/measurement harness and headless
+tests. Framework package versions are scoped to the spike directory; the engine
+and production solution have no new GUI dependencies. Each host calls the same
+Bootstrap/Application path directly. Backend work, including synchronous setup,
+runs via `Task.Run`; fresh providers avoid cross-operation adapter caches. Session
+commands serialize operations, sample progress before posting, ignore late progress
+from earlier operation IDs, and await cancellation on close. Paths and technical
+exception text are not exported by the shared presentation model.
+
+This is comparison scaffolding, not the production WP4 session/coordinator. Status
+and doctor retain existing metadata side effects, including the open WP5-08 cache
+recovery concern. Do not run against valuable repositories. The framework decision
+remains Proposed in ADR-GUI-001 until the native Windows comparison is complete.
