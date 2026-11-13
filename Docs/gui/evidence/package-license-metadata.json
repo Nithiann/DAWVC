@@ -1,0 +1,706 @@
+[
+  {
+    "host": "Avalonia",
+    "package": "Avalonia",
+    "version": "12.1.6",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "Avalonia.Angle.Windows.Natives",
+    "version": "2.1.27548.20260419",
+    "license": "LICENSE",
+    "licenseType": "file",
+    "legacyLicenseUrl": "https://aka.ms/deprecateLicenseUrl"
+  },
+  {
+    "host": "Avalonia",
+    "package": "Avalonia.BuildServices",
+    "version": "11.3.2",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "Avalonia.Desktop",
+    "version": "12.1.6",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "Avalonia.FreeDesktop",
+    "version": "12.1.6",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "Avalonia.FreeDesktop.AtSpi",
+    "version": "12.1.6",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "Avalonia.HarfBuzz",
+    "version": "12.1.6",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "Avalonia.Native",
+    "version": "12.1.6",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "Avalonia.Remote.Protocol",
+    "version": "12.1.6",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "Avalonia.Skia",
+    "version": "12.1.6",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "Avalonia.Themes.Fluent",
+    "version": "12.1.6",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "Avalonia.Win32",
+    "version": "12.1.6",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "Avalonia.X11",
+    "version": "12.1.6",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "Blake3",
+    "version": "3.0.2",
+    "license": "BSD-2-Clause",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/BSD-2-Clause"
+  },
+  {
+    "host": "Avalonia",
+    "package": "Dapper",
+    "version": "2.1.66",
+    "license": "Apache-2.0",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/Apache-2.0"
+  },
+  {
+    "host": "Avalonia",
+    "package": "HarfBuzzSharp",
+    "version": "8.3.1.3",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "HarfBuzzSharp.NativeAssets.Linux",
+    "version": "8.3.1.3",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "HarfBuzzSharp.NativeAssets.macOS",
+    "version": "8.3.1.3",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "HarfBuzzSharp.NativeAssets.WebAssembly",
+    "version": "8.3.1.3",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "HarfBuzzSharp.NativeAssets.Win32",
+    "version": "8.3.1.3",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "MicroCom.Runtime",
+    "version": "0.11.6",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "Microsoft.Data.Sqlite",
+    "version": "9.0.2",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "Microsoft.Data.Sqlite.Core",
+    "version": "9.0.2",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "Microsoft.Extensions.DependencyInjection",
+    "version": "10.0.0-preview.1.25080.5",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "Microsoft.Extensions.DependencyInjection.Abstractions",
+    "version": "10.0.0-preview.1.25080.5",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "Microsoft.Extensions.FileSystemGlobbing",
+    "version": "10.0.0-preview.1.25080.5",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "SkiaSharp",
+    "version": "3.119.4",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "SkiaSharp.NativeAssets.Linux",
+    "version": "3.119.4",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "SkiaSharp.NativeAssets.macOS",
+    "version": "3.119.4",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "SkiaSharp.NativeAssets.WebAssembly",
+    "version": "3.119.4",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "SkiaSharp.NativeAssets.Win32",
+    "version": "3.119.4",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "SQLitePCLRaw.bundle_e_sqlite3",
+    "version": "2.1.13",
+    "license": "Apache-2.0",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/Apache-2.0"
+  },
+  {
+    "host": "Avalonia",
+    "package": "SQLitePCLRaw.core",
+    "version": "2.1.13",
+    "license": "Apache-2.0",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/Apache-2.0"
+  },
+  {
+    "host": "Avalonia",
+    "package": "SQLitePCLRaw.lib.e_sqlite3",
+    "version": "2.1.13",
+    "license": "Apache-2.0",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/Apache-2.0"
+  },
+  {
+    "host": "Avalonia",
+    "package": "SQLitePCLRaw.provider.e_sqlite3",
+    "version": "2.1.13",
+    "license": "Apache-2.0",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/Apache-2.0"
+  },
+  {
+    "host": "Avalonia",
+    "package": "Tmds.DBus.Protocol",
+    "version": "0.94.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Avalonia",
+    "package": "YamlDotNet",
+    "version": "18.1.0",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Wpf",
+    "package": "Blake3",
+    "version": "3.0.2",
+    "license": "BSD-2-Clause",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/BSD-2-Clause"
+  },
+  {
+    "host": "Wpf",
+    "package": "Dapper",
+    "version": "2.1.66",
+    "license": "Apache-2.0",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/Apache-2.0"
+  },
+  {
+    "host": "Wpf",
+    "package": "Microsoft.Data.Sqlite",
+    "version": "9.0.2",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Wpf",
+    "package": "Microsoft.Data.Sqlite.Core",
+    "version": "9.0.2",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Wpf",
+    "package": "Microsoft.Extensions.DependencyInjection",
+    "version": "10.0.0-preview.1.25080.5",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Wpf",
+    "package": "Microsoft.Extensions.DependencyInjection.Abstractions",
+    "version": "10.0.0-preview.1.25080.5",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Wpf",
+    "package": "Microsoft.Extensions.FileSystemGlobbing",
+    "version": "10.0.0-preview.1.25080.5",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Wpf",
+    "package": "SQLitePCLRaw.bundle_e_sqlite3",
+    "version": "2.1.13",
+    "license": "Apache-2.0",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/Apache-2.0"
+  },
+  {
+    "host": "Wpf",
+    "package": "SQLitePCLRaw.core",
+    "version": "2.1.13",
+    "license": "Apache-2.0",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/Apache-2.0"
+  },
+  {
+    "host": "Wpf",
+    "package": "SQLitePCLRaw.lib.e_sqlite3",
+    "version": "2.1.13",
+    "license": "Apache-2.0",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/Apache-2.0"
+  },
+  {
+    "host": "Wpf",
+    "package": "SQLitePCLRaw.provider.e_sqlite3",
+    "version": "2.1.13",
+    "license": "Apache-2.0",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/Apache-2.0"
+  },
+  {
+    "host": "Wpf",
+    "package": "YamlDotNet",
+    "version": "18.1.0",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Blake3",
+    "version": "3.0.2",
+    "license": "BSD-2-Clause",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/BSD-2-Clause"
+  },
+  {
+    "host": "Photino",
+    "package": "Dapper",
+    "version": "2.1.66",
+    "license": "Apache-2.0",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/Apache-2.0"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.AspNetCore.Authorization",
+    "version": "9.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.AspNetCore.Components",
+    "version": "9.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.AspNetCore.Components.Analyzers",
+    "version": "9.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.AspNetCore.Components.Forms",
+    "version": "9.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.AspNetCore.Components.Web",
+    "version": "9.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.AspNetCore.Components.WebView",
+    "version": "9.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.AspNetCore.Metadata",
+    "version": "9.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.Data.Sqlite",
+    "version": "9.0.2",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.Data.Sqlite.Core",
+    "version": "9.0.2",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.Extensions.Configuration",
+    "version": "9.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.Extensions.Configuration.Abstractions",
+    "version": "9.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.Extensions.Configuration.Binder",
+    "version": "9.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.Extensions.Configuration.FileExtensions",
+    "version": "9.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.Extensions.Configuration.Json",
+    "version": "9.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.Extensions.DependencyInjection",
+    "version": "10.0.0-preview.1.25080.5",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.Extensions.DependencyInjection.Abstractions",
+    "version": "10.0.0-preview.1.25080.5",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.Extensions.FileProviders.Abstractions",
+    "version": "9.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.Extensions.FileProviders.Composite",
+    "version": "9.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.Extensions.FileProviders.Embedded",
+    "version": "9.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.Extensions.FileProviders.Physical",
+    "version": "9.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.Extensions.FileSystemGlobbing",
+    "version": "10.0.0-preview.1.25080.5",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.Extensions.Logging",
+    "version": "9.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.Extensions.Logging.Abstractions",
+    "version": "9.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.Extensions.Logging.Configuration",
+    "version": "9.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.Extensions.Logging.Console",
+    "version": "9.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.Extensions.Options",
+    "version": "9.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.Extensions.Options.ConfigurationExtensions",
+    "version": "9.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.Extensions.Primitives",
+    "version": "9.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Microsoft.JSInterop",
+    "version": "9.0.1",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "host": "Photino",
+    "package": "Photino.Blazor",
+    "version": "4.0.13",
+    "license": "Apache-2.0",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/Apache-2.0"
+  },
+  {
+    "host": "Photino",
+    "package": "Photino.Native",
+    "version": "4.0.22",
+    "license": "Apache-2.0",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/Apache-2.0"
+  },
+  {
+    "host": "Photino",
+    "package": "Photino.NET",
+    "version": "4.0.16",
+    "license": "Apache-2.0",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/Apache-2.0"
+  },
+  {
+    "host": "Photino",
+    "package": "SQLitePCLRaw.bundle_e_sqlite3",
+    "version": "2.1.13",
+    "license": "Apache-2.0",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/Apache-2.0"
+  },
+  {
+    "host": "Photino",
+    "package": "SQLitePCLRaw.core",
+    "version": "2.1.13",
+    "license": "Apache-2.0",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/Apache-2.0"
+  },
+  {
+    "host": "Photino",
+    "package": "SQLitePCLRaw.lib.e_sqlite3",
+    "version": "2.1.13",
+    "license": "Apache-2.0",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/Apache-2.0"
+  },
+  {
+    "host": "Photino",
+    "package": "SQLitePCLRaw.provider.e_sqlite3",
+    "version": "2.1.13",
+    "license": "Apache-2.0",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/Apache-2.0"
+  },
+  {
+    "host": "Photino",
+    "package": "YamlDotNet",
+    "version": "18.1.0",
+    "license": "MIT",
+    "licenseType": "expression",
+    "legacyLicenseUrl": "https://licenses.nuget.org/MIT"
+  }
+]

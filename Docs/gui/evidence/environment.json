@@ -1,0 +1,38 @@
+{
+  "date": "2026-11-13",
+  "sourceCommit": "73d613b8ee56e443a5801b065cf67d62a3b9bd68",
+  "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+  "architecture": "x86_64",
+  "sdk": "10.0.404",
+  "runtime": "10.0.15",
+  "cpuQuotaCores": 4,
+  "memoryLimitGiB": 32,
+  "note": "Linux container; not the Windows comparison machine. No display server; no WebKitGTK 4.1.",
+  "tests": {
+    "spikePassed": 4,
+    "productionPassed": 534,
+    "skipped": 0
+  },
+  "nativeSmoke": {
+    "Avalonia": "XOpenDisplay failed",
+    "Wpf": "Exit 150: Microsoft.WindowsDesktop.App not installed on Linux",
+    "Photino": "libwebkit2gtk-4.1.so.0 missing"
+  },
+  "validation": [
+    "dotnet build spikes/gui/GuiSpikes.slnx -c Release",
+    "dotnet test spikes/gui/Tests/Tests.csproj -c Release",
+    "dotnet test DawVcs.slnx -c Release",
+    "dotnet format spikes/gui/GuiSpikes.slnx --no-restore --verify-no-changes"
+  ],
+  "limitations": [
+    "No native Windows evidence",
+    "Model filtering is not filter-to-render latency",
+    "Backend cancellation is not UI scan/cancel latency",
+    "Cross-publication excludes external WebView2 footprint",
+    "Development time not instrumented"
+  ],
+  "publishEnvironment": {
+    "MSBUILDDISABLENODEREUSE": "1",
+    "note": "Final cross-publication runs serialized after one MSB4166 build-node failure during overlapping .NET tooling. No OOM event was reported."
+  }
+}
