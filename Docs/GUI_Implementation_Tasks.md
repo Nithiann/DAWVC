@@ -20,9 +20,9 @@ Dit document is de centrale voortgangsregistratie voor de desktop-GUI. Het oorsp
 
 ## 2. Actuele voortgang
 
-**Eerstvolgende taak:** WP3-01 — gelijke fixtures, meetprocedure en acceptatiegrenzen bepalen. WP3 is nog niet gestart.
+**Eerstvolgende taak:** WP3-02 — Avalonia-spike en gedeelde meetfixtures uitvoeren volgens `gui/WP3_Measurement_Protocol.md`.
 
-**Lopende taken:** Geen; WP2-05 t/m WP2-07 afgerond in de huidige wijziging.
+**Lopende taken:** WP3; WP3-01 afgerond vóór implementatie en metingen.
 
 **Blokkades:** Implementatievalidatie geslaagd (534 Release-tests). PR-aanmaak via GitHub API geblokkeerd: `gh auth status` meldt een ongeldig token en `gh pr list` krijgt `Forbidden`.
 
@@ -33,7 +33,7 @@ Dit document is de centrale voortgangsregistratie voor de desktop-GUI. Het oorsp
 | WP0 — Planning en documentatie | Voltooid | Geen | Takenlijst, verwijzingen en onderhoudsafspraken |
 | WP1 — Gedeelde composition root | Voltooid | WP0 | Bootstrap en ongewijzigd CLI-gedrag |
 | WP2 — Operatiecontracten | Voltooid | WP1 | Voortgang, cancellation en typed fouten |
-| WP3 — Frameworkspikes en ADR | Open | WP1; WP2 voor progress/cancellation | Onderbouwde frameworkkeuze |
+| WP3 — Frameworkspikes en ADR | In uitvoering | WP1; WP2 voor progress/cancellation | Onderbouwde frameworkkeuze |
 | WP4 — Desktop-shell en session | Open | WP2, WP3 | Responsieve shell en veilige lifecycle |
 | WP5 — Viewer-release | Open | WP4 | Geen mutaties aan projectinhoud, staging, branches of refs |
 | WP6 — Lokale mutaties | Open | WP5 | Preflight, bevestiging en recovery |
@@ -76,7 +76,7 @@ Werkpakketten zijn opleverbaar in kleine wijzigingen. Packaging, CI, privacy en 
 
 ### WP3 — Frameworkspikes en ADR
 
-- [ ] WP3-01 — Gelijke fixtures, meetprocedure en vooraf vastgelegde acceptatiegrenzen bepalen voor startup, geheugen, filterrespons en cancellation.
+- [x] WP3-01 — Gelijke fixtures, meetprocedure en vooraf vastgelegde acceptatiegrenzen bepalen voor startup, geheugen, filterrespons en cancellation.
 - [ ] WP3-02 — Avalonia-spike bouwen: folderpicker, echte status, 10.000 assets, filtering, annuleerbare scan, doctor, thema en Windows-publicatie.
 - [ ] WP3-03 — Dezelfde verticale slice in WPF uitvoeren.
 - [ ] WP3-04 — Dezelfde slice in Photino of Uno uitvoeren conform het ontwerpdocument; een eventuele scopewijziging expliciet onderbouwen en vastleggen.
@@ -267,3 +267,10 @@ Gebruik bij volgende updates hetzelfde formaat: datum, taak-ID's, bestanden/resu
 - **Documentatie:** Technical Design §6.3, operatie-inventarisatie en Recovery Guide beschrijven foutcategorieën, lokale gevoelige details, annuleringsgrenzen en gedeeltelijke duurzame effecten. No-op blijft een bestaand use-caseresultaat; cancellation of een exception is geen garantie dat niets gepubliceerd werd.
 - **Uitgevoerde validatie:** Linux x64, .NET SDK 10.0.404; `dotnet test DawVcs.slnx -c Release --no-restore` — 534/534 geslaagd, 0 overgeslagen; `dotnet build DawVcs.slnx -c Release --no-restore` — 0 fouten en 0 waarschuwingen. `git diff --check` geslaagd. `dotnet format DawVcs.slnx --verify-no-changes --no-restore` — geslaagd voor de volledige solution.
 - **Grenzen:** Geen GUI of frameworkkeuze geleverd; WP3 nog open. Commit/fetch/pull/clone zijn niet ineens transactioneel. Untyped legacy `InvalidOperationException` blijft `Unknown`; geen onbetrouwbare categorisatie op tekst. Een repositoryroot als recoverypad duidt metadataherstel aan en belooft geen volledige back-up. Windows-desktopvalidatie hoort bij latere werkpakketten en is hier niet uitgevoerd.
+
+
+### 13 november 2026 — WP3-01 meetprotocol vastgesteld
+
+- Budgetten, fixtures, meetherhalingen en Windows-knock-outchecks vooraf vastgelegd in `gui/WP3_Measurement_Protocol.md`.
+- Nieuwe branch `spike/gui-wp3-framework-comparison` expliciet op verzoek aangemaakt vanaf `feat/gui-wp2-operation-errors` (`6976c5b`). Geen extra branches per prototype.
+- Geen framework gekozen; WP3-02 t/m WP3-06 blijven open tot hun bewijs beschikbaar is.
