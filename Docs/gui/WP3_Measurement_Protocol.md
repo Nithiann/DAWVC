@@ -1,7 +1,10 @@
 # WP3 — vooraf vastgelegd meetprotocol
 
-Datum: 13 november 2026. Status: protocol vastgesteld vóór implementatie/metingen;
-frameworkbesluit nog open. Scope: geïsoleerde prototypes, geen productie-Desktop.
+Datum: 13 november 2026. Historisch protocol, vastgesteld vóór implementatie/metingen.
+Later die dag koos de gebruiker expliciet Avalonia voor Windows, macOS en Linux.
+De vergelijkende selectiegate is vervangen; de budgetten zijn niet achteraf gewijzigd.
+Native kwaliteitsmetingen voor Avalonia gaan mee naar WP8 voor alle drie OS'en.
+Ontbrekende vergelijkingsmetingen worden niet als geslaagd beschouwd.
 
 ## Gelijke slice en fixtures
 

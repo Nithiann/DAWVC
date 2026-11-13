@@ -1,13 +1,20 @@
 # DAWVC GUI Framework Selection & Implementation Plan
 
-**Status:** Voorstel voor besluitvorming  
+**Status:** Avalonia gekozen door gebruiker; uitvoering WP4
+
 **Datum:** 24 oktober 2026  
 **Repositorybaseline:** DAWVC `v0.2.0-preview.1` (`8795fa6`)  
 **Doel:** Een zelfstandig beslis- en implementatiedocument voor het toevoegen van een desktop-GUI aan DAWVC.  
 **Uitvoering en voortgang:** [GUI-takenlijst per werkpakket](GUI_Implementation_Tasks.md). Deze takenlijst is de centrale statusregistratie; dit document blijft de ontwerp- en besluitvormingsbron.
 
-**WP3-stand 13 november 2026:** Geïsoleerde Avalonia-, WPF- en Photino.Blazor-prototypes staan in `spikes/gui`. Het [meetprotocol](gui/WP3_Measurement_Protocol.md) is vooraf vastgelegd; [resultaten en ontbrekend Windows-bewijs](gui/WP3_Results.md) worden apart bijgehouden. [ADR-GUI-001](adr/ADR-GUI-001-desktop-framework.md) is Proposed: er is nog geen definitieve frameworkkeuze en geen productie-Desktop-project.
+**Historische WP3-stand vóór het gebruikersbesluit op 13 november 2026:** Geïsoleerde Avalonia-, WPF- en Photino.Blazor-prototypes staan in `spikes/gui`. Het [meetprotocol](gui/WP3_Measurement_Protocol.md) is vooraf vastgelegd; [resultaten en ontbrekend Windows-bewijs](gui/WP3_Results.md) worden apart bijgehouden. [ADR-GUI-001](adr/ADR-GUI-001-desktop-framework.md) is Proposed: er is nog geen definitieve frameworkkeuze en geen productie-Desktop-project.
 
+
+**Besluit 13 november 2026:** De gebruiker kiest Avalonia en vereist ondersteuning
+voor Windows, macOS en Linux. [ADR-GUI-001](adr/ADR-GUI-001-desktop-framework.md)
+legt dit besluit vast. WP4 mag beginnen zonder de oorspronkelijke driewegvergelijking
+af te wachten. Eerder ontbrekende native metingen blijven als open releasevalidatie
+in WP8 staan. De onderstaande oorspronkelijke afwegingen blijven als context behouden.
 
 ---
 

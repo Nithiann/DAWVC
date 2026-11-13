@@ -1,11 +1,6 @@
 <Project>
   <Import Project="../../Directory.Packages.props" />
   <ItemGroup>
-    <PackageVersion Include="xunit.v3" Version="3.2.2" />
-    <PackageVersion Include="Avalonia" Version="12.1.6" />
-    <PackageVersion Include="Avalonia.Desktop" Version="12.1.6" />
-    <PackageVersion Include="Avalonia.Themes.Fluent" Version="12.1.6" />
-    <PackageVersion Include="Avalonia.Headless.XUnit" Version="12.1.6" />
     <PackageVersion Include="Photino.Blazor" Version="4.0.13" />
   </ItemGroup>
 </Project>

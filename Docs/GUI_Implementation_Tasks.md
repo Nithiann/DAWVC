@@ -1,7 +1,7 @@
 <!--  --># DAWVC GUI — Takenlijst en voortgang
 
 **Laatst bijgewerkt:** 13 november 2026
-**Status:** WP1 en WP2 voltooid; WP3 in uitvoering met drie geïsoleerde frameworkprototypes.
+**Status:** Avalonia expliciet gekozen voor Windows, macOS en Linux; WP3-selectie afgesloten met scopewijziging. WP4 afgerond; WP5 is de volgende uitvoering.
 
 **Ontwerpbron:** [GUI Framework Selection & Implementation Plan](DAWVC_GUI_Framework_Selection_and_Implementation_Plan.md)
 
@@ -20,11 +20,11 @@ Dit document is de centrale voortgangsregistratie voor de desktop-GUI. Het oorsp
 
 ## 2. Actuele voortgang
 
-**Eerstvolgende taak:** WP3-02 t/m WP3-05 — native Windows-slices en vergelijkingsmetingen uitvoeren volgens `gui/WP3_Measurement_Protocol.md`; daarna pas het frameworkbesluit (WP3-06).
+**Eerstvolgende taak:** WP5-01 — viewer-startscherm en repository-opening verder uitwerken op de geleverde shell; daarna dashboard/changes/history. WP5 is nog niet gestart.
 
-**Lopende taken:** WP3-02/03/04: prototypes geïmplementeerd; native Windows-validatie open. WP3-05/06 blijven open.
+**Lopende taken:** Geen binnen WP4. Native platform-/releasechecks blijven geregistreerd in WP8.
 
-**Blokkades:** Deze Linux-omgeving heeft geen native Windows-runtime. Avalonia native start faalt op `XOpenDisplay`; Photino native start mist `libwebkit2gtk-4.1.so.0`. Windows-interactie/performance kan hier niet worden afgetekend. GitHub API-toegang voor PR-aanmaak was in WP2 geblokkeerd (`Forbidden`); branchpush werkt.
+**Blokkades:** GitHub API blijft `Forbidden` geven voor Actions en PR-aanmaak; branchpush werkt. De gebruiker heeft de frameworkkeuze expliciet gemaakt en WP4 toegestaan. Native Windows/macOS-QA en platformbudgetten blijven open in WP8, niet als geslaagd aangemerkt. Linux-native validatie is nu mogelijk met een tijdelijk lokaal uitgepakte Xvfb.
 
 **Aandachtspunten:** Rollback probeert alle herstelacties; falen wordt typed gemeld en beschikbare journalback-ups blijven bewaard. Fouten kunnen na duurzame publicatie optreden. SQLite-corruptieherstel kan staged entries wissen: dit moet vóór vieweracceptatie worden aangepakt (WP5-08). Fetch/pull-dry-runs schrijven tijdelijke metadata en kunnen stale sessies verwijderen. Adaptercache-invalidatie blijft WP4-05. Zie de inventarisatie voor bronnen en vervolggrenzen.
 
@@ -33,12 +33,12 @@ Dit document is de centrale voortgangsregistratie voor de desktop-GUI. Het oorsp
 | WP0 — Planning en documentatie | Voltooid | Geen | Takenlijst, verwijzingen en onderhoudsafspraken |
 | WP1 — Gedeelde composition root | Voltooid | WP0 | Bootstrap en ongewijzigd CLI-gedrag |
 | WP2 — Operatiecontracten | Voltooid | WP1 | Voortgang, cancellation en typed fouten |
-| WP3 — Frameworkspikes en ADR | In uitvoering | WP1; WP2 voor progress/cancellation | Onderbouwde frameworkkeuze |
-| WP4 — Desktop-shell en session | Open | WP2, WP3 | Responsieve shell en veilige lifecycle |
+| WP3 — Frameworkspikes en ADR | Afgesloten op gebruikersbesluit | WP1; WP2 voor progress/cancellation | Onderbouwde frameworkkeuze |
+| WP4 — Desktop-shell en session | Voltooid | WP2, WP3 | Responsieve shell en veilige lifecycle |
 | WP5 — Viewer-release | Open | WP4 | Geen mutaties aan projectinhoud, staging, branches of refs |
 | WP6 — Lokale mutaties | Open | WP5 | Preflight, bevestiging en recovery |
 | WP7 — Clone en remotes | Open | WP6 | Backendconforme samenwerking |
-| WP8 — Productisering | Open | Start bij WP3/WP4; afronding na WP7 | Gevalideerde Windows-release |
+| WP8 — Productisering voor Windows, macOS en Linux | Open | Start bij WP3/WP4; afronding na WP7 | Gevalideerde Windows-release |
 
 Werkpakketten zijn opleverbaar in kleine wijzigingen. Packaging, CI, privacy en toegankelijkheid beginnen vroeg; WP8 is geen reden om die uit te stellen.
 
@@ -76,25 +76,32 @@ Werkpakketten zijn opleverbaar in kleine wijzigingen. Packaging, CI, privacy en 
 
 ### WP3 — Frameworkspikes en ADR
 
-- [x] WP3-01 — Gelijke fixtures, meetprocedure en vooraf vastgelegde acceptatiegrenzen bepalen voor startup, geheugen, filterrespons en cancellation.
-- [ ] WP3-02 — Avalonia-spike bouwen: folderpicker, echte status, 10.000 assets, filtering, annuleerbare scan, doctor, thema en Windows-publicatie.
-- [ ] WP3-03 — Dezelfde verticale slice in WPF uitvoeren.
-- [ ] WP3-04 — Dezelfde slice in Photino of Uno uitvoeren conform het ontwerpdocument; een eventuele scopewijziging expliciet onderbouwen en vastleggen.
-- [ ] WP3-05 — Virtualisatie, drag-and-drop, toetsenbord, DPI, testbaarheid, licenties, ontwikkeltijd en reproduceerbare packaging vergelijken.
-- [ ] WP3-06 — Meetresultaten documenteren en de frameworkkeuze vastleggen in `Docs/adr`; ontwerpstatus en gekozen dependencies bijwerken.
+**Scopewijziging 13 november 2026:** De gebruiker vereist Windows, macOS en Linux,
+kiest expliciet Avalonia en geeft opdracht met WP4 verder te gaan. De oorspronkelijke
+vergelijkingsgate is hiermee vervangen. Eerder ontbrekende metingen blijven ontbreken;
+native kwaliteits-/releasevalidatie voor Avalonia gaat mee naar WP8 voor alle drie OS'en.
 
-**Acceptatie:** De keuze is met metingen onderbouwd, voldoet aan de knock-outcriteria en introduceert geen onbedoelde commerciële controlafhankelijkheid. Prototypes mogen geïsoleerd worden uitgevoerd; branches alleen op expliciet verzoek aanmaken.
+- [x] WP3-01 — Gelijke fixtures, meetprocedure en budgetten vooraf vastgelegd; originele protocolwaarden behouden.
+- [x] WP3-02 — Avalonia-prototype geleverd met gedeelde backend, virtualisatie, filtering, cancellation, doctor en Windows-crosspublicatie; headless bewijs geregistreerd. Native platform-QA verplaatst naar WP8.
+- [x] WP3-03 — WPF-referentiespike behouden; uitgesloten als productkandidaat wegens Windows-only. Native vergelijkingsrun vervalt door gebruikersbesluit.
+- [x] WP3-04 — Photino-referentiespike behouden als niet-gekozen alternatief; beperkingen niet als geslaagde checks gepresenteerd.
+- [x] WP3-05 — Beschikbaar bewijs, licentiemetadata en open platformchecks geregistreerd; volledige driewegvergelijking vervalt door gebruikersbesluit.
+- [x] WP3-06 — Expliciete Avalonia-keuze vastgelegd in Accepted ADR-GUI-001; implementatie- en ontwerpstatus bijgewerkt.
+
+**Acceptatie na scopewijziging:** Avalonia is een expliciet gebruikersbesluit, geen
+volledig bewezen vergelijkingswinnaar. Geen commerciële controls. Productie-Desktop
+mag worden gebouwd; native kwaliteit en distributie op de drie OS'en blijven releasegates.
 
 ### WP4 — Desktop-shell en repositorysession
 
-- [ ] WP4-01 — `src/DawVcs.Desktop` en `tests/DawVcs.Desktop.Tests` toevoegen met de gekozen stack; packages centraal beheren.
-- [ ] WP4-02 — Startup, Bootstrap-integratie, navigatie, thema en design tokens bouwen.
-- [ ] WP4-03 — Interfaces voor folderpicker, dialogs en openen in de bestandsverkenner implementeren.
-- [ ] WP4-04 — Recente repositories in gebruikersgebonden opslag implementeren, zonder machinepaden in gedeelde repositorydata op te slaan.
-- [ ] WP4-05 — Repositorysession met sessie-identiteit, cancellation en disposal implementeren; late resultaten van een vorige session negeren. Adaptercacheverversing of een expliciet lifetimebeleid implementeren en testen, inclusief gewijzigde/ontbrekende samples en gewijzigde zoekpaden.
-- [ ] WP4-06 — Operatiecoördinator bouwen met busy state, begrensde progressupdates, foutpresentatie en serialisatie van conflicterende acties.
-- [ ] WP4-07 — UI-threadresponsiviteit borgen, inclusief synchronisch werk vóór de eerste `await`.
-- [ ] WP4-08 — Architectuurtests toevoegen voor Desktop → Application en het verbod op Desktop → CLI; lifecycle-, commandstate- en navigatietests uitvoeren.
+- [x] WP4-01 — `src/DawVcs.Desktop` en `tests/DawVcs.Desktop.Tests` toevoegen met de gekozen stack; packages centraal beheren.
+- [x] WP4-02 — Startup, Bootstrap-integratie, navigatie, thema en design tokens bouwen.
+- [x] WP4-03 — Interfaces voor folderpicker, dialogs en openen in de bestandsverkenner implementeren.
+- [x] WP4-04 — Recente repositories in gebruikersgebonden opslag implementeren, zonder machinepaden in gedeelde repositorydata op te slaan.
+- [x] WP4-05 — Repositorysession met sessie-identiteit, cancellation en disposal implementeren; late resultaten van een vorige session negeren. Adaptercacheverversing of een expliciet lifetimebeleid implementeren en testen, inclusief gewijzigde/ontbrekende samples en gewijzigde zoekpaden.
+- [x] WP4-06 — Operatiecoördinator bouwen met busy state, begrensde progressupdates, foutpresentatie en serialisatie van conflicterende acties.
+- [x] WP4-07 — UI-threadresponsiviteit borgen, inclusief synchronisch werk vóór de eerste `await`.
+- [x] WP4-08 — Architectuurtests toevoegen voor Desktop → Application en het verbod op Desktop → CLI; lifecycle-, commandstate- en navigatietests uitvoeren.
 
 **Acceptatie:** Repositorywissels tonen geen oude resultaten; langdurig werk blokkeert de UI niet. GUI-coördinatie vervangt geen backendbeveiliging tegen gelijktijdig CLI-gebruik.
 
@@ -136,18 +143,18 @@ Werkpakketten zijn opleverbaar in kleine wijzigingen. Packaging, CI, privacy en 
 
 **Acceptatie:** Alleen ondersteunde transportmogelijkheden worden aangeboden; dry-run, uitvoering en foutpresentatie komen overeen met backendgedrag.
 
-### WP8 — Productisering
+### WP8 — Productisering voor Windows, macOS en Linux
 
-- [ ] WP8-01 — Vroeg een reproduceerbare self-contained Windows x64-publicatie inrichten en packageversies/licenties registreren.
+- [ ] WP8-01 — Vroeg reproduceerbare self-contained publicaties voor Windows, macOS en Linux inrichten en packageversies/licenties registreren.
 - [ ] WP8-02 — Vanaf de desktop-shell CI-build, tests en artifacts toevoegen.
 - [ ] WP8-03 — Signing en distributiestrategie vastleggen; automatische updates pas na expliciet beveiligings- en distributiebesluit implementeren.
 - [ ] WP8-04 — High-DPI-, toetsenbord-, focus- en toegankelijkheidstests uitvoeren.
 - [ ] WP8-05 — Grote-projecttests met echte hashing en grote samples uitvoeren; resultaten vergelijken met de vastgelegde budgetten.
 - [ ] WP8-06 — Logs, crashdetails en exports op pad-/privacyredactie controleren.
 - [ ] WP8-07 — Installatie, QuickStart, beperkingen, recovery, screenshots en afhankelijkhedenoverzicht bijwerken voor de werkelijk geleverde GUI.
-- [ ] WP8-08 — Gepubliceerde Windows-app op een schone omgeving valideren en releasecriteria met bewijs aftekenen.
+- [ ] WP8-08 — Gepubliceerde app op schone Windows-, macOS- en Linux-omgevingen valideren en releasecriteria met bewijs aftekenen.
 
-**Acceptatie:** De distributie is reproduceerbaar en de ondersteunde Windows-workflows zijn aantoonbaar getest; documentatie beschrijft geen nog ongeïmplementeerde functies als beschikbaar.
+**Acceptatie:** De distributie is reproduceerbaar en de ondersteunde Windows-, macOS- en Linux-workflows zijn aantoonbaar getest; documentatie beschrijft geen nog ongeïmplementeerde functies als beschikbaar.
 
 ## 4. Welke documentatie wordt wanneer bijgewerkt?
 
@@ -294,3 +301,25 @@ Gebruik bij volgende updates hetzelfde formaat: datum, taak-ID's, bestanden/resu
 - **Metingen:** Model-filter p95 1,5975 ms (geen UI-renderlatency); echte status/scan/doctor zonder failurecategorie; tien echte 256 MiB-status-hashingcancellations voltooid, p95/max 26,823 ms (geen native scan/cancelacceptatie). Definitieve self-contained win-x64-crosspublicatie voor alle drie kandidaten tweemaal uitgevoerd met identieke niet-PDB-hashes. Publicatiegrootte: Avalonia 207,45 MiB, WPF 143,39 MiB, Photino 82,68 MiB exclusief externe WebView2. Ruwe data, omgeving, pakketmetadata en manifests staan in `gui/evidence/`; toelichting in `gui/WP3_Results.md`.
 - **Mislukte poging:** Eén herhaalde crosspublicatieronde stopte met MSB4166 (buildnodes verdwenen tijdens overlappende .NET-tooling). Definitieve publicaties serieel opnieuw uitgevoerd zonder node reuse; alle zes geslaagd. Niet als compiler- of frameworkfout gepresenteerd.
 - **Blijft open:** Native Windows-startup/procesboomgeheugen, filter-tot-render, UI-respons, scan/cancel, folderpicker, toetsenbord, DPI, contrast, native Photino-drop en runtime-/originreview. Het Windows-workflow en PowerShell-scripts zijn geleverd maar hier niet op Windows uitgevoerd. Geen ontwikkeltijdcijfers verzonnen. WP3-02 t/m WP3-06 en de frameworkkeuze blijven daarom open; WP4 niet gestart.
+
+
+### 13 november 2026 — Gebruikersbesluit Avalonia en start WP4
+
+- **Besluit/scope:** De gebruiker kiest expliciet Avalonia, vereist meerdere OS'en en autoriseert doorgaan met WP4. De oorspronkelijke vergelijkingsgate van WP3 is vervangen; ADR-GUI-001 is Accepted. Dit is geen PR-approval. Ontbrekende vergelijkingsmetingen zijn niet als geslaagd aangemerkt; native Avalonia-QA gaat naar WP8 voor Windows/macOS/Linux.
+- **Branch:** `feat/gui-wp4-avalonia-shell` vanaf `spike/gui-wp3-framework-comparison` (`7e6cc1f`); geen WP5-features in deze wijziging.
+- **Implementatie:** `DawVcs.Desktop` en `DawVcs.Desktop.Tests` aan hoofdsolution toegevoegd; Avalonia/FluentTheme/Inter 12.1.6 en CommunityToolkit.Mvvm 8.4.0 centraal beheerd. Spike-packageversies dedupliceren via dezelfde centrale bron; CLI-gedrag ongewijzigd.
+- **Contract:** Nieuwe lichte `OpenRepositoryUseCase` via Bootstrap voorkomt directe Desktop→repositoryimplementatie en vraagt geen status/indexherstel op. Alle backendstartwerk draait op een worker. De coördinator serialiseert werk, wacht op cancellation/disposal, vernieuwt adapterproviders per operatie en filtert late sessieresultaten. Succesvolle backendpublicatie wordt bij een laat annuleerverzoek behouden.
+- **Shell:** Navigatie en commandstates, thema en design tokens, native platformabstracties voor folders/dialogs/explorer, begrensde lokale MRU-opslag met tijdelijke file + atomic move. Productpagina's zijn placeholders tot WP5.
+- **Vroege productisering:** Apart desktop-CI-workflow voor Windows/macOS/Linux met headless tests en self-contained artifacts. Remote uitvoering niet geverifieerd wegens API-toegang.
+- **Validatie in uitvoering:** De eerste 12 gerichte tests slagen. Native Linux-opstarttest vond een ontbrekend Inter-lettertype; als gebundelde dependency gecorrigeerd. Tijdelijk user-local Xvfb en testtools gebruikt zonder systeeminstallatie; verdere native controles en definitieve suite volgen hieronder.
+
+
+### 13 november 2026 — WP4 afgerond
+
+- **Taken:** WP4-01 t/m WP4-08 voltooid. Viewerfeatures blijven WP5; geen automatische voortzetting naar WP5 in deze branch.
+- **Validatie:** 554/554 tests in de hoofdsolution geslaagd, nul skips (16 Desktop, 288 Application, 27 Bootstrap); Release-build met 0 fouten en 0 waarschuwingen; volledige `dotnet format --verify-no-changes --no-restore` geslaagd; whitespace en documentatielinks gecontroleerd. SDK 10.0.404, Linux x64. MSBuild-nodehergebruik lokaal uitgeschakeld na de eerder bekende runner-nodefout.
+- **Native bewijs:** Self-contained Linux-app onder user-local Xvfb daadwerkelijk bediend: repository openen, MRU opslaan onder gebruikersdata met Unix 0600, donker/licht wisselen en native sluiten met exitcode 0. Screenshots, assemblyhash en samenvattingen in `gui/evidence/wp4`; toelichting in `gui/WP4_Validation.md`.
+- **Crosspublicatie:** win-x64, linux-x64, osx-arm64 en osx-x64 geslaagd. Inter en volledige OFL-fontlicentie meegepubliceerd. Dit is geen native Windows/macOS-acceptatie; die controles blijven in WP8.
+- **Extra lifecycleborging:** Succesvolle backendpublicatie blijft zichtbaar bij een laat annuleerverzoek zolang dezelfde session actief is. Een geannuleerde repositorywissel meldt zich niet voltooid terwijl het vorige backendwerk nog loopt. Parallelle shell-openacties/MRU-writes zijn geserialiseerd; late startup-MRU-loads kunnen nieuwe lijsten niet terugzetten.
+- **Documentatie:** Geaccepteerde framework-ADR, GUI-plan, takenlijst, Technical Design, Installation, QuickStart, README, Known Limitations, SBOM en securityreview bijgewerkt. Historische WP3-metingen blijven bewaard; hun onuitgevoerde checks zijn niet als geslaagd gemarkeerd.
+- **Beperkingen:** Native Windows/macOS en fysieke DPI/toegankelijkheids-/performancemetingen niet uitgevoerd; CI-configuratie en artifacts voorzien, remote resultaten niet bereikbaar via de huidige GitHub API. Geen PR-approval of merge uitgevoerd.

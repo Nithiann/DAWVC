@@ -1,6 +1,11 @@
 # WP3 — frameworkvergelijking
 
-**Stand:** 13 november 2026; in uitvoering. **Geen frameworkbesluit.**
+**Actueel besluit, 13 november 2026:** De gebruiker heeft Avalonia expliciet gekozen
+voor Windows, macOS en Linux en opdracht gegeven WP4 te starten. De oorspronkelijke
+vergelijkingsgate is daarmee vervangen; onderstaande ontbrekende metingen blijven
+ontbrekend. Zie de geaccepteerde [ADR-GUI-001](../adr/ADR-GUI-001-desktop-framework.md).
+De eerdere vergelijkingsresultaten en vervolgprocedure hieronder blijven bewaard
+als historische context; ze blokkeren de frameworkkeuze niet langer.
 Het [protocol](WP3_Measurement_Protocol.md) is vastgelegd vóór de prototypes.
 De broncode staat in [spikes/gui](../../spikes/gui/README.md).
 

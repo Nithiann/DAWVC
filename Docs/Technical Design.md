@@ -1429,3 +1429,41 @@ This is comparison scaffolding, not the production WP4 session/coordinator. Stat
 and doctor retain existing metadata side effects, including the open WP5-08 cache
 recovery concern. Do not run against valuable repositories. The framework decision
 remains Proposed in ADR-GUI-001 until the native Windows comparison is complete.
+
+### 6.5 Avalonia Desktop shell and session (WP4, 13 November 2026)
+
+Following the explicit user choice, `DawVcs.Desktop` uses Avalonia 12.1.6,
+FluentTheme, bundled Inter and CommunityToolkit.Mvvm 8.4.0. Windows, macOS and
+Linux are target platforms. `DawVcs.Desktop.Tests` uses Avalonia headless/xUnit v3;
+existing engine tests remain on xUnit v2. Desktop references Application and
+Bootstrap, never CLI or Infrastructure. `OpenRepositoryUseCase` validates markers,
+loads configuration/branch through a caller-owned context and never requests
+status or staged-index recovery. Context construction may create object temp dirs.
+
+`OperationCoordinator` owns a repository identity and cancellation source. Switching
+invalidates the old session before waiting for its work, cancels it and waits for
+the serial operation gate. Queued progress/results check generation and operation
+identity on the UI dispatcher. Cancellation never releases resources or busy state
+while backend work is still running. A normal successful return is preserved even
+if cancellation was requested late; it may represent durable publication. A result
+from a replaced session is suppressed. Technical failures retain the WP2 exception
+and recovery data; the shell exposes only safe category messages.
+
+Every operation, including synchronous setup before the first await, runs on a
+worker and owns a fresh `AddDawVcs()` provider. This deliberately bounds adapter,
+search-path and sample-index caches to one operation. The provider and use-case
+contexts are disposed before completion. CLI singleton behavior is unchanged.
+Progress coalesces to at most one queued callback, with a 50 ms sampling interval.
+This desktop serialization does not replace backend safeguards against CLI access.
+
+Platform services abstract folder selection, confirmation dialogs and file explorer
+opening. Explorer uses a directory URI and shell association without interpolated
+commands. Recents are capped at 20 normalized paths in user-local application data,
+written via a same-directory temp file and atomic move. No preference path is stored
+in repository data or exports. Corrupt/inaccessible preferences produce a recoverable
+notice. Theme resources are independent of controls; theme changes apply in process.
+
+WP4 is a shell, not the WP5 viewer. Navigation destinations are placeholders; no
+status/staging/history/diagnostics controls or mutating actions are offered yet.
+Native performance, DPI, assistive technology and clean-machine validation across
+the three target OSes remain WP8 gates. Early CI builds/tests/publishes all three.

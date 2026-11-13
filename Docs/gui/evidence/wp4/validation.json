@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-13",
+  "sdk": "10.0.404",
+  "platform": "Linux x64",
+  "passed": 554,
+  "skipped": 0,
+  "desktopPassed": 16,
+  "productionSolution": "DawVcs.slnx",
+  "baseCommit": "7e6cc1f",
+  "note": "WP4 working tree on feat/gui-wp4-avalonia-shell. Native assembly SHA-256 in native-linux.json. Remote Windows/macOS CI not verified."
+}

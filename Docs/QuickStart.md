@@ -212,3 +212,12 @@ dawvc pull
 ```
 If you have uncommitted changes in your workspace, DAWVC will protect your work and refuse to overwrite. Use `dawvc pull --force` to create an automatic timestamped backup in `.dawvc/recovery/` before updating.
 
+
+## Desktop foundation preview
+
+With the .NET 10 SDK, start `dotnet run --project src/DawVcs.Desktop -c Release`.
+Choose **Open repository**, or enter the root folder and choose **Open path**.
+Only existing initialized repositories are accepted. Recent folders are saved in
+user-local preferences; **Dark / light** changes the running theme. Other pages
+currently provide navigation placeholders; use the CLI for repository workflows
+until the subsequent GUI work packages are delivered. See [Installation](Installation.md#avalonia-desktop-development-preview-wp4).

@@ -66,3 +66,17 @@ file containing BSD-style redistribution/attribution requirements; preserve its
 notices in a future distributable. This inventory is not a full native/OS license
 or vulnerability audit. No commercial Avalonia controls are referenced. The
 historical product audit above is not extended to these experimental dependencies.
+
+## Avalonia Desktop foundation — WP4 (13 November 2026)
+
+The user selected Avalonia for Windows, macOS and Linux. Avalonia,
+Avalonia.Desktop, FluentTheme, Fonts.Inter and headless testing are pinned at
+12.1.6 in the root package catalog. CommunityToolkit.Mvvm 8.4.0 (MIT) is added.
+Inter is bundled to avoid system-font-dependent startup failures; the font is
+under SIL OFL 1.1, while the Avalonia.Fonts.Inter wrapper package declares MIT.
+xUnit v3 3.2.2 is confined to Desktop/spike tests; existing test projects remain v2.
+
+Desktop uses no commercial controls. The earlier WP3 inventory remains useful,
+but this is now an actual Desktop dependency. `src/DawVcs.Desktop/ThirdPartyNotices.md`
+records preview dependencies; the complete native/font redistribution notices,
+platform installers and final vulnerability/license review remain WP8 work.

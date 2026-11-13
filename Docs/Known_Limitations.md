@@ -74,3 +74,18 @@ These are audited backend limitations, not delivered GUI features. See the [oper
 - **Partial durable results:** fetch can retain promoted objects and partially updated tracking refs; clone can leave a partially initialized target. Commit can publish its ref before index clearing fails. Checkout/restore can finish file publication before dependency resolution fails or is cancelled. A failed/cancelled task therefore does not universally mean 'nothing changed'.
 - **Long-lived adapter caches:** the shared FL Studio adapter has no invalidation for search paths, file indexes or positive/negative sample resolutions. Lifetime/refresh policy is still required before desktop rescans can be advertised as fresh.
 
+
+## Avalonia Desktop foundation (WP4, 13 November 2026)
+
+Avalonia has been selected for Windows, macOS and Linux. The current Desktop is a
+shell with repository opening, local recent projects, theme switching and session
+coordination. Navigation destinations are placeholders; it does not yet expose
+status/history/dependencies, diagnostics, staging or mutating commands. Those
+remain the subsequent GUI work packages.
+
+Self-contained publication does not replace native OS dependencies. Linux still
+requires a graphical display and Avalonia/Skia native libraries; macOS installer
+bundles/signing/notarization remain open. Native validation performed here is Linux
+under Xvfb, not a full physical-desktop/DPI/accessibility audit. Windows/macOS native
+release checks remain WP8 work. The desktop CI matrix is configured, but its remote
+execution cannot be verified from this session because GitHub API access is denied.
