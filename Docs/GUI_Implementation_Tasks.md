@@ -1,7 +1,7 @@
 <!--  --># DAWVC GUI — Takenlijst en voortgang
 
-**Laatst bijgewerkt:** 25 oktober 2026
-**Status:** WP1 en WP2-01 t/m WP2-04 voltooid; voortgang en cancellation/disposal aangesloten op alle use cases en storage/indices, typed foutvertaling en rollback-borging in uitvoering
+**Laatst bijgewerkt:** 13 november 2026
+**Status:** WP1 en WP2 voltooid; frameworkspikes (WP3) zijn de volgende stap.
 
 **Ontwerpbron:** [GUI Framework Selection & Implementation Plan](DAWVC_GUI_Framework_Selection_and_Implementation_Plan.md)
 
@@ -20,19 +20,19 @@ Dit document is de centrale voortgangsregistratie voor de desktop-GUI. Het oorsp
 
 ## 2. Actuele voortgang
 
-**Eerstvolgende taak:** WP2-05 — typed fouten aanvullen en centrale gebruikerscategorieën definiëren zonder exceptiontekst te parsen; timeout, annulering en incomplete rollback onderscheiden.
+**Eerstvolgende taak:** WP3-01 — gelijke fixtures, meetprocedure en acceptatiegrenzen bepalen. WP3 is nog niet gestart.
 
-**Lopende taken:** WP2-04 voltooid; WP2-05 t/m WP2-07 nog open binnen WP2.
+**Lopende taken:** Geen; WP2-05 t/m WP2-07 afgerond in de huidige wijziging.
 
-**Blokkades:** Geen; 527 tests geslaagd in Release-configuratie.
+**Blokkades:** Implementatievalidatie geslaagd (534 Release-tests). PR-aanmaak via GitHub API geblokkeerd: `gh auth status` meldt een ongeldig token en `gh pr list` krijgt `Forbidden`.
 
-**Aandachtspunten:** Rollback is best-effort en fouten kunnen na duurzame publicatie optreden. SQLite-corruptieherstel kan staged entries wissen: dit moet vóór vieweracceptatie worden aangepakt (WP5-08). Fetch/pull-dry-runs schrijven tijdelijke metadata en kunnen stale sessies verwijderen. Adaptercache-invalidatie blijft WP4-05. Zie de inventarisatie voor bronnen en vervolggrenzen.
+**Aandachtspunten:** Rollback probeert alle herstelacties; falen wordt typed gemeld en beschikbare journalback-ups blijven bewaard. Fouten kunnen na duurzame publicatie optreden. SQLite-corruptieherstel kan staged entries wissen: dit moet vóór vieweracceptatie worden aangepakt (WP5-08). Fetch/pull-dry-runs schrijven tijdelijke metadata en kunnen stale sessies verwijderen. Adaptercache-invalidatie blijft WP4-05. Zie de inventarisatie voor bronnen en vervolggrenzen.
 
 | Werkpakket | Status | Afhankelijkheden | Oplevering |
 | --- | --- | --- | --- |
 | WP0 — Planning en documentatie | Voltooid | Geen | Takenlijst, verwijzingen en onderhoudsafspraken |
 | WP1 — Gedeelde composition root | Voltooid | WP0 | Bootstrap en ongewijzigd CLI-gedrag |
-| WP2 — Operatiecontracten | In uitvoering | WP1 | Voortgang, cancellation en typed fouten |
+| WP2 — Operatiecontracten | Voltooid | WP1 | Voortgang, cancellation en typed fouten |
 | WP3 — Frameworkspikes en ADR | Open | WP1; WP2 voor progress/cancellation | Onderbouwde frameworkkeuze |
 | WP4 — Desktop-shell en session | Open | WP2, WP3 | Responsieve shell en veilige lifecycle |
 | WP5 — Viewer-release | Open | WP4 | Geen mutaties aan projectinhoud, staging, branches of refs |
@@ -68,9 +68,9 @@ Werkpakketten zijn opleverbaar in kleine wijzigingen. Packaging, CI, privacy en 
 - [x] WP2-02 — `OperationProgress` in Application introduceren; optioneel per aanroep ontsluiten met behoud van bestaande CLI-call-sites. Contract en aanvullende overloads geleverd voor scan/status; overige integratie valt onder WP2-03.
 - [x] WP2-03 — Voortgang aansluiten op scan/status, commit, checkout/restore, diagnostics en transfers waar zinvol; onbekende totalen ondersteunen. Geleverd voor scan/status, commit, checkout/restore en fast-forward, doctor/fsck en fetch/clone/pull; nested completion en legacy-overloads getest.
 - [x] WP2-04 — Cancellation tijdens enumeratie, hashing, adapterwerk en I/O controleren en ontbrekende checks toevoegen. Stream-disposal bij gefaalde/geannuleerde header-read gerealiseerd in LooseObjectStore. Cancellationbehoud in PublicationJournal (rollback met uncancelled token en directe rethrow), Clone/Pull optionele doctor reporting en Dependency Discovery/Resolver. Entry- en loop-checks toegevoegd aan alle use cases (Checkout, Commit, Add, Log, Bind, Switch, Init, Fsck, Doctor, Remotes), SQLite-stagingindex (Dapper CommandDefinition) en QuarantineObjectStore.
-- [ ] WP2-05 — Typed fouten aanvullen en centrale gebruikerscategorieën definiëren zonder exceptiontekst te parsen; timeout, annulering en incomplete rollback onderscheiden.
-- [ ] WP2-06 — Veilige annuleringsgrenzen en rollbackbeleid vastleggen en testen; cleanup mag niet door een reeds geannuleerd token worden overgeslagen.
-- [ ] WP2-07 — Contract-, cancellation- en regressietests uitvoeren; Application-contracten en beperkingen documenteren.
+- [x] WP2-05 — Typed fouten aanvullen en centrale gebruikerscategorieën definiëren zonder exceptiontekst te parsen; timeout, annulering en incomplete rollback onderscheiden.
+- [x] WP2-06 — Veilige annuleringsgrenzen en rollbackbeleid vastleggen en testen; cleanup mag niet door een reeds geannuleerd token worden overgeslagen.
+- [x] WP2-07 — Contract-, cancellation- en regressietests uitvoeren; Application-contracten en beperkingen documenteren.
 
 **Acceptatie:** Bestaande clients blijven werken zonder progressconsument. Annulering is pas afgerond zodra het werk stopt; fouten zijn typed presenteerbaar.
 
@@ -256,3 +256,14 @@ Bestaande historische plannen behouden hun oorspronkelijke releasescope. Voeg ve
 - **Beperkingen en vervolg:** Rollback blijft best-effort; fouten na duurzame refpublicatie kunnen de repository in een inconsistente toestand achterlaten als rollback faalt. SQLite-corruptieherstel wist nog steeds staged entries (WP5-08). WP2-05 (typed fouten en centrale categorieën) is de volgende stap.
 
 Gebruik bij volgende updates hetzelfde formaat: datum, taak-ID's, bestanden/resultaten, uitgevoerde validatie en open beperkingen.
+
+
+### 13 november 2026 — WP2 afgerond
+
+- **Taken:** WP2-05, WP2-06, WP2-07; bestaande voortgangs- en cancellationcontracten behouden.
+- **Opgeleverd:** `Common/OperationFailure.cs` met centrale, typegebaseerde categorieën en veilige `Unknown`-fallback. `IncompleteRollbackException` bevat recoverypad en technische oorzaak. Lokale schemafouten en remote schema-/identiteitsfouten zijn typed; remote-fouten behouden hun bestaande CLI-exceptionbasis. Geen exceptiontekst wordt geparsed; timeout wordt niet uit cancellation geraden.
+- **Rollback:** `PublicationJournal.cs` verzamelt herstelproblemen, probeert overige entries te herstellen en bewaart back-ups na mislukte rollback én disposal. `CheckoutUseCase.cs` meldt ook ref-/indexcompensatiefouten. Een incomplete rollback heeft voorrang op annulering; oorspronkelijke fouten blijven in aggregate causes beschikbaar. Succesvolle compensatie behoudt de oorspronkelijke exception. Cleanup en compensatie gebruiken geen geannuleerd callertoken.
+- **Tests:** `OperationFailureTests.cs`, `PublicationJournalTests.cs`, `CheckoutProgressTests.cs` en `CheckoutAcTests.cs` controleren typegebaseerde mapping, hersteldata na disposal, metadatafouten, filecompensatie en annulering ná bestandspublicatie. Bestaande tests die een onderdrukte rollbackfout accepteerden zijn op het expliciete contract aangepast.
+- **Documentatie:** Technical Design §6.3, operatie-inventarisatie en Recovery Guide beschrijven foutcategorieën, lokale gevoelige details, annuleringsgrenzen en gedeeltelijke duurzame effecten. No-op blijft een bestaand use-caseresultaat; cancellation of een exception is geen garantie dat niets gepubliceerd werd.
+- **Uitgevoerde validatie:** Linux x64, .NET SDK 10.0.404; `dotnet test DawVcs.slnx -c Release --no-restore` — 534/534 geslaagd, 0 overgeslagen; `dotnet build DawVcs.slnx -c Release --no-restore` — 0 fouten en 0 waarschuwingen. `git diff --check` geslaagd. `dotnet format DawVcs.slnx --verify-no-changes --no-restore` — geslaagd voor de volledige solution.
+- **Grenzen:** Geen GUI of frameworkkeuze geleverd; WP3 nog open. Commit/fetch/pull/clone zijn niet ineens transactioneel. Untyped legacy `InvalidOperationException` blijft `Unknown`; geen onbetrouwbare categorisatie op tekst. Een repositoryroot als recoverypad duidt metadataherstel aan en belooft geen volledige back-up. Windows-desktopvalidatie hoort bij latere werkpakketten en is hier niet uitgevoerd.

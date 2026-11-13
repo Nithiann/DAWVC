@@ -78,7 +78,7 @@ public sealed class CloneUseCase
         var handshake = await transport.HandshakeAsync(cancellationToken).ConfigureAwait(false);
         if (handshake.SchemaVersion > RepositoryConfig.CurrentSchemaVersion)
         {
-            throw new RemoteException($"Remote schemaVersion '{handshake.SchemaVersion}' is newer than supported version '{RepositoryConfig.CurrentSchemaVersion}'.");
+            throw new IncompatibleRemoteRepositoryException($"Remote schemaVersion '{handshake.SchemaVersion}' is newer than supported version '{RepositoryConfig.CurrentSchemaVersion}'.");
         }
 
         // 2. Read remote config from remote transport or path

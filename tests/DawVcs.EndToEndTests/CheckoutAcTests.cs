@@ -420,8 +420,10 @@ public sealed class CheckoutAcTests
         var act = () => faultyCheckoutUseCase.ExecuteAsync(new CheckoutRequest(temp.Path, "feature", Force: true));
 
         // THEN staging fout wordt gegooid
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*Simulated staging index SQLite failure during clear*");
+        var failure = (await act.Should().ThrowAsync<IncompleteRollbackException>()).Which;
+        failure.RecoveryPath.Should().Be(temp.Path);
+        ((AggregateException)failure.InnerException!).InnerExceptions.Should()
+            .Contain(e => e is InvalidOperationException);
 
         // EN HEAD moet gerolled back zijn naar 'main'
         var normalContext = ContextFactory(temp.Path);

@@ -101,3 +101,11 @@ Observerexceptions kunnen een operatie stoppen nadat al objecten, refs of bestan
 5. **WP2-07:** complete contract-, cancellation- en regressievalidatie pas aftekenen nadat de bovenstaande wijzigingen zijn geleverd.
 
 Deze inventarisatie is broncodebewijs, geen fault-injectiontest van de open risico's. De werkelijk uitgevoerde build/tests, gewijzigde bestanden en resterende beperkingen staan in het voortgangslogboek van de [takenlijst](GUI_Implementation_Tasks.md).
+
+## WP2-05/06 — Foutpresentatie en annuleringsgrenzen (13 november 2026)
+
+`OperationFailure.FromException` classificeert op type; `OperationFailureCategory.Unknown` is de expliciete fallback voor nog ongetypeerde fouten. Er wordt geen exceptiontekst geparsed. Timeout en cancellation zijn afzonderlijk; een `OperationCanceledException` zonder verdere context wordt niet als timeout geraden. Incompatibele lokale/remote schema's en remote repository-identiteit zijn typed. Remote compatibility blijft afgeleid van `RemoteException` voor bestaande CLI-afhandeling.
+
+`PublicationJournal` verzamelt alle herstelproblemen, probeert ook volgende entries te herstellen en bewaart back-ups wanneer herstel faalt. Dispose verwijdert deze back-ups niet. Een ontbrekende vereiste back-up is eveneens een rollbackfout. `IncompleteRollbackException` bevat een herstelpad en technische oorzaak. Bij een publicatiefout blijven zowel de oorspronkelijke fout als rollbackfouten beschikbaar. Checkout en fast-forward melden ook mislukte ref-/indexcompensatie expliciet; het herstelpad is dan de repositoryroot, met exacte journalpaden in eventuele geneste fouten.
+
+Annulering tijdens staging publiceert geen bestanden; annulering tijdens publicatie wacht op rollback. Ref-/indexcompensatie gebruikt een onafhankelijk token. Een incomplete rollback heeft voorrang boven cancellation. De API belooft geen transactie over commit, fetch, pull of clone: duurzame writes kunnen bij onderbreking blijven bestaan. Een UI mag pas na het afwachten van de operatie "gestopt" tonen en mag cancellation niet presenteren als garantie dat niets veranderd is. Callbackfouten kunnen na publicatie optreden; progressconsumenten moeten niet gooien. Deze grenzen staan ook in Technical Design §6.3 en de Recovery Guide.

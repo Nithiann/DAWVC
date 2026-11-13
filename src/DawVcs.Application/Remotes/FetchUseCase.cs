@@ -82,12 +82,12 @@ public class FetchUseCase
         var handshake = await transport.HandshakeAsync(cancellationToken).ConfigureAwait(false);
         if (handshake.SchemaVersion > RepositoryConfig.CurrentSchemaVersion)
         {
-            throw new RemoteException($"Remote schemaVersion '{handshake.SchemaVersion}' is newer than supported version '{RepositoryConfig.CurrentSchemaVersion}'.");
+            throw new IncompatibleRemoteRepositoryException($"Remote schemaVersion '{handshake.SchemaVersion}' is newer than supported version '{RepositoryConfig.CurrentSchemaVersion}'.");
         }
 
         if (handshake.RepositoryId != localConfig.RepositoryId)
         {
-            throw new RemoteException($"Remote repositoryId '{handshake.RepositoryId}' does not match local repositoryId '{localConfig.RepositoryId}'.");
+            throw new IncompatibleRemoteRepositoryException($"Remote repositoryId '{handshake.RepositoryId}' does not match local repositoryId '{localConfig.RepositoryId}'.");
         }
 
         // 2. Enumerate remote refs
