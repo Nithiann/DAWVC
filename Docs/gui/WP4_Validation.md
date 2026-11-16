@@ -72,3 +72,20 @@ performancebudgetten, schone installatie, signing/notarization en volledige nati
 redistributienotices blijven WP8-releasegates. Het geselecteerde framework en de
 crossplatformtargets veranderen niets aan die ontbrekende bewijslast. GitHub API
 voor PR/Actions is nog geblokkeerd; er is niets goedgekeurd of gemerged.
+
+
+## Regressiefix 16 november 2026 — Windows index.db-lock
+
+De gebruiker meldde een cleanupfout in de Windows-spike-test. De fysieke SQLite-
+verbinding bleef na logische disposal in de pool staan. `SqliteStagingIndex.Dispose`
+leegt nu uitsluitend die databasepool; andere pools en actieve verbindingen blijven
+bruikbaar. Gebruik na disposal wordt geweigerd. Een nieuwe crossplatformtest bewijst
+de native-handle-sluiting en faalt tegen de oude implementatie. De oorspronkelijke
+spike-test blijft intact, zonder sleeps, retries of genegeerde cleanupfouten.
+
+556/556 hoofdsolutiontests en 4/4 spike-tests geslaagd op Linux; volledige
+opmaakcontrole en spike-build zonder fouten/waarschuwingen. De rollback-E2E-fixture
+levert nu verse, caller-owned contexts voor geneste aanroepen; de oorspronkelijke
+rollbackasserties blijven behouden. De Windows-spikepipeline is opnieuw geconfigureerd
+om de WP4-push en indexwijzigingen te testen. De Windows-uitkomst is niet lokaal
+geverifieerd. [Validatiesamenvatting](evidence/wp4/sqlite-pool-fix.json).

@@ -1467,3 +1467,16 @@ WP4 is a shell, not the WP5 viewer. Navigation destinations are placeholders; no
 status/staging/history/diagnostics controls or mutating actions are offered yet.
 Native performance, DPI, assistive technology and clean-machine validation across
 the three target OSes remain WP8 gates. Early CI builds/tests/publishes all three.
+
+### 6.6 SQLite pool lifetime at context disposal (16 November 2026)
+
+Logical `SqliteConnection.Dispose` returns native handles to its pool; it does not
+necessarily release Windows file locks. `SqliteStagingIndex.Dispose` now clears
+only the pool for its exact connection string, after callers have awaited active
+index work. This closes idle handles and prevents active connections from returning
+to that cleared pool once closed; it does not invalidate active commands or clear
+unrelated database pools. Disposal is idempotent, and subsequent index operations
+are rejected. Pooling remains enabled within the index lifetime, preserving reuse
+across hashing/cache operations. Repository-context disposal therefore releases the
+idle index handles before session cleanup. The corruption-recovery path and its
+known staged-entry limitation remain unchanged for WP5-08.

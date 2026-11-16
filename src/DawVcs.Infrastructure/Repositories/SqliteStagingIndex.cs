@@ -17,6 +17,7 @@ public sealed class SqliteStagingIndex : IStagingIndex, IDisposable
     private readonly string _dbPath;
     private readonly string _connectionString;
     private bool _initialized;
+    private int _disposed;
     private readonly SemaphoreSlim _lock = new(1, 1);
 
     public SqliteStagingIndex(string rootPath)
@@ -36,6 +37,7 @@ public sealed class SqliteStagingIndex : IStagingIndex, IDisposable
 
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)
     {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         if (_initialized) return;
 
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -237,6 +239,12 @@ VALUES (@path, @size, @lastModified, @hash, @checked_at);
 
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        // Disposing logical connections returns them to the pool. Release this database's
+        // idle native handles as well, so a completed session does not lock index.db on Windows.
+        // Other databases and currently active connections must remain usable.
+        using var connection = new SqliteConnection(_connectionString);
+        SqliteConnection.ClearPool(connection);
         _lock.Dispose();
     }
 

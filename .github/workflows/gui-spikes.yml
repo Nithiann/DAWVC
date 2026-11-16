@@ -2,11 +2,11 @@ name: GUI WP3 spikes (experimental)
 on:
   workflow_dispatch:
   push:
-    branches: [spike/gui-wp3-framework-comparison]
-    paths: ['spikes/gui/**', '.github/workflows/gui-spikes.yml']
+    branches: [spike/gui-wp3-framework-comparison, feat/gui-wp4-avalonia-shell]
+    paths: ['spikes/gui/**', 'src/DawVcs.Infrastructure/Repositories/SqliteStagingIndex.cs', 'Directory.Packages.props', '.github/workflows/gui-spikes.yml']
   pull_request:
-    branches: [feat_GUI, feat/gui-wp2-operation-errors]
-    paths: ['spikes/gui/**', '.github/workflows/gui-spikes.yml']
+    branches: [feat_GUI, feat/gui-wp2-operation-errors, spike/gui-wp3-framework-comparison]
+    paths: ['spikes/gui/**', 'src/DawVcs.Infrastructure/Repositories/SqliteStagingIndex.cs', 'Directory.Packages.props', '.github/workflows/gui-spikes.yml']
 permissions:
   contents: read
 jobs:

@@ -1,6 +1,6 @@
 <!--  --># DAWVC GUI — Takenlijst en voortgang
 
-**Laatst bijgewerkt:** 13 november 2026
+**Laatst bijgewerkt:** 16 november 2026
 **Status:** Avalonia expliciet gekozen voor Windows, macOS en Linux; WP3-selectie afgesloten met scopewijziging. WP4 afgerond; WP5 is de volgende uitvoering.
 
 **Ontwerpbron:** [GUI Framework Selection & Implementation Plan](DAWVC_GUI_Framework_Selection_and_Implementation_Plan.md)
@@ -323,3 +323,14 @@ Gebruik bij volgende updates hetzelfde formaat: datum, taak-ID's, bestanden/resu
 - **Extra lifecycleborging:** Succesvolle backendpublicatie blijft zichtbaar bij een laat annuleerverzoek zolang dezelfde session actief is. Een geannuleerde repositorywissel meldt zich niet voltooid terwijl het vorige backendwerk nog loopt. Parallelle shell-openacties/MRU-writes zijn geserialiseerd; late startup-MRU-loads kunnen nieuwe lijsten niet terugzetten.
 - **Documentatie:** Geaccepteerde framework-ADR, GUI-plan, takenlijst, Technical Design, Installation, QuickStart, README, Known Limitations, SBOM en securityreview bijgewerkt. Historische WP3-metingen blijven bewaard; hun onuitgevoerde checks zijn niet als geslaagd gemarkeerd.
 - **Beperkingen:** Native Windows/macOS en fysieke DPI/toegankelijkheids-/performancemetingen niet uitgevoerd; CI-configuratie en artifacts voorzien, remote resultaten niet bereikbaar via de huidige GitHub API. Geen PR-approval of merge uitgevoerd.
+
+
+### 16 november 2026 — WP4-05/WP4-08 regressie: Windows SQLite-bestandslock
+
+- **Melding:** De Windows-spikepipeline faalt bij `Status_IsRealAndDisposeWaitsForCompletion`: na sessiedisposal kan cleanup `index.db` niet verwijderen.
+- **Oorzaak:** Contexts en logische SQLite-connecties worden opgeruimd, maar `Microsoft.Data.Sqlite` houdt fysieke handles in de pool. `SqliteStagingIndex.Dispose` ruimde alleen zijn semaphore op.
+- **Correctie:** Bij disposal de pool voor uitsluitend de eigen connectionstring legen (`ClearPool`), met idempotente disposal en een disposed-guard. Actieve verbindingen blijven geldig en sluiten bij terugkeer; andere databasepools blijven intact. Geen algemene `ClearAllPools`-oplossing in tests, sleeps, retries of genegeerde cleanupfouten. Het bestaande corruptieherstel/WP5-08 valt buiten deze fix.
+- **Regressietests:** Native pooled handle expliciet volgen, sluiting controleren en de repository direct verwijderen; daarnaast actieve verbindingen en een andere pool op bruikbaarheid controleren. De bestaande spike-lifecycletest blijft ongewijzigd.
+- **CI:** Het Windows-spikeworkflow reageert nu ook op WP4-pushes en deze Infrastructure-wijziging, zodat de gemelde test opnieuw wordt uitgevoerd. Remote uitkomst nog niet beschikbaar in deze sessie.
+- **E2E-fixture:** De disposed-guard maakte zichtbaar dat de rollbacktest dezelfde context teruggaf aan checkout en geneste status. De factory maakt nu per aanroep een eigen context en ruimt ook de verificatiecontext op; rollbackasserties blijven behouden.
+- **Validatie:** Nieuwe native-handle-regressietest faalt aantoonbaar tegen de oude code; met de fix 556/556 hoofdsolutiontests en 4/4 spike-tests geslaagd (exacte gemelde `--no-build --logger trx`-stap), nul skips. Release-builds van hoofdsolution en spikes: 0 fouten/waarschuwingen; volledige hoofdsolution-opmaakcontrole en `git diff --check` geslaagd. Ruwe samenvatting in `gui/evidence/wp4/sqlite-pool-fix.json`. Windows-CI moet de Windows-uitkomst nog bevestigen.
