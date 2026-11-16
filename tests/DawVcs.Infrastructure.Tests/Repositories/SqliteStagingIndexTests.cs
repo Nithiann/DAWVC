@@ -5,6 +5,8 @@ using DawVcs.Infrastructure.Repositories;
 
 using FluentAssertions;
 
+using Microsoft.Data.Sqlite;
+
 using Xunit;
 
 namespace DawVcs.Infrastructure.Tests.Repositories;
@@ -25,6 +27,66 @@ public sealed class SqliteStagingIndexTests : IDisposable
         {
             try { Directory.Delete(_testDir, recursive: true); } catch { }
         }
+    }
+
+    [Fact]
+    public async Task Dispose_ClosesIdleNativeHandlesAndAllowsImmediateRepositoryDeletion()
+    {
+        var root = Path.Combine(_testDir, "disposal");
+        using var index = new SqliteStagingIndex(root);
+        await index.GetStagedEntriesAsync();
+        var builder = new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(root, ".dawvc", "index.db"),
+            Mode = SqliteOpenMode.ReadWriteCreate
+        };
+        var probe = new SqliteConnection(builder.ToString());
+        await probe.OpenAsync();
+        var native = probe.Handle!;
+        await probe.DisposeAsync();
+        native.IsClosed.Should().BeFalse("pooling retains the physical connection before index disposal");
+
+        index.Dispose();
+        index.Dispose(); // Context and host shutdown may both dispose owned resources.
+
+        native.IsClosed.Should().BeTrue("session disposal must release pooled native file handles");
+        Directory.Delete(root, recursive: true); // Must also pass on Windows, without retries/pool cleanup in the test.
+        Directory.Exists(root).Should().BeFalse();
+        var afterDispose = () => index.GetStagedEntriesAsync();
+        await afterDispose.Should().ThrowAsync<ObjectDisposedException>();
+    }
+
+    [Fact]
+    public async Task Dispose_DoesNotCloseActiveConnectionsOrAnotherRepositoryPool()
+    {
+        var root = Path.Combine(_testDir, "active");
+        var otherRoot = Path.Combine(_testDir, "other");
+        using var index = new SqliteStagingIndex(root);
+        using var otherIndex = new SqliteStagingIndex(otherRoot);
+        await index.GetStagedEntriesAsync();
+        await otherIndex.GetStagedEntriesAsync();
+        static SqliteConnection CreateConnection(string directory) => new(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(directory, ".dawvc", "index.db"),
+            Mode = SqliteOpenMode.ReadWriteCreate
+        }.ToString());
+        await using var active = CreateConnection(root);
+        await active.OpenAsync();
+        var activeNative = active.Handle!;
+        var other = CreateConnection(otherRoot);
+        await other.OpenAsync();
+        var otherNative = other.Handle!;
+        await other.DisposeAsync();
+
+        index.Dispose();
+
+        activeNative.IsClosed.Should().BeFalse();
+        otherNative.IsClosed.Should().BeFalse("disposal must not clear unrelated pools");
+        await using var command = active.CreateCommand();
+        command.CommandText = "SELECT 1";
+        (await command.ExecuteScalarAsync()).Should().Be(1L);
+        await active.DisposeAsync();
+        activeNative.IsClosed.Should().BeTrue("an active handle must close instead of returning to the cleared pool");
     }
 
     [Fact]

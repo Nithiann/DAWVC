@@ -28,6 +28,7 @@ public sealed class ServiceCollectionExtensionsTests
     public static TheoryData<Type> SharedUseCases => new()
     {
         typeof(InitRepositoryUseCase),
+        typeof(OpenRepositoryUseCase),
         typeof(CommitUseCase),
         typeof(LogUseCase),
         typeof(CheckoutRestoreUseCase),

@@ -1,0 +1,19 @@
+{
+  "platform": "Linux x64 under user-local Xvfb",
+  "kind": "native-shell-smoke",
+  "assemblySha256": "6349d39336ef64c44c29b53e41bc0c9e510df4a48bda43afd44957a2414ed30d",
+  "windowOpened": true,
+  "repositoryOpened": true,
+  "userLocalRecentsSaved": true,
+  "unixPreferenceMode": "0o600",
+  "themeToggleExercised": true,
+  "nativeCloseExitCode": 0,
+  "screenshots": [
+    "shell-dark.png",
+    "shell-light.png"
+  ],
+  "limitations": [
+    "Not Windows or macOS native validation",
+    "No DPI/accessibility/performance acceptance implied"
+  ]
+}

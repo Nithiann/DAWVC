@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "platform": "Linux x64",
+  "sdk": "10.0.404",
+  "regressionControl": "New native-handle test fails against the original implementation (native.IsClosed is false).",
+  "solutionTestsPassed": 556,
+  "spikeTestsPassed": 4,
+  "skipped": 0,
+  "poolBehavior": [
+    "Idle native handles closed on index disposal",
+    "Active connection remains usable and closes when returned",
+    "Unrelated repository pool remains open",
+    "Immediate repository deletion after disposal without cleanup retries"
+  ],
+  "windowsCi": "Original Windows failure reported by user; rerun configured on WP4 push, remote outcome not verified.",
+  "solutionBuildWarnings": 0,
+  "solutionBuildErrors": 0,
+  "spikeBuildWarnings": 0,
+  "spikeBuildErrors": 0,
+  "formatVerified": true
+}

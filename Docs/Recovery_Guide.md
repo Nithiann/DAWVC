@@ -109,3 +109,9 @@ dawvc fsck --artifacts
 
 - **Health domain**: Checks internal BLAKE3 hashes of all stored commit objects, snapshots, envelopes, and bundled blobs.
 - **Atomic guarantee**: DAWVC uses atomic file renaming on Windows NTFS. Incomplete object writes remain orphaned in temporary files and never corrupt existing reachable commits or branch pointers.
+
+## GUI operation contract: incomplete rollback
+
+The Application API distinguishes cancellation from incomplete rollback. Await a cancelled operation until compensation has finished. Cancellation does not guarantee an unchanged repository: commit, fetch, pull and clone can leave durable effects.
+
+If `IncompleteRollbackException` is returned, stop further mutations and preserve its `RecoveryPath`. A journal backup directory contains the original files that could not be restored and survives journal disposal. A repository-root path identifies failed ref/index compensation; it is not a complete metadata backup. Inspect the retained technical causes locally for nested journal paths. Preserve these paths before attempting manual recovery and run `doctor`/`fsck` as appropriate. Redact machine paths and technical exception details before sharing diagnostics. There is no new GUI recovery action or CLI command in this change.

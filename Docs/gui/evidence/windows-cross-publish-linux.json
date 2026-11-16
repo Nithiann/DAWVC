@@ -1,0 +1,53 @@
+[
+  {
+    "framework": "Avalonia",
+    "attempt": 1,
+    "seconds": 6.162605883999959,
+    "bytes": 217527962,
+    "fileCount": 248,
+    "manifestFile": "avalonia-manifest-1.json"
+  },
+  {
+    "framework": "Avalonia",
+    "attempt": 2,
+    "seconds": 5.464277591999917,
+    "bytes": 217527962,
+    "fileCount": 248,
+    "manifestFile": "avalonia-manifest-2.json",
+    "identicalNonPdbHashes": true
+  },
+  {
+    "framework": "Wpf",
+    "attempt": 1,
+    "seconds": 5.902069379000068,
+    "bytes": 150356939,
+    "fileCount": 425,
+    "manifestFile": "wpf-manifest-1.json"
+  },
+  {
+    "framework": "Wpf",
+    "attempt": 2,
+    "seconds": 6.041312340000104,
+    "bytes": 150356939,
+    "fileCount": 425,
+    "manifestFile": "wpf-manifest-2.json",
+    "identicalNonPdbHashes": true
+  },
+  {
+    "framework": "Photino",
+    "attempt": 1,
+    "seconds": 12.050228265999976,
+    "bytes": 86692673,
+    "fileCount": 251,
+    "manifestFile": "photino-manifest-1.json"
+  },
+  {
+    "framework": "Photino",
+    "attempt": 2,
+    "seconds": 5.495448461000024,
+    "bytes": 86692673,
+    "fileCount": 251,
+    "manifestFile": "photino-manifest-2.json",
+    "identicalNonPdbHashes": true
+  }
+]

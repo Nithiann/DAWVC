@@ -1,0 +1,26 @@
+<Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Styles.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="Color.Background.Base">#15181E</SolidColorBrush>
+          <SolidColorBrush x:Key="Color.Background.Elevated">#1D222B</SolidColorBrush>
+          <SolidColorBrush x:Key="Color.Border.Subtle">#353E4D</SolidColorBrush>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="Color.Background.Base">#F7F8FA</SolidColorBrush>
+          <SolidColorBrush x:Key="Color.Background.Elevated">#EBEEF3</SolidColorBrush>
+          <SolidColorBrush x:Key="Color.Border.Subtle">#CDD3DE</SolidColorBrush>
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+      <Thickness x:Key="Spacing.Small">8</Thickness>
+      <Thickness x:Key="Spacing.Page">24</Thickness>
+      <CornerRadius x:Key="Radius.Panel">12</CornerRadius>
+      <SolidColorBrush x:Key="Color.Accent">#9FC1FF</SolidColorBrush>
+    </ResourceDictionary>
+  </Styles.Resources>
+  <Style Selector="Button"><Setter Property="Padding" Value="14,10" /><Setter Property="CornerRadius" Value="6" /></Style>
+  <Style Selector="Button.nav"><Setter Property="HorizontalContentAlignment" Value="Left" /><Setter Property="HorizontalAlignment" Value="Stretch" /><Setter Property="Margin" Value="0,3" /><Setter Property="Background" Value="Transparent" /></Style>
+  <Style Selector="Button.nav:pointerover /template/ ContentPresenter"><Setter Property="Background" Value="{DynamicResource Color.Background.Elevated}" /></Style>
+  <Style Selector="TextBlock.caption"><Setter Property="Opacity" Value="0.7" /><Setter Property="FontSize" Value="13" /></Style>
+</Styles>

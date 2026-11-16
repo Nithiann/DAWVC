@@ -42,6 +42,27 @@ public sealed class PublicationJournalTests : IDisposable
 
     [Fact]
     [Trait("Requirement", "FR-CHK-006")]
+    public async Task RollbackFailure_RetainsBackupAfterDisposal()
+    {
+        var target = Path.Combine(_targetDir, "FileA.txt");
+        await File.WriteAllTextAsync(target, "original");
+        await File.WriteAllTextAsync(Path.Combine(_stagingDir, "FileA.txt"), "replacement");
+        var journal = new PublicationJournal(_targetDir, _dotDawvcDir);
+        await journal.ApplyAsync(_stagingDir, new CheckoutPlan(
+            [new CheckoutAction(new ArtifactPath("FileA.txt"), CheckoutActionKind.Replace)], []));
+
+        File.Delete(target);
+        Directory.CreateDirectory(target); // Blocks restoration on Windows and Linux.
+        var act = () => journal.RollbackAsync();
+        var failure = (await act.Should().ThrowAsync<IncompleteRollbackException>()).Which;
+        await journal.DisposeAsync();
+
+        (await File.ReadAllTextAsync(Path.Combine(failure.RecoveryPath, "FileA.txt")))
+            .Should().Be("original");
+    }
+
+    [Fact]
+    [Trait("Requirement", "FR-CHK-006")]
     public async Task ExecutePlanAsync_SuccessfulPlan_AppliesAllActionsCleanly()
     {
         // Arrange

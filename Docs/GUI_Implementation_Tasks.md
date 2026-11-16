@@ -1,7 +1,7 @@
 <!--  --># DAWVC GUI — Takenlijst en voortgang
 
-**Laatst bijgewerkt:** 25 oktober 2026
-**Status:** WP1 en WP2-01 t/m WP2-04 voltooid; voortgang en cancellation/disposal aangesloten op alle use cases en storage/indices, typed foutvertaling en rollback-borging in uitvoering
+**Laatst bijgewerkt:** 16 november 2026
+**Status:** Avalonia expliciet gekozen voor Windows, macOS en Linux; WP3-selectie afgesloten met scopewijziging. WP4 afgerond; WP5 is de volgende uitvoering.
 
 **Ontwerpbron:** [GUI Framework Selection & Implementation Plan](DAWVC_GUI_Framework_Selection_and_Implementation_Plan.md)
 
@@ -20,25 +20,25 @@ Dit document is de centrale voortgangsregistratie voor de desktop-GUI. Het oorsp
 
 ## 2. Actuele voortgang
 
-**Eerstvolgende taak:** WP2-05 — typed fouten aanvullen en centrale gebruikerscategorieën definiëren zonder exceptiontekst te parsen; timeout, annulering en incomplete rollback onderscheiden.
+**Eerstvolgende taak:** WP5-01 — viewer-startscherm en repository-opening verder uitwerken op de geleverde shell; daarna dashboard/changes/history. WP5 is nog niet gestart.
 
-**Lopende taken:** WP2-04 voltooid; WP2-05 t/m WP2-07 nog open binnen WP2.
+**Lopende taken:** Geen binnen WP4. Native platform-/releasechecks blijven geregistreerd in WP8.
 
-**Blokkades:** Geen; 527 tests geslaagd in Release-configuratie.
+**Blokkades:** GitHub API blijft `Forbidden` geven voor Actions en PR-aanmaak; branchpush werkt. De gebruiker heeft de frameworkkeuze expliciet gemaakt en WP4 toegestaan. Native Windows/macOS-QA en platformbudgetten blijven open in WP8, niet als geslaagd aangemerkt. Linux-native validatie is nu mogelijk met een tijdelijk lokaal uitgepakte Xvfb.
 
-**Aandachtspunten:** Rollback is best-effort en fouten kunnen na duurzame publicatie optreden. SQLite-corruptieherstel kan staged entries wissen: dit moet vóór vieweracceptatie worden aangepakt (WP5-08). Fetch/pull-dry-runs schrijven tijdelijke metadata en kunnen stale sessies verwijderen. Adaptercache-invalidatie blijft WP4-05. Zie de inventarisatie voor bronnen en vervolggrenzen.
+**Aandachtspunten:** Rollback probeert alle herstelacties; falen wordt typed gemeld en beschikbare journalback-ups blijven bewaard. Fouten kunnen na duurzame publicatie optreden. SQLite-corruptieherstel kan staged entries wissen: dit moet vóór vieweracceptatie worden aangepakt (WP5-08). Fetch/pull-dry-runs schrijven tijdelijke metadata en kunnen stale sessies verwijderen. Adaptercache-invalidatie blijft WP4-05. Zie de inventarisatie voor bronnen en vervolggrenzen.
 
 | Werkpakket | Status | Afhankelijkheden | Oplevering |
 | --- | --- | --- | --- |
 | WP0 — Planning en documentatie | Voltooid | Geen | Takenlijst, verwijzingen en onderhoudsafspraken |
 | WP1 — Gedeelde composition root | Voltooid | WP0 | Bootstrap en ongewijzigd CLI-gedrag |
-| WP2 — Operatiecontracten | In uitvoering | WP1 | Voortgang, cancellation en typed fouten |
-| WP3 — Frameworkspikes en ADR | Open | WP1; WP2 voor progress/cancellation | Onderbouwde frameworkkeuze |
-| WP4 — Desktop-shell en session | Open | WP2, WP3 | Responsieve shell en veilige lifecycle |
+| WP2 — Operatiecontracten | Voltooid | WP1 | Voortgang, cancellation en typed fouten |
+| WP3 — Frameworkspikes en ADR | Afgesloten op gebruikersbesluit | WP1; WP2 voor progress/cancellation | Onderbouwde frameworkkeuze |
+| WP4 — Desktop-shell en session | Voltooid | WP2, WP3 | Responsieve shell en veilige lifecycle |
 | WP5 — Viewer-release | Open | WP4 | Geen mutaties aan projectinhoud, staging, branches of refs |
 | WP6 — Lokale mutaties | Open | WP5 | Preflight, bevestiging en recovery |
 | WP7 — Clone en remotes | Open | WP6 | Backendconforme samenwerking |
-| WP8 — Productisering | Open | Start bij WP3/WP4; afronding na WP7 | Gevalideerde Windows-release |
+| WP8 — Productisering voor Windows, macOS en Linux | Open | Start bij WP3/WP4; afronding na WP7 | Gevalideerde Windows-release |
 
 Werkpakketten zijn opleverbaar in kleine wijzigingen. Packaging, CI, privacy en toegankelijkheid beginnen vroeg; WP8 is geen reden om die uit te stellen.
 
@@ -68,33 +68,40 @@ Werkpakketten zijn opleverbaar in kleine wijzigingen. Packaging, CI, privacy en 
 - [x] WP2-02 — `OperationProgress` in Application introduceren; optioneel per aanroep ontsluiten met behoud van bestaande CLI-call-sites. Contract en aanvullende overloads geleverd voor scan/status; overige integratie valt onder WP2-03.
 - [x] WP2-03 — Voortgang aansluiten op scan/status, commit, checkout/restore, diagnostics en transfers waar zinvol; onbekende totalen ondersteunen. Geleverd voor scan/status, commit, checkout/restore en fast-forward, doctor/fsck en fetch/clone/pull; nested completion en legacy-overloads getest.
 - [x] WP2-04 — Cancellation tijdens enumeratie, hashing, adapterwerk en I/O controleren en ontbrekende checks toevoegen. Stream-disposal bij gefaalde/geannuleerde header-read gerealiseerd in LooseObjectStore. Cancellationbehoud in PublicationJournal (rollback met uncancelled token en directe rethrow), Clone/Pull optionele doctor reporting en Dependency Discovery/Resolver. Entry- en loop-checks toegevoegd aan alle use cases (Checkout, Commit, Add, Log, Bind, Switch, Init, Fsck, Doctor, Remotes), SQLite-stagingindex (Dapper CommandDefinition) en QuarantineObjectStore.
-- [ ] WP2-05 — Typed fouten aanvullen en centrale gebruikerscategorieën definiëren zonder exceptiontekst te parsen; timeout, annulering en incomplete rollback onderscheiden.
-- [ ] WP2-06 — Veilige annuleringsgrenzen en rollbackbeleid vastleggen en testen; cleanup mag niet door een reeds geannuleerd token worden overgeslagen.
-- [ ] WP2-07 — Contract-, cancellation- en regressietests uitvoeren; Application-contracten en beperkingen documenteren.
+- [x] WP2-05 — Typed fouten aanvullen en centrale gebruikerscategorieën definiëren zonder exceptiontekst te parsen; timeout, annulering en incomplete rollback onderscheiden.
+- [x] WP2-06 — Veilige annuleringsgrenzen en rollbackbeleid vastleggen en testen; cleanup mag niet door een reeds geannuleerd token worden overgeslagen.
+- [x] WP2-07 — Contract-, cancellation- en regressietests uitvoeren; Application-contracten en beperkingen documenteren.
 
 **Acceptatie:** Bestaande clients blijven werken zonder progressconsument. Annulering is pas afgerond zodra het werk stopt; fouten zijn typed presenteerbaar.
 
 ### WP3 — Frameworkspikes en ADR
 
-- [ ] WP3-01 — Gelijke fixtures, meetprocedure en vooraf vastgelegde acceptatiegrenzen bepalen voor startup, geheugen, filterrespons en cancellation.
-- [ ] WP3-02 — Avalonia-spike bouwen: folderpicker, echte status, 10.000 assets, filtering, annuleerbare scan, doctor, thema en Windows-publicatie.
-- [ ] WP3-03 — Dezelfde verticale slice in WPF uitvoeren.
-- [ ] WP3-04 — Dezelfde slice in Photino of Uno uitvoeren conform het ontwerpdocument; een eventuele scopewijziging expliciet onderbouwen en vastleggen.
-- [ ] WP3-05 — Virtualisatie, drag-and-drop, toetsenbord, DPI, testbaarheid, licenties, ontwikkeltijd en reproduceerbare packaging vergelijken.
-- [ ] WP3-06 — Meetresultaten documenteren en de frameworkkeuze vastleggen in `Docs/adr`; ontwerpstatus en gekozen dependencies bijwerken.
+**Scopewijziging 13 november 2026:** De gebruiker vereist Windows, macOS en Linux,
+kiest expliciet Avalonia en geeft opdracht met WP4 verder te gaan. De oorspronkelijke
+vergelijkingsgate is hiermee vervangen. Eerder ontbrekende metingen blijven ontbreken;
+native kwaliteits-/releasevalidatie voor Avalonia gaat mee naar WP8 voor alle drie OS'en.
 
-**Acceptatie:** De keuze is met metingen onderbouwd, voldoet aan de knock-outcriteria en introduceert geen onbedoelde commerciële controlafhankelijkheid. Prototypes mogen geïsoleerd worden uitgevoerd; branches alleen op expliciet verzoek aanmaken.
+- [x] WP3-01 — Gelijke fixtures, meetprocedure en budgetten vooraf vastgelegd; originele protocolwaarden behouden.
+- [x] WP3-02 — Avalonia-prototype geleverd met gedeelde backend, virtualisatie, filtering, cancellation, doctor en Windows-crosspublicatie; headless bewijs geregistreerd. Native platform-QA verplaatst naar WP8.
+- [x] WP3-03 — WPF-referentiespike behouden; uitgesloten als productkandidaat wegens Windows-only. Native vergelijkingsrun vervalt door gebruikersbesluit.
+- [x] WP3-04 — Photino-referentiespike behouden als niet-gekozen alternatief; beperkingen niet als geslaagde checks gepresenteerd.
+- [x] WP3-05 — Beschikbaar bewijs, licentiemetadata en open platformchecks geregistreerd; volledige driewegvergelijking vervalt door gebruikersbesluit.
+- [x] WP3-06 — Expliciete Avalonia-keuze vastgelegd in Accepted ADR-GUI-001; implementatie- en ontwerpstatus bijgewerkt.
+
+**Acceptatie na scopewijziging:** Avalonia is een expliciet gebruikersbesluit, geen
+volledig bewezen vergelijkingswinnaar. Geen commerciële controls. Productie-Desktop
+mag worden gebouwd; native kwaliteit en distributie op de drie OS'en blijven releasegates.
 
 ### WP4 — Desktop-shell en repositorysession
 
-- [ ] WP4-01 — `src/DawVcs.Desktop` en `tests/DawVcs.Desktop.Tests` toevoegen met de gekozen stack; packages centraal beheren.
-- [ ] WP4-02 — Startup, Bootstrap-integratie, navigatie, thema en design tokens bouwen.
-- [ ] WP4-03 — Interfaces voor folderpicker, dialogs en openen in de bestandsverkenner implementeren.
-- [ ] WP4-04 — Recente repositories in gebruikersgebonden opslag implementeren, zonder machinepaden in gedeelde repositorydata op te slaan.
-- [ ] WP4-05 — Repositorysession met sessie-identiteit, cancellation en disposal implementeren; late resultaten van een vorige session negeren. Adaptercacheverversing of een expliciet lifetimebeleid implementeren en testen, inclusief gewijzigde/ontbrekende samples en gewijzigde zoekpaden.
-- [ ] WP4-06 — Operatiecoördinator bouwen met busy state, begrensde progressupdates, foutpresentatie en serialisatie van conflicterende acties.
-- [ ] WP4-07 — UI-threadresponsiviteit borgen, inclusief synchronisch werk vóór de eerste `await`.
-- [ ] WP4-08 — Architectuurtests toevoegen voor Desktop → Application en het verbod op Desktop → CLI; lifecycle-, commandstate- en navigatietests uitvoeren.
+- [x] WP4-01 — `src/DawVcs.Desktop` en `tests/DawVcs.Desktop.Tests` toevoegen met de gekozen stack; packages centraal beheren.
+- [x] WP4-02 — Startup, Bootstrap-integratie, navigatie, thema en design tokens bouwen.
+- [x] WP4-03 — Interfaces voor folderpicker, dialogs en openen in de bestandsverkenner implementeren.
+- [x] WP4-04 — Recente repositories in gebruikersgebonden opslag implementeren, zonder machinepaden in gedeelde repositorydata op te slaan.
+- [x] WP4-05 — Repositorysession met sessie-identiteit, cancellation en disposal implementeren; late resultaten van een vorige session negeren. Adaptercacheverversing of een expliciet lifetimebeleid implementeren en testen, inclusief gewijzigde/ontbrekende samples en gewijzigde zoekpaden.
+- [x] WP4-06 — Operatiecoördinator bouwen met busy state, begrensde progressupdates, foutpresentatie en serialisatie van conflicterende acties.
+- [x] WP4-07 — UI-threadresponsiviteit borgen, inclusief synchronisch werk vóór de eerste `await`.
+- [x] WP4-08 — Architectuurtests toevoegen voor Desktop → Application en het verbod op Desktop → CLI; lifecycle-, commandstate- en navigatietests uitvoeren.
 
 **Acceptatie:** Repositorywissels tonen geen oude resultaten; langdurig werk blokkeert de UI niet. GUI-coördinatie vervangt geen backendbeveiliging tegen gelijktijdig CLI-gebruik.
 
@@ -136,18 +143,18 @@ Werkpakketten zijn opleverbaar in kleine wijzigingen. Packaging, CI, privacy en 
 
 **Acceptatie:** Alleen ondersteunde transportmogelijkheden worden aangeboden; dry-run, uitvoering en foutpresentatie komen overeen met backendgedrag.
 
-### WP8 — Productisering
+### WP8 — Productisering voor Windows, macOS en Linux
 
-- [ ] WP8-01 — Vroeg een reproduceerbare self-contained Windows x64-publicatie inrichten en packageversies/licenties registreren.
+- [ ] WP8-01 — Vroeg reproduceerbare self-contained publicaties voor Windows, macOS en Linux inrichten en packageversies/licenties registreren.
 - [ ] WP8-02 — Vanaf de desktop-shell CI-build, tests en artifacts toevoegen.
 - [ ] WP8-03 — Signing en distributiestrategie vastleggen; automatische updates pas na expliciet beveiligings- en distributiebesluit implementeren.
 - [ ] WP8-04 — High-DPI-, toetsenbord-, focus- en toegankelijkheidstests uitvoeren.
 - [ ] WP8-05 — Grote-projecttests met echte hashing en grote samples uitvoeren; resultaten vergelijken met de vastgelegde budgetten.
 - [ ] WP8-06 — Logs, crashdetails en exports op pad-/privacyredactie controleren.
 - [ ] WP8-07 — Installatie, QuickStart, beperkingen, recovery, screenshots en afhankelijkhedenoverzicht bijwerken voor de werkelijk geleverde GUI.
-- [ ] WP8-08 — Gepubliceerde Windows-app op een schone omgeving valideren en releasecriteria met bewijs aftekenen.
+- [ ] WP8-08 — Gepubliceerde app op schone Windows-, macOS- en Linux-omgevingen valideren en releasecriteria met bewijs aftekenen.
 
-**Acceptatie:** De distributie is reproduceerbaar en de ondersteunde Windows-workflows zijn aantoonbaar getest; documentatie beschrijft geen nog ongeïmplementeerde functies als beschikbaar.
+**Acceptatie:** De distributie is reproduceerbaar en de ondersteunde Windows-, macOS- en Linux-workflows zijn aantoonbaar getest; documentatie beschrijft geen nog ongeïmplementeerde functies als beschikbaar.
 
 ## 4. Welke documentatie wordt wanneer bijgewerkt?
 
@@ -256,3 +263,74 @@ Bestaande historische plannen behouden hun oorspronkelijke releasescope. Voeg ve
 - **Beperkingen en vervolg:** Rollback blijft best-effort; fouten na duurzame refpublicatie kunnen de repository in een inconsistente toestand achterlaten als rollback faalt. SQLite-corruptieherstel wist nog steeds staged entries (WP5-08). WP2-05 (typed fouten en centrale categorieën) is de volgende stap.
 
 Gebruik bij volgende updates hetzelfde formaat: datum, taak-ID's, bestanden/resultaten, uitgevoerde validatie en open beperkingen.
+
+
+### 13 november 2026 — WP2 afgerond
+
+- **Taken:** WP2-05, WP2-06, WP2-07; bestaande voortgangs- en cancellationcontracten behouden.
+- **Opgeleverd:** `Common/OperationFailure.cs` met centrale, typegebaseerde categorieën en veilige `Unknown`-fallback. `IncompleteRollbackException` bevat recoverypad en technische oorzaak. Lokale schemafouten en remote schema-/identiteitsfouten zijn typed; remote-fouten behouden hun bestaande CLI-exceptionbasis. Geen exceptiontekst wordt geparsed; timeout wordt niet uit cancellation geraden.
+- **Rollback:** `PublicationJournal.cs` verzamelt herstelproblemen, probeert overige entries te herstellen en bewaart back-ups na mislukte rollback én disposal. `CheckoutUseCase.cs` meldt ook ref-/indexcompensatiefouten. Een incomplete rollback heeft voorrang op annulering; oorspronkelijke fouten blijven in aggregate causes beschikbaar. Succesvolle compensatie behoudt de oorspronkelijke exception. Cleanup en compensatie gebruiken geen geannuleerd callertoken.
+- **Tests:** `OperationFailureTests.cs`, `PublicationJournalTests.cs`, `CheckoutProgressTests.cs` en `CheckoutAcTests.cs` controleren typegebaseerde mapping, hersteldata na disposal, metadatafouten, filecompensatie en annulering ná bestandspublicatie. Bestaande tests die een onderdrukte rollbackfout accepteerden zijn op het expliciete contract aangepast.
+- **Documentatie:** Technical Design §6.3, operatie-inventarisatie en Recovery Guide beschrijven foutcategorieën, lokale gevoelige details, annuleringsgrenzen en gedeeltelijke duurzame effecten. No-op blijft een bestaand use-caseresultaat; cancellation of een exception is geen garantie dat niets gepubliceerd werd.
+- **Uitgevoerde validatie:** Linux x64, .NET SDK 10.0.404; `dotnet test DawVcs.slnx -c Release --no-restore` — 534/534 geslaagd, 0 overgeslagen; `dotnet build DawVcs.slnx -c Release --no-restore` — 0 fouten en 0 waarschuwingen. `git diff --check` geslaagd. `dotnet format DawVcs.slnx --verify-no-changes --no-restore` — geslaagd voor de volledige solution.
+- **Grenzen:** Geen GUI of frameworkkeuze geleverd; WP3 nog open. Commit/fetch/pull/clone zijn niet ineens transactioneel. Untyped legacy `InvalidOperationException` blijft `Unknown`; geen onbetrouwbare categorisatie op tekst. Een repositoryroot als recoverypad duidt metadataherstel aan en belooft geen volledige back-up. Windows-desktopvalidatie hoort bij latere werkpakketten en is hier niet uitgevoerd.
+
+
+### 13 november 2026 — WP3-01 meetprotocol vastgesteld
+
+- Budgetten, fixtures, meetherhalingen en Windows-knock-outchecks vooraf vastgelegd in `gui/WP3_Measurement_Protocol.md`.
+- Nieuwe branch `spike/gui-wp3-framework-comparison` expliciet op verzoek aangemaakt vanaf `feat/gui-wp2-operation-errors` (`6976c5b`). Geen extra branches per prototype.
+- Geen framework gekozen; WP3-02 t/m WP3-06 blijven open tot hun bewijs beschikbaar is.
+
+
+### 13 november 2026 — WP3-prototypes geïmplementeerd; Windows-validatie open
+
+- **Taken:** WP3-02/03/04 gedeeltelijk; WP3-05/06 nog open. Alleen WP3-01 is volledig afgevinkt.
+- **Opgeleverd:** `spikes/gui/GuiSpikes.slnx` met Shared, Avalonia, Wpf, Photino, Harness en Tests; frameworkpackages alleen in de lokale `Directory.Packages.props`. Bestaande productieprojecten en productiepackages ongewijzigd. Echte status/scan/doctor, native folderpickers, 10.000 synthetische rijen, filtering/virtualisatie, thema en cancellation/close-coördinatie. Avalonia/WPF hebben folderdrop; Photino-drop blijft open.
+- **Veiligheid/lifecycle:** Worker-thread inclusief synchronische backendstart, verse providers per operatie, gesamplede progress en operatie-ID voor late updates, geblokkeerde repositorywissels tijdens werk, invalid-foldercheck vóór contextconstructie, annuleren en afwachten bij sluiten. Photino-webviewfilesystemtoegang uitgeschakeld; upstream oorsprongvalidatie als reviewpunt vastgelegd.
+- **Fixture/metingen:** Harness genereert uitsluitend synthetische FLP/WAV en optioneel een echte 256 MiB asset; bestaande doelen worden geweigerd. Backendfouten leveren een niet-nul exitcode. `--cancel-status` accepteert alleen de gemarkeerde grote fixture en meet vanaf vóór tokenannulering tot einde taak.
+- **Windows-vervolg:** `publish.ps1` publiceert tweemaal en vergelijkt hashes; `smoke-windows.ps1` controleert native openen/sluiten. `.github/workflows/gui-spikes.yml` bouwt/test/publiceert op Windows en bewaart artifacts. Het workflow is geleverd, niet lokaal op Windows uitgevoerd; smoke-vensterhandle is geen first-render/performancebewijs.
+- **Validatie:** 4/4 geïsoleerde tests geslaagd, inclusief headless Avalonia-virtualisatie (10.000 items, 1–200 gerealiseerde containers), filtering, veilig sluiten en echte status/lifecycle. Bestaande regressiesuite: 534/534 geslaagd. Definitieve build/format-, publicatie- en meetresultaten worden in de aansluitende bewijsregistratie vastgelegd.
+- **Documentatie:** Ontwerpdocument, Technical Design, SBOM, SecurityThreatModelReview, spike-README en Proposed ADR-GUI-001 bijgewerkt. Native Windows-toetsenbord/DPI/folderpicker-/cancelchecks en frameworkkeuze zijn niet als voltooid gepresenteerd.
+
+
+### 13 november 2026 — WP3 Linux-bewijs vastgelegd
+
+- **Bron:** Prototypecommit `73d613b`; meetprotocol vooraf gecommit als `e9050ac`.
+- **Checks:** Definitieve geïsoleerde Release-build geslaagd met 0 waarschuwingen en 0 fouten. 4/4 spike-tests en 534/534 bestaande regressietests geslaagd, geen skips. `dotnet format spikes/gui/GuiSpikes.slnx --no-restore --verify-no-changes` geslaagd voor de volledige spike-solution; `git diff --check` en nieuwe lokale documentatielinks gecontroleerd.
+- **Metingen:** Model-filter p95 1,5975 ms (geen UI-renderlatency); echte status/scan/doctor zonder failurecategorie; tien echte 256 MiB-status-hashingcancellations voltooid, p95/max 26,823 ms (geen native scan/cancelacceptatie). Definitieve self-contained win-x64-crosspublicatie voor alle drie kandidaten tweemaal uitgevoerd met identieke niet-PDB-hashes. Publicatiegrootte: Avalonia 207,45 MiB, WPF 143,39 MiB, Photino 82,68 MiB exclusief externe WebView2. Ruwe data, omgeving, pakketmetadata en manifests staan in `gui/evidence/`; toelichting in `gui/WP3_Results.md`.
+- **Mislukte poging:** Eén herhaalde crosspublicatieronde stopte met MSB4166 (buildnodes verdwenen tijdens overlappende .NET-tooling). Definitieve publicaties serieel opnieuw uitgevoerd zonder node reuse; alle zes geslaagd. Niet als compiler- of frameworkfout gepresenteerd.
+- **Blijft open:** Native Windows-startup/procesboomgeheugen, filter-tot-render, UI-respons, scan/cancel, folderpicker, toetsenbord, DPI, contrast, native Photino-drop en runtime-/originreview. Het Windows-workflow en PowerShell-scripts zijn geleverd maar hier niet op Windows uitgevoerd. Geen ontwikkeltijdcijfers verzonnen. WP3-02 t/m WP3-06 en de frameworkkeuze blijven daarom open; WP4 niet gestart.
+
+
+### 13 november 2026 — Gebruikersbesluit Avalonia en start WP4
+
+- **Besluit/scope:** De gebruiker kiest expliciet Avalonia, vereist meerdere OS'en en autoriseert doorgaan met WP4. De oorspronkelijke vergelijkingsgate van WP3 is vervangen; ADR-GUI-001 is Accepted. Dit is geen PR-approval. Ontbrekende vergelijkingsmetingen zijn niet als geslaagd aangemerkt; native Avalonia-QA gaat naar WP8 voor Windows/macOS/Linux.
+- **Branch:** `feat/gui-wp4-avalonia-shell` vanaf `spike/gui-wp3-framework-comparison` (`7e6cc1f`); geen WP5-features in deze wijziging.
+- **Implementatie:** `DawVcs.Desktop` en `DawVcs.Desktop.Tests` aan hoofdsolution toegevoegd; Avalonia/FluentTheme/Inter 12.1.6 en CommunityToolkit.Mvvm 8.4.0 centraal beheerd. Spike-packageversies dedupliceren via dezelfde centrale bron; CLI-gedrag ongewijzigd.
+- **Contract:** Nieuwe lichte `OpenRepositoryUseCase` via Bootstrap voorkomt directe Desktop→repositoryimplementatie en vraagt geen status/indexherstel op. Alle backendstartwerk draait op een worker. De coördinator serialiseert werk, wacht op cancellation/disposal, vernieuwt adapterproviders per operatie en filtert late sessieresultaten. Succesvolle backendpublicatie wordt bij een laat annuleerverzoek behouden.
+- **Shell:** Navigatie en commandstates, thema en design tokens, native platformabstracties voor folders/dialogs/explorer, begrensde lokale MRU-opslag met tijdelijke file + atomic move. Productpagina's zijn placeholders tot WP5.
+- **Vroege productisering:** Apart desktop-CI-workflow voor Windows/macOS/Linux met headless tests en self-contained artifacts. Remote uitvoering niet geverifieerd wegens API-toegang.
+- **Validatie in uitvoering:** De eerste 12 gerichte tests slagen. Native Linux-opstarttest vond een ontbrekend Inter-lettertype; als gebundelde dependency gecorrigeerd. Tijdelijk user-local Xvfb en testtools gebruikt zonder systeeminstallatie; verdere native controles en definitieve suite volgen hieronder.
+
+
+### 13 november 2026 — WP4 afgerond
+
+- **Taken:** WP4-01 t/m WP4-08 voltooid. Viewerfeatures blijven WP5; geen automatische voortzetting naar WP5 in deze branch.
+- **Validatie:** 554/554 tests in de hoofdsolution geslaagd, nul skips (16 Desktop, 288 Application, 27 Bootstrap); Release-build met 0 fouten en 0 waarschuwingen; volledige `dotnet format --verify-no-changes --no-restore` geslaagd; whitespace en documentatielinks gecontroleerd. SDK 10.0.404, Linux x64. MSBuild-nodehergebruik lokaal uitgeschakeld na de eerder bekende runner-nodefout.
+- **Native bewijs:** Self-contained Linux-app onder user-local Xvfb daadwerkelijk bediend: repository openen, MRU opslaan onder gebruikersdata met Unix 0600, donker/licht wisselen en native sluiten met exitcode 0. Screenshots, assemblyhash en samenvattingen in `gui/evidence/wp4`; toelichting in `gui/WP4_Validation.md`.
+- **Crosspublicatie:** win-x64, linux-x64, osx-arm64 en osx-x64 geslaagd. Inter en volledige OFL-fontlicentie meegepubliceerd. Dit is geen native Windows/macOS-acceptatie; die controles blijven in WP8.
+- **Extra lifecycleborging:** Succesvolle backendpublicatie blijft zichtbaar bij een laat annuleerverzoek zolang dezelfde session actief is. Een geannuleerde repositorywissel meldt zich niet voltooid terwijl het vorige backendwerk nog loopt. Parallelle shell-openacties/MRU-writes zijn geserialiseerd; late startup-MRU-loads kunnen nieuwe lijsten niet terugzetten.
+- **Documentatie:** Geaccepteerde framework-ADR, GUI-plan, takenlijst, Technical Design, Installation, QuickStart, README, Known Limitations, SBOM en securityreview bijgewerkt. Historische WP3-metingen blijven bewaard; hun onuitgevoerde checks zijn niet als geslaagd gemarkeerd.
+- **Beperkingen:** Native Windows/macOS en fysieke DPI/toegankelijkheids-/performancemetingen niet uitgevoerd; CI-configuratie en artifacts voorzien, remote resultaten niet bereikbaar via de huidige GitHub API. Geen PR-approval of merge uitgevoerd.
+
+
+### 16 november 2026 — WP4-05/WP4-08 regressie: Windows SQLite-bestandslock
+
+- **Melding:** De Windows-spikepipeline faalt bij `Status_IsRealAndDisposeWaitsForCompletion`: na sessiedisposal kan cleanup `index.db` niet verwijderen.
+- **Oorzaak:** Contexts en logische SQLite-connecties worden opgeruimd, maar `Microsoft.Data.Sqlite` houdt fysieke handles in de pool. `SqliteStagingIndex.Dispose` ruimde alleen zijn semaphore op.
+- **Correctie:** Bij disposal de pool voor uitsluitend de eigen connectionstring legen (`ClearPool`), met idempotente disposal en een disposed-guard. Actieve verbindingen blijven geldig en sluiten bij terugkeer; andere databasepools blijven intact. Geen algemene `ClearAllPools`-oplossing in tests, sleeps, retries of genegeerde cleanupfouten. Het bestaande corruptieherstel/WP5-08 valt buiten deze fix.
+- **Regressietests:** Native pooled handle expliciet volgen, sluiting controleren en de repository direct verwijderen; daarnaast actieve verbindingen en een andere pool op bruikbaarheid controleren. De bestaande spike-lifecycletest blijft ongewijzigd.
+- **CI:** Het Windows-spikeworkflow reageert nu ook op WP4-pushes en deze Infrastructure-wijziging, zodat de gemelde test opnieuw wordt uitgevoerd. Remote uitkomst nog niet beschikbaar in deze sessie.
+- **E2E-fixture:** De disposed-guard maakte zichtbaar dat de rollbacktest dezelfde context teruggaf aan checkout en geneste status. De factory maakt nu per aanroep een eigen context en ruimt ook de verificatiecontext op; rollbackasserties blijven behouden.
+- **Validatie:** Nieuwe native-handle-regressietest faalt aantoonbaar tegen de oude code; met de fix 556/556 hoofdsolutiontests en 4/4 spike-tests geslaagd (exacte gemelde `--no-build --logger trx`-stap), nul skips. Release-builds van hoofdsolution en spikes: 0 fouten/waarschuwingen; volledige hoofdsolution-opmaakcontrole en `git diff --check` geslaagd. Ruwe samenvatting in `gui/evidence/wp4/sqlite-pool-fix.json`. Windows-CI moet de Windows-uitkomst nog bevestigen.

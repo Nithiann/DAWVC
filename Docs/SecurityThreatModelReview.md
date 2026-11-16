@@ -105,3 +105,43 @@ All runtime dependencies in `src/` were analyzed for licensing terms and potenti
 - **Bounded Concurrency (`NFR-PERF-006`):**
   - Hashing and filesystem scanning leverage `ConcurrencyLimiter` bounded to `Math.Clamp(ProcessorCount, 1, 8)`.
 
+
+## GUI WP3 prototype review (13 November 2026)
+
+The three experimental hosts in `spikes/gui` call the shared engine directly and
+show only sanitized failure categories. They offer no staging, commit, checkout,
+branch or remote mutators. Opening a path validates repository markers before
+context construction; real status/doctor still have metadata side effects. Use
+only disposable generated fixtures until WP5-08 cache recovery is resolved.
+
+Photino hosts only packaged local HTML/CSS/Blazor content and has no external
+links, remote content feature or custom JavaScript-to-filesystem bridge in this
+prototype. WebView file-system access is disabled; the native folder dialog remains a host
+service. The upstream Photino.Blazor `PhotinoWebViewManager` explicitly notes
+that incoming message origins are treated as the app origin, rather than being
+reported by the native window. Treat navigation/origin isolation as an unresolved
+framework security review item before any production choice; do not enable remote
+navigation or untrusted HTML. This spike is not approval of a general web bridge.
+WebView2 availability and native runtime notices also require Windows validation.
+
+## Avalonia Desktop foundation — WP4 (13 November 2026)
+
+The selected Desktop has no webview or external-content bridge. It opens only
+existing repositories through an Application query, validates markers before
+constructing a context, and does not access the staged index during opening.
+No project-content mutators are exposed. Context construction may create object
+staging directories; opening is not described as strictly write-free.
+
+Recent paths are local preferences: bounded to 20 entries/64 KiB, normalized,
+deduplicated, stored only under user-local application data and atomically replaced.
+The default path must be absolute even when its directory does not exist; it never
+falls back to the working repository. New Unix preference files request mode 0600.
+Corrupt/inaccessible preferences produce a recoverable notice. Directory explorer
+launches use a directory URI without command interpolation. Raw exception messages
+and paths are not exported in the UI error presentation.
+
+Session generations prevent old results/progress from entering a new repository
+view. Cancellation awaits backend/resource completion. A late cancel does not hide
+a successful backend publication. Desktop serialization is process-local and does
+not replace existing engine protection against concurrent CLI use. Native platform
+privacy/accessibility/security and release packaging remain open WP8 gates.

@@ -1,0 +1,38 @@
+name: Avalonia desktop foundation
+on:
+  workflow_dispatch:
+  push:
+    branches: ['feat/gui-wp4-*']
+  pull_request:
+    branches: [main, develop, feat_GUI, feat/gui-wp2-operation-errors, spike/gui-wp3-framework-comparison]
+permissions:
+  contents: read
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: macos-latest
+            rid: osx-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Desktop lifecycle, architecture and headless UI tests
+        run: dotnet test tests/DawVcs.Desktop.Tests/DawVcs.Desktop.Tests.csproj -c Release --logger trx
+      - name: Self-contained desktop preview
+        run: dotnet publish src/DawVcs.Desktop/DawVcs.Desktop.csproj -c Release -r ${{ matrix.rid }} --self-contained true -p:PublishTrimmed=false -p:PublishSingleFile=false -o artifacts/desktop/${{ matrix.rid }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dawvc-desktop-${{ matrix.rid }}
+          path: |
+            artifacts/desktop/${{ matrix.rid }}
+            tests/DawVcs.Desktop.Tests/TestResults

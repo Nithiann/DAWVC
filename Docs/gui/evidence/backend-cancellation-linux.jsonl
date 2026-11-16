@@ -1,0 +1,10 @@
+{"kind":"backend-cancel-only","iteration":1,"outcome":"cancelled","millisecondsAfterRequest":26.823}
+{"kind":"backend-cancel-only","iteration":2,"outcome":"cancelled","millisecondsAfterRequest":24.463}
+{"kind":"backend-cancel-only","iteration":3,"outcome":"cancelled","millisecondsAfterRequest":0.5622}
+{"kind":"backend-cancel-only","iteration":4,"outcome":"cancelled","millisecondsAfterRequest":0.4191}
+{"kind":"backend-cancel-only","iteration":5,"outcome":"cancelled","millisecondsAfterRequest":0.5651}
+{"kind":"backend-cancel-only","iteration":6,"outcome":"cancelled","millisecondsAfterRequest":0.2636}
+{"kind":"backend-cancel-only","iteration":7,"outcome":"cancelled","millisecondsAfterRequest":0.38}
+{"kind":"backend-cancel-only","iteration":8,"outcome":"cancelled","millisecondsAfterRequest":4.1802}
+{"kind":"backend-cancel-only","iteration":9,"outcome":"cancelled","millisecondsAfterRequest":4.5661}
+{"kind":"backend-cancel-only","iteration":10,"outcome":"cancelled","millisecondsAfterRequest":10.2974}

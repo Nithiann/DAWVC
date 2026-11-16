@@ -1,0 +1,3 @@
+{"kind":"backend-only","operation":"Status","elapsedMs":603.9729,"summary":"Branch main; staged 0, modified 1, untracked 101, missing 0","failureCategory":null}
+{"kind":"backend-only","operation":"Scan","elapsedMs":23.6623,"summary":"Scan: FL Studio; opaque fallback False; 16.6 ms","failureCategory":null}
+{"kind":"backend-only","operation":"Doctor","elapsedMs":118.8744,"summary":"Doctor: healthy True; score 100.0; blocking 0; warnings 1","failureCategory":null}

@@ -248,8 +248,9 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
 
                 await journal.CommitAsync().ConfigureAwait(false);
             }
-            catch
+            catch (Exception originalFailure)
             {
+                var rollbackFailures = new List<Exception>();
                 if (!isExternalRestore)
                 {
                     try
@@ -259,9 +260,9 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
                             context.SetCurrentBranch(previousBranch.Value);
                         }
                     }
-                    catch
+                    catch (Exception rollbackFailure)
                     {
-                        // Best effort restore of previous branch
+                        rollbackFailures.Add(rollbackFailure);
                     }
 
                     try
@@ -275,13 +276,25 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
                             }
                         }
                     }
-                    catch
+                    catch (Exception rollbackFailure)
                     {
-                        // Best effort restore of staged entries
+                        rollbackFailures.Add(rollbackFailure);
                     }
                 }
 
-                await journal.RollbackAsync().ConfigureAwait(false);
+                try
+                {
+                    await journal.RollbackAsync().ConfigureAwait(false);
+                }
+                catch (IncompleteRollbackException rollbackFailure)
+                {
+                    rollbackFailures.Add(rollbackFailure);
+                }
+                if (rollbackFailures.Count > 0)
+                {
+                    rollbackFailures.Insert(0, originalFailure);
+                    throw new IncompleteRollbackException(context.RootPath, new AggregateException(rollbackFailures));
+                }
                 throw;
             }
         }
@@ -537,8 +550,9 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
 
                 await journal.CommitAsync().ConfigureAwait(false);
             }
-            catch
+            catch (Exception originalFailure)
             {
+                var rollbackFailures = new List<Exception>();
                 try
                 {
                     if (previousBranchCommit.HasValue)
@@ -546,9 +560,9 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
                         await context.UpdateBranchCommitAsync(target.Branch, previousBranchCommit.Value, CancellationToken.None).ConfigureAwait(false);
                     }
                 }
-                catch
+                catch (Exception rollbackFailure)
                 {
-                    // Best effort rollback of branch tip
+                    rollbackFailures.Add(rollbackFailure);
                 }
 
                 try
@@ -562,12 +576,24 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
                         }
                     }
                 }
-                catch
+                catch (Exception rollbackFailure)
                 {
-                    // Best effort restore of staged entries
+                    rollbackFailures.Add(rollbackFailure);
                 }
 
-                await journal.RollbackAsync().ConfigureAwait(false);
+                try
+                {
+                    await journal.RollbackAsync().ConfigureAwait(false);
+                }
+                catch (IncompleteRollbackException rollbackFailure)
+                {
+                    rollbackFailures.Add(rollbackFailure);
+                }
+                if (rollbackFailures.Count > 0)
+                {
+                    rollbackFailures.Insert(0, originalFailure);
+                    throw new IncompleteRollbackException(context.RootPath, new AggregateException(rollbackFailures));
+                }
                 throw;
             }
         }

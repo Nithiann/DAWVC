@@ -219,9 +219,9 @@ public sealed class CheckoutProgressTests : IDisposable
         var progress = new RecordingProgress();
         var act = () => RunAsync(operation, progress);
 
-        var assertion = await act.Should().ThrowAsync<IOException>();
+        var assertion = await act.Should().ThrowAsync<IncompleteRollbackException>();
 
-        assertion.Which.Should().BeSameAs(failure);
+        ((AggregateException)assertion.Which.InnerException!).InnerExceptions.Should().Contain(failure);
         progress.Reports.Should().Contain(report => report.Stage == OperationStage.PublishingFiles);
         progress.Reports.Should().NotContain(report => report.Stage == OperationStage.Completed);
         File.Exists(Path.Combine(_root, "Track0.flp")).Should().BeFalse();
@@ -343,6 +343,55 @@ public sealed class CheckoutProgressTests : IDisposable
         }
         var actualFastForward = await _checkout.ExecuteFastForwardAsync(target, false, default, new RecordingProgress());
         actualFastForward.Should().BeEquivalentTo(expectedFastForward);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MetadataFailure_RestoresFilesAndReportsIncompleteCompensation(bool rollbackFails)
+    {
+        _index.ClearStagedEntriesAsync(Arg.Any<CancellationToken>()).Returns(_ =>
+            Task.FromException(new IOException("index unavailable")));
+        if (!rollbackFails)
+        {
+            _index.ClearStagedEntriesAsync(CancellationToken.None).Returns(Task.CompletedTask);
+        }
+        using var cts = new CancellationTokenSource();
+        var act = () => _checkout.ExecuteAsync(new CheckoutRequest(_root, "main"), cts.Token);
+        if (rollbackFails)
+        {
+            await act.Should().ThrowAsync<IncompleteRollbackException>();
+        }
+        else
+        {
+            await act.Should().ThrowAsync<IOException>();
+        }
+        foreach (var entry in _snapshot.Project.Root.GetEntries())
+        {
+            File.Exists(Path.Combine(_root, entry.Path.Value)).Should().BeFalse();
+        }
+        _context.Received().SetCurrentBranch(new BranchName("workspace"));
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task CancellationAfterFilePublication_CompletesRollbackBeforeReturning(int operation)
+    {
+        using var cancellation = new CancellationTokenSource();
+        _index.ClearStagedEntriesAsync(cancellation.Token).Returns(_ =>
+        {
+            cancellation.Cancel();
+            return Task.FromCanceled(cancellation.Token);
+        });
+        var act = () => RunAsync(operation, new RecordingProgress(), cancellation.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+
+        await _index.Received().ClearStagedEntriesAsync(CancellationToken.None);
+        File.Exists(Path.Combine(_root, "Track0.flp")).Should().BeFalse();
+        File.Exists(Path.Combine(_root, "Track1.flp")).Should().BeFalse();
+        AssertCleanedUp();
     }
 
     private void SetSnapshot(int count)

@@ -1,0 +1,47 @@
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:vm="using:DawVcs.Desktop.ViewModels" xmlns:svc="using:DawVcs.Desktop.Services"
+ x:Class="DawVcs.Desktop.Views.MainWindow" x:DataType="vm:ShellViewModel"
+ Background="{DynamicResource Color.Background.Base}" Title="DAWVC" Width="1180" Height="780" MinWidth="820" MinHeight="560">
+  <Grid RowDefinitions="*,Auto" ColumnDefinitions="230,*">
+    <Border Background="{DynamicResource Color.Background.Elevated}" Padding="20">
+      <DockPanel LastChildFill="True">
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,28" Spacing="4"><TextBlock Text="DAWVC" FontSize="26" FontWeight="Bold" /><TextBlock Text="Your sound. Your history." Classes="caption" /></StackPanel>
+        <StackPanel DockPanel.Dock="Bottom" Spacing="10"><Button Content="Dark / light" Command="{Binding ToggleThemeCommand}" /><TextBlock Text="Desktop preview" Classes="caption" /></StackPanel>
+        <StackPanel>
+          <Button Classes="nav" Content="Home" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:DesktopPage.Home}" />
+          <Button Classes="nav" Content="Overview" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:DesktopPage.Overview}" />
+          <Button Classes="nav" Content="Changes" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:DesktopPage.Changes}" />
+          <Button Classes="nav" Content="History" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:DesktopPage.History}" />
+          <Button Classes="nav" Content="Dependencies" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:DesktopPage.Dependencies}" />
+          <Button Classes="nav" Content="Diagnostics" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:DesktopPage.Diagnostics}" />
+          <Button Classes="nav" Content="Settings" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:DesktopPage.Settings}" />
+        </StackPanel>
+      </DockPanel>
+    </Border>
+    <ScrollViewer Grid.Column="1">
+      <StackPanel Margin="{StaticResource Spacing.Page}" Spacing="20">
+        <Grid ColumnDefinitions="*,Auto"><TextBlock Text="{Binding PageTitle}" FontSize="30" FontWeight="SemiBold" /><Button Grid.Column="1" Content="Open repository" Command="{Binding OpenCommand}" /></Grid>
+        <TextBlock Text="{Binding PageDescription}" TextWrapping="Wrap" Classes="caption" />
+        <Border BorderBrush="{DynamicResource Color.Border.Subtle}" BorderThickness="1" CornerRadius="{StaticResource Radius.Panel}" Padding="20">
+          <StackPanel Spacing="12">
+            <TextBlock Text="Workspace" FontWeight="SemiBold" FontSize="18" />
+            <TextBox Text="{Binding RepositoryInput, Mode=TwoWay}" PlaceholderText="Repository folder" AutomationProperties.Name="Repository folder" />
+            <StackPanel Orientation="Horizontal" Spacing="8"><Button Content="Open path" Command="{Binding OpenPathCommand}" /><Button Content="Open in file explorer" Command="{Binding OpenExplorerCommand}" /></StackPanel>
+            <TextBlock Text="{Binding Operations.RepositoryPath}" TextWrapping="Wrap" Classes="caption" />
+          </StackPanel>
+        </Border>
+        <TextBlock Text="{Binding FailureMessage}" TextWrapping="Wrap" />
+        <TextBlock Text="{Binding Notice}" TextWrapping="Wrap" />
+        <TextBlock Text="Recent projects" FontSize="18" FontWeight="SemiBold" />
+        <ItemsControl ItemsSource="{Binding RecentRepositories}">
+          <ItemsControl.ItemTemplate><DataTemplate x:DataType="svc:RecentRepository">
+            <Button Classes="nav" Click="OpenRecent" Tag="{Binding Path}"><StackPanel><TextBlock Text="{Binding Name}" /><TextBlock Text="{Binding Path}" Classes="caption" /></StackPanel></Button>
+          </DataTemplate></ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </ScrollViewer>
+    <Border Grid.Row="1" Grid.ColumnSpan="2" Padding="16,8" Background="{DynamicResource Color.Background.Elevated}">
+      <Grid ColumnDefinitions="*,Auto"><TextBlock Text="{Binding ProgressText}" VerticalAlignment="Center" /><Button Grid.Column="1" Content="Cancel" Command="{Binding CancelCommand}" /></Grid>
+    </Border>
+  </Grid>
+</Window>

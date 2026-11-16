@@ -88,3 +88,33 @@ Because DAWVC is distributed as a clean, portable single executable with no syst
 1. Remove `C:\Tools\dawvc` (or your custom directory).
 2. Remove the directory from your User `PATH` environment variable.
 3. Repositories tracked with DAWVC keep their internal metadata inside `.dawvc/` within their project folders. To remove version control from a project without deleting music files, simply delete the `.dawvc` folder in that project.
+
+## Avalonia desktop development preview (WP4)
+
+The Desktop foundation targets Windows, macOS and Linux. It provides a shell,
+existing-repository selection, local recent projects and theme switching. Repository
+views and commands are still WP5 work; this is not a complete viewer release.
+
+With the .NET 10 SDK:
+
+```sh
+dotnet run --project src/DawVcs.Desktop -c Release
+```
+
+Self-contained publication (choose `win-x64`, `linux-x64`, `osx-arm64` or `osx-x64`):
+
+```sh
+dotnet publish src/DawVcs.Desktop -c Release -r linux-x64 --self-contained true -p:PublishTrimmed=false -p:PublishSingleFile=false -o artifacts/desktop/linux-x64
+```
+
+Run `DawVcs.Desktop.exe` on Windows or `./DawVcs.Desktop` on Linux/macOS from the
+published directory. Inter is bundled. Linux still needs an X11/compatible display
+and the native libraries required by Avalonia/Skia, such as fontconfig. Self-contained
+.NET does not eliminate OS library requirements. macOS `.app` bundles, signing,
+notarization, installers and native accessibility/DPI validation remain WP8 work.
+
+Recent paths are stored under the current user's local application-data directory
+in `DAWVC/recent-repositories.json`. Appearance changes currently apply for the
+running session. Opening a repository validates its configuration without loading
+the staging index; context construction can still create object temporary directories.
+No machine paths are added to shared repository configuration.

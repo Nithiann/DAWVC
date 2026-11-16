@@ -1402,3 +1402,81 @@ DAWVC establishes a reproducible foundation for audio production:
 Success is measured by one defining capability:
 
 > **"Can two producers reliably reconstruct, version, and collaborate on the same musical project across different workstations and DAWs without local folder structures, missing assets, implicit dependencies, or unsafe format conversions damaging the native project?"**
+
+### 6.3 Operation failures and cancellation boundaries (13 November 2026)
+
+Application exposes `OperationFailure.FromException` and `OperationFailureCategory` for presentation-neutral error handling. Classification uses exception types, never message text. Categories cover validation, dirty workspace, missing dependencies, integrity, incompatible repository, remote availability, non-fast-forward, permission/I/O, timeout, cancellation, incomplete rollback and unknown failures. Existing untyped `InvalidOperationException` failures remain `Unknown`; a client must not infer a category from their text. Unsupported schemas and remote identity mismatches now have explicit typed exceptions. Remote compatibility errors retain `RemoteException` ancestry, preserving CLI remote exit handling.
+
+The original exception is retained for local diagnostics. Recovery paths and exception details can contain private machine paths and must be redacted before export. `IncompleteRollbackException` takes precedence over cancellation when compensation fails; its aggregate cause preserves the initiating error and compensation failures. For file rollback the recovery path is the retained journal backup directory. For ref/index compensation it is the affected repository root; nested file-rollback errors retain their precise backup locations. A repository-root recovery path does not promise an automatic repair or a complete metadata backup.
+
+Cancellation is cooperative: clients must await the operation before declaring it stopped or disposing its session. Checkout/fast-forward stage and verify before file publication, compensate applied files in reverse order, and restore refs/staged entries with `CancellationToken.None`. Cleanup never inherits an already cancelled caller token. A successful rollback preserves the original cancellation exception. Failed rollback reports incomplete recovery and retains available file backups, including after disposal. Cleanup failure after successful publication is best-effort; it does not reverse a committed journal.
+
+These contracts do not make every operation transactional. Commit may have published its branch ref before an index-clear error; fetch may have promoted objects or updated a subset of tracking refs; pull retains fetch effects if integration fails; clone can leave a partial destination. Cancellation is not proof that no changes were made. No extra final cancellation check is added after a durable mutation. Progress callbacks can throw, including after publication, so consumers should be non-throwing. No-op outcomes remain existing typed use-case results. Desktop coordination, preflight, session isolation, and user recovery flows remain WP4/WP6/WP7 work.
+
+### 6.4 Isolated GUI framework spikes (13 November 2026)
+
+`spikes/gui/GuiSpikes.slnx` contains experimental Avalonia, WPF and Photino hosts,
+a shared `SpikeSession`, deterministic fixture/measurement harness and headless
+tests. Framework package versions are scoped to the spike directory; the engine
+and production solution have no new GUI dependencies. Each host calls the same
+Bootstrap/Application path directly. Backend work, including synchronous setup,
+runs via `Task.Run`; fresh providers avoid cross-operation adapter caches. Session
+commands serialize operations, sample progress before posting, ignore late progress
+from earlier operation IDs, and await cancellation on close. Paths and technical
+exception text are not exported by the shared presentation model.
+
+This is comparison scaffolding, not the production WP4 session/coordinator. Status
+and doctor retain existing metadata side effects, including the open WP5-08 cache
+recovery concern. Do not run against valuable repositories. The framework decision
+remains Proposed in ADR-GUI-001 until the native Windows comparison is complete.
+
+### 6.5 Avalonia Desktop shell and session (WP4, 13 November 2026)
+
+Following the explicit user choice, `DawVcs.Desktop` uses Avalonia 12.1.6,
+FluentTheme, bundled Inter and CommunityToolkit.Mvvm 8.4.0. Windows, macOS and
+Linux are target platforms. `DawVcs.Desktop.Tests` uses Avalonia headless/xUnit v3;
+existing engine tests remain on xUnit v2. Desktop references Application and
+Bootstrap, never CLI or Infrastructure. `OpenRepositoryUseCase` validates markers,
+loads configuration/branch through a caller-owned context and never requests
+status or staged-index recovery. Context construction may create object temp dirs.
+
+`OperationCoordinator` owns a repository identity and cancellation source. Switching
+invalidates the old session before waiting for its work, cancels it and waits for
+the serial operation gate. Queued progress/results check generation and operation
+identity on the UI dispatcher. Cancellation never releases resources or busy state
+while backend work is still running. A normal successful return is preserved even
+if cancellation was requested late; it may represent durable publication. A result
+from a replaced session is suppressed. Technical failures retain the WP2 exception
+and recovery data; the shell exposes only safe category messages.
+
+Every operation, including synchronous setup before the first await, runs on a
+worker and owns a fresh `AddDawVcs()` provider. This deliberately bounds adapter,
+search-path and sample-index caches to one operation. The provider and use-case
+contexts are disposed before completion. CLI singleton behavior is unchanged.
+Progress coalesces to at most one queued callback, with a 50 ms sampling interval.
+This desktop serialization does not replace backend safeguards against CLI access.
+
+Platform services abstract folder selection, confirmation dialogs and file explorer
+opening. Explorer uses a directory URI and shell association without interpolated
+commands. Recents are capped at 20 normalized paths in user-local application data,
+written via a same-directory temp file and atomic move. No preference path is stored
+in repository data or exports. Corrupt/inaccessible preferences produce a recoverable
+notice. Theme resources are independent of controls; theme changes apply in process.
+
+WP4 is a shell, not the WP5 viewer. Navigation destinations are placeholders; no
+status/staging/history/diagnostics controls or mutating actions are offered yet.
+Native performance, DPI, assistive technology and clean-machine validation across
+the three target OSes remain WP8 gates. Early CI builds/tests/publishes all three.
+
+### 6.6 SQLite pool lifetime at context disposal (16 November 2026)
+
+Logical `SqliteConnection.Dispose` returns native handles to its pool; it does not
+necessarily release Windows file locks. `SqliteStagingIndex.Dispose` now clears
+only the pool for its exact connection string, after callers have awaited active
+index work. This closes idle handles and prevents active connections from returning
+to that cleared pool once closed; it does not invalidate active commands or clear
+unrelated database pools. Disposal is idempotent, and subsequent index operations
+are rejected. Pooling remains enabled within the index lifetime, preserving reuse
+across hashing/cache operations. Repository-context disposal therefore releases the
+idle index handles before session cleanup. The corruption-recovery path and its
+known staged-entry limitation remain unchanged for WP5-08.

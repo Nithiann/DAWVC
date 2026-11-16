@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/engine/">
+    <Project Path="../../src/DawVcs.Domain/DawVcs.Domain.csproj" />
+    <Project Path="../../src/DawVcs.Adapters.Abstractions/DawVcs.Adapters.Abstractions.csproj" />
+    <Project Path="../../src/DawVcs.Adapters.FLStudio/DawVcs.Adapters.FLStudio.csproj" />
+    <Project Path="../../src/DawVcs.Application/DawVcs.Application.csproj" />
+    <Project Path="../../src/DawVcs.Infrastructure/DawVcs.Infrastructure.csproj" />
+    <Project Path="../../src/DawVcs.Bootstrap/DawVcs.Bootstrap.csproj" />
+  </Folder>
+  <Project Path="Shared/Shared.csproj" />
+  <Project Path="Avalonia/Avalonia.csproj" />
+  <Project Path="Wpf/Wpf.csproj" />
+  <Project Path="Photino/Photino.csproj" />
+  <Project Path="Harness/Harness.csproj" />
+  <Project Path="Tests/Tests.csproj" />
+</Solution>
