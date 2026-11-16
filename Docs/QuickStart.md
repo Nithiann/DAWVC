@@ -218,6 +218,17 @@ If you have uncommitted changes in your workspace, DAWVC will protect your work 
 With the .NET 10 SDK, start `dotnet run --project src/DawVcs.Desktop -c Release`.
 Choose **Open repository**, or enter the root folder and choose **Open path**.
 Only existing initialized repositories are accepted. Recent folders are saved in
-user-local preferences; **Dark / light** changes the running theme. Other pages
-currently provide navigation placeholders; use the CLI for repository workflows
-until the subsequent GUI work packages are delivered. See [Installation](Installation.md#avalonia-desktop-development-preview-wp4).
+user-local preferences; **Dark / light** changes the running theme. WP5 adds overview, changes, history, dependencies and diagnostics. Use the CLI
+for staging, commits, checkout, branches and remote workflows until those GUI
+work packages are delivered. See [Installation](Installation.md#avalonia-desktop-development-preview-wp4).
+
+## Viewer workflow (WP5)
+
+1. Open the existing repository root. Overview loads project/branch/HEAD and working-tree counts independently.
+2. Open Changes to search, select and inspect grouped working-tree rows. No staging action is available.
+3. Open History; select a commit and choose Show selected commit. Older commits and snapshot files are paged.
+4. Dependencies shows the committed snapshot, not a claim of current machine verification. Filters apply to its current page.
+5. Diagnostics runs Scan, Doctor or Fsck with the shared Cancel action. Export last summary saves counts only outside the repository.
+
+On corrupt index errors, preserve `index.db` and its journal files. Status is unavailable
+rather than silently losing staged entries; metadata/history/diagnostics remain available.

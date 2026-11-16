@@ -27,9 +27,10 @@ public sealed class ShellViewModel : ObservableObject, IAsyncDisposable
     private Task? _disposal;
     private string _repositoryInput = "";
 
-    public ShellViewModel(OperationCoordinator operations, IFolderPicker picker, IFileExplorer explorer, IRecentRepositories recents)
+    public ShellViewModel(OperationCoordinator operations, IFolderPicker picker, IFileExplorer explorer, IRecentRepositories recents, IDiagnosticExporter? exporter = null)
     {
         Operations = operations;
+        Viewer = new ViewerViewModel(operations, exporter);
         _picker = picker;
         _explorer = explorer;
         _recents = recents;
@@ -45,6 +46,10 @@ public sealed class ShellViewModel : ObservableObject, IAsyncDisposable
     }
 
     public OperationCoordinator Operations { get; }
+    public ViewerViewModel Viewer { get; }
+    public bool ShowHome => CurrentPage == DesktopPage.Home;
+    public bool ShowSettings => CurrentPage == DesktopPage.Settings;
+    public bool ShowViewer => !ShowHome && !ShowSettings;
     public ObservableCollection<RecentRepository> RecentRepositories { get; } = [];
     public IAsyncRelayCommand OpenCommand { get; }
     public IAsyncRelayCommand OpenPathCommand { get; }
@@ -54,7 +59,7 @@ public sealed class ShellViewModel : ObservableObject, IAsyncDisposable
     public IRelayCommand<DesktopPage> NavigateCommand { get; }
     public IRelayCommand ToggleThemeCommand { get; }
     public IRelayCommand OpenExplorerCommand { get; }
-    public DesktopPage CurrentPage { get => _page; private set { if (SetProperty(ref _page, value)) { OnPropertyChanged(nameof(PageTitle)); OnPropertyChanged(nameof(PageDescription)); } } }
+    public DesktopPage CurrentPage { get => _page; private set { if (SetProperty(ref _page, value)) { OnPropertyChanged(nameof(PageTitle)); OnPropertyChanged(nameof(PageDescription)); Viewer.Page = value; OnPropertyChanged(nameof(ShowHome)); OnPropertyChanged(nameof(ShowSettings)); OnPropertyChanged(nameof(ShowViewer)); } } }
     public bool IsDark { get => _dark; set => SetProperty(ref _dark, value); }
     public string? Notice { get => _notice; private set => SetProperty(ref _notice, value); }
     public string RepositoryInput { get => _repositoryInput; set { if (SetProperty(ref _repositoryInput, value)) OpenPathCommand.NotifyCanExecuteChanged(); } }
@@ -63,7 +68,7 @@ public sealed class ShellViewModel : ObservableObject, IAsyncDisposable
     {
         DesktopPage.Home => "Open an existing DAWVC repository to begin.",
         DesktopPage.Settings => "Choose the appearance that suits your workspace.",
-        _ => "This view will be available in a future update."
+        _ => "Inspect your project without changing files, staging or branches."
     };
     public string? FailureMessage => Operations.Failure?.Category switch
     {
@@ -77,8 +82,8 @@ public sealed class ShellViewModel : ObservableObject, IAsyncDisposable
         _ => "The operation could not finish."
     };
     public string ProgressText => Operations.IsCancelling ? "Stopping — waiting for the operation to finish…" :
-        Operations.Progress is { } progress ? $"{progress.Stage} · {progress.Completed}/{progress.Total?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"}" :
-        Operations.IsBusy ? "Opening workspace…" : "Ready";
+        !Operations.IsBusy ? "Ready" : Operations.Progress is { } progress ? $"{progress.Stage} · {progress.Completed}/{progress.Total?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"}" :
+        Operations.IsBusy ? "Working…" : "Ready";
 
     private async Task PickAndOpenAsync()
     {
@@ -113,6 +118,7 @@ public sealed class ShellViewModel : ObservableObject, IAsyncDisposable
         }
         catch (Exception ex) when (ex is not OperationCanceledException) { Notice = "Recent projects could not be saved."; }
         catch (OperationCanceledException) { }
+        if (!_closing && Operations.SessionId == session) await Viewer.LoadCurrentPageAsync();
     }
 
     private async Task LoadRecentsAsync()
@@ -126,7 +132,11 @@ public sealed class ShellViewModel : ObservableObject, IAsyncDisposable
     private void SetRecents(IEnumerable<RecentRepository> items) { RecentRepositories.Clear(); foreach (var item in items) RecentRepositories.Add(item); }
     private void Navigate(DesktopPage page)
     {
-        if (page is DesktopPage.Home or DesktopPage.Settings || Operations.RepositoryPath is not null) CurrentPage = page;
+        if (page is DesktopPage.Home or DesktopPage.Settings || Operations.RepositoryPath is not null)
+        {
+            CurrentPage = page;
+            _ = Viewer.LoadCurrentPageAsync();
+        }
     }
     private void OpenExplorer()
     {
@@ -154,6 +164,7 @@ public sealed class ShellViewModel : ObservableObject, IAsyncDisposable
         await Operations.DisposeAsync();
         await Task.WhenAll(OpenCommand.ExecutionTask ?? Task.CompletedTask, OpenPathCommand.ExecutionTask ?? Task.CompletedTask,
             OpenRecentCommand.ExecutionTask ?? Task.CompletedTask, LoadRecentsCommand.ExecutionTask ?? Task.CompletedTask);
+        await Viewer.DisposeAsync();
         Operations.PropertyChanged -= OperationChanged;
         _openingGate.Dispose();
         _shutdown.Dispose();

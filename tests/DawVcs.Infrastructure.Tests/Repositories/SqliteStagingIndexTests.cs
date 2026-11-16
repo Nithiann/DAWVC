@@ -1,6 +1,7 @@
 using DawVcs.Domain.Artifacts;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Hashing;
+using DawVcs.Domain.Repositories;
 using DawVcs.Infrastructure.Repositories;
 
 using FluentAssertions;
@@ -145,24 +146,18 @@ public sealed class SqliteStagingIndexTests : IDisposable
     }
 
     [Fact]
-    public async Task CorruptionRecovery_WhenDatabaseCorrupted_TransparentlyRecreatesSchema()
+    public async Task CorruptIndex_IsPreservedInsteadOfRecreatingAndLosingStagedEntries()
     {
         var dbPath = Path.Combine(_testDir, ".dawvc", "index.db");
-        Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
-
-        // Corrupt file by writing invalid header
-        await File.WriteAllTextAsync(dbPath, "NOT A VALID SQLITE DATABASE FILE - CORRUPTION TEST");
-
-        using var index = new SqliteStagingIndex(_testDir);
-
-        // Must recover and succeed without throwing
-        var hash = new ContentHash(new byte[32]);
-        var entry = ArtifactEntry.Create(new ArtifactPath("Recovered.wav"), hash, 100);
-        await index.StageEntryAsync(entry);
-
-        var staged = await index.GetStagedEntriesAsync();
-        staged.Should().HaveCount(1);
-        staged[0].Path.Value.Should().Be("Recovered.wav");
+        using (var index = new SqliteStagingIndex(_testDir))
+            await index.StageEntryAsync(ArtifactEntry.Create(new ArtifactPath("Keep.wav"), new ContentHash(new byte[32]), 100));
+        var bytes = await File.ReadAllBytesAsync(dbPath);
+        bytes[0] = 0; // Damage the header of an actual index containing staged user state.
+        await File.WriteAllBytesAsync(dbPath, bytes);
+        using var corrupt = new SqliteStagingIndex(_testDir);
+        var read = () => corrupt.GetStagedEntriesAsync();
+        await read.Should().ThrowAsync<StagingIndexCorruptException>();
+        (await File.ReadAllBytesAsync(dbPath)).Should().Equal(bytes);
     }
 
     [Fact]

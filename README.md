@@ -125,9 +125,11 @@ The solution adheres to Clean Architecture principles with strictly enforced dep
 `DawVcs.Bootstrap` supplies the shared `services.AddDawVcs()` composition root used by the CLI. It wires Application use cases to Infrastructure and the FL Studio adapter; Application and Domain remain independent of presentation frameworks. The host owns its service provider, while use cases dispose factory-created repository contexts and transport resources per operation. See [Technical Design](Docs/Technical%20Design.md#61-implemented-composition-root-and-ownership-24-october-2026) for lifetimes, metadata side effects and the provider lifetimes and metadata side effects.
 
 `DawVcs.Desktop` now provides an Avalonia shell targeting Windows, macOS and Linux,
-with local recent projects and session/operation lifecycle handling. It calls the
-shared Application engine through fresh Bootstrap providers per operation. This
-is the WP4 foundation; repository viewer features follow in WP5. See
+with local recent projects, safe sessions, overview/status, grouped changes,
+paged history/snapshot/dependencies and scan/doctor/fsck. It calls the shared
+Application engine through fresh Bootstrap providers per operation. This is the
+WP5 viewer: project/staging/ref mutators remain CLI-only; status may update its
+local hash cache. Corrupt indices are preserved instead of being silently reset. See
 [Desktop preview instructions](Docs/Installation.md#avalonia-desktop-development-preview-wp4)
 and the [GUI task list](Docs/GUI_Implementation_Tasks.md).
 

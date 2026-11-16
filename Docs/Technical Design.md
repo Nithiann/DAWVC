@@ -1480,3 +1480,38 @@ are rejected. Pooling remains enabled within the index lifetime, preserving reus
 across hashing/cache operations. Repository-context disposal therefore releases the
 idle index handles before session cleanup. The corruption-recovery path and its
 known staged-entry limitation remain unchanged for WP5-08.
+
+### 6.7 Viewer release contracts (WP5, 16 November 2026)
+
+The Avalonia shell now has working overview, changes, history, snapshot files,
+snapshot dependencies and diagnostics views. `ViewerQueries` supplies Application
+read queries with first-parent commit cursors (default 50, max 100), immutable
+commit-pinned snapshot file/dependency pages (default 200, max 500), and metadata
+independent of working-tree/index availability. Full snapshot metadata still uses
+the existing object reader; paging bounds UI/query output, not object deserialization.
+Missing objects/cycles are integrity failures, not an empty history.
+
+Each viewer section has separate Idle/Loading/Empty/Success/Error/Cancelled state.
+Changes use grouped, searchable, selectable virtualized rows; dependency filters
+apply to the current snapshot page and expose no locators/original absolute paths.
+Recorded hashes are labelled as recorded, not current verification. Doctor provides
+live binding status separately. Detail selection revisions and session generations
+prevent late results from replacing a newer selection/repository. Backend startup
+uses the WP4 worker/gate and fresh adapter provider; the footer reports activity only
+while the actual task remains busy.
+
+Scan/doctor/fsck use existing typed Application progress/cancellation overloads.
+The UI limits findings to 200 while showing complete summary counts. Export schema 1
+contains only a fixed operation enum, health boolean and operation-specific allowlisted
+count keys. Backend free text, paths, authors, credentials, environment details and
+locators are not serialized. Save is user-selected JSON outside the repository,
+with linked ancestors resolved before validation; no automatic repository report file.
+
+Normal status updates the derived filesystem hash cache, and context construction
+can create object-temp directories. Metadata/history/dependency queries, scan, doctor
+and fsck perform no staging/ref/project/object publication or binding saves. The viewer
+is therefore not strictly write-free. CORRUPT/NOTADB initialization now fails closed
+with `StagingIndexCorruptException`: the shared index stores staged intent and cannot
+be discarded as a hash cache. See ADR-009's dated amendment and the recovery guide.
+No schema migration or destructive repair command is introduced. CLI callers observe
+the same fail-closed behavior; the old transparent index reset is intentionally removed.

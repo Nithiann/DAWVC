@@ -92,8 +92,8 @@ Because DAWVC is distributed as a clean, portable single executable with no syst
 ## Avalonia desktop development preview (WP4)
 
 The Desktop foundation targets Windows, macOS and Linux. It provides a shell,
-existing-repository selection, local recent projects and theme switching. Repository
-views and commands are still WP5 work; this is not a complete viewer release.
+existing-repository selection, local recent projects and theme switching. WP5 now adds repository views and diagnostics; project/staging/ref mutators
+remain outside this preview.
 
 With the .NET 10 SDK:
 
@@ -118,3 +118,15 @@ in `DAWVC/recent-repositories.json`. Appearance changes currently apply for the
 running session. Opening a repository validates its configuration without loading
 the staging index; context construction can still create object temporary directories.
 No machine paths are added to shared repository configuration.
+
+## WP5 viewer preview
+
+The same Avalonia launch/publication commands now provide overview/status, grouped
+changes, paged first-parent history and snapshot details, paged snapshot dependencies,
+and scan/doctor/fsck. Diagnostic summary export is JSON with allowlisted counts only;
+choose a location outside the repository. Viewer operation does not change project
+content, staging, branches or refs, but status may update the local hash cache.
+
+Windows preview publication is cross-built; native Windows/macOS release validation,
+installers/signing and physical-desktop accessibility/performance remain WP8 gates.
+See [WP5 validation](gui/WP5_Validation.md) for the actually executed checks and screenshots.

@@ -89,3 +89,17 @@ bundles/signing/notarization remain open. Native validation performed here is Li
 under Xvfb, not a full physical-desktop/DPI/accessibility audit. Windows/macOS native
 release checks remain WP8 work. The desktop CI matrix is configured, but its remote
 execution cannot be verified from this session because GitHub API access is denied.
+
+## WP5 viewer update (16 November 2026)
+
+The earlier WP4 placeholder-only statement is superseded: overview, changes, history,
+snapshot files/dependencies and diagnostics are now implemented. No project-content,
+staging, ref or branch mutators have been added. Status hash-cache writes remain.
+History follows the first parent; dependency filtering is page-local and snapshot
+hashes are labelled recorded. Snapshot deserialization remains whole-object despite
+bounded UI pages. Diagnostic findings are capped at 200 visible rows; summaries retain
+full counts. Export intentionally omits free-text details and machine identifiers.
+
+Corrupt staging indices are preserved and block status rather than being rebuilt.
+No automatic recovery/reset command is provided. Native platform release checks remain
+open in WP8; cross-publication alone does not prove Windows/macOS interaction quality.

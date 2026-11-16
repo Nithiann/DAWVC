@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>Exe</OutputType><IsTestProject>true</IsTestProject><IsPackable>false</IsPackable></PropertyGroup>
   <ItemGroup>
+    <Compile Include="../DawVcs.Adapters.FLStudio.Tests/Fixtures/FlpFixtureGenerator.cs" Link="Fixtures/FlpFixtureGenerator.cs" />
     <ProjectReference Include="../../src/DawVcs.Desktop/DawVcs.Desktop.csproj" />
     <PackageReference Include="Avalonia.Headless.XUnit" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />

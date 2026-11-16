@@ -1,7 +1,7 @@
 <!--  --># DAWVC GUI — Takenlijst en voortgang
 
 **Laatst bijgewerkt:** 16 november 2026
-**Status:** Avalonia expliciet gekozen voor Windows, macOS en Linux; WP3-selectie afgesloten met scopewijziging. WP4 afgerond; WP5 is de volgende uitvoering.
+**Status:** WP5 afgerond op `feat/gui-wp5-viewer`, rechtstreeks vanaf `feat_GUI` (`f27413f`). WP6 is de volgende uitvoering.
 
 **Ontwerpbron:** [GUI Framework Selection & Implementation Plan](DAWVC_GUI_Framework_Selection_and_Implementation_Plan.md)
 
@@ -20,13 +20,13 @@ Dit document is de centrale voortgangsregistratie voor de desktop-GUI. Het oorsp
 
 ## 2. Actuele voortgang
 
-**Eerstvolgende taak:** WP5-01 — viewer-startscherm en repository-opening verder uitwerken op de geleverde shell; daarna dashboard/changes/history. WP5 is nog niet gestart.
+**Eerstvolgende taak:** WP6-01 — operatiespecifieke preflight ontwerpen. WP6 is in deze branch nog niet gestart.
 
-**Lopende taken:** Geen binnen WP4. Native platform-/releasechecks blijven geregistreerd in WP8.
+**Lopende taken:** Geen binnen WP5; native platform-/releaseacceptatie blijft in WP8.
 
 **Blokkades:** GitHub API blijft `Forbidden` geven voor Actions en PR-aanmaak; branchpush werkt. De gebruiker heeft de frameworkkeuze expliciet gemaakt en WP4 toegestaan. Native Windows/macOS-QA en platformbudgetten blijven open in WP8, niet als geslaagd aangemerkt. Linux-native validatie is nu mogelijk met een tijdelijk lokaal uitgepakte Xvfb.
 
-**Aandachtspunten:** Rollback probeert alle herstelacties; falen wordt typed gemeld en beschikbare journalback-ups blijven bewaard. Fouten kunnen na duurzame publicatie optreden. SQLite-corruptieherstel kan staged entries wissen: dit moet vóór vieweracceptatie worden aangepakt (WP5-08). Fetch/pull-dry-runs schrijven tijdelijke metadata en kunnen stale sessies verwijderen. Adaptercache-invalidatie blijft WP4-05. Zie de inventarisatie voor bronnen en vervolggrenzen.
+**Aandachtspunten:** Rollback probeert alle herstelacties; falen wordt typed gemeld en beschikbare journalback-ups blijven bewaard. Fouten kunnen na duurzame publicatie optreden. SQLite-corruptie wordt nu fail-closed afgehandeld: geen automatische reset van staged entries (WP5-08). Fetch/pull-dry-runs schrijven tijdelijke metadata en kunnen stale sessies verwijderen. Adaptercaches zijn sinds WP4 begrensd tot één operatieprovider. Zie de inventarisatie voor bronnen en vervolggrenzen.
 
 | Werkpakket | Status | Afhankelijkheden | Oplevering |
 | --- | --- | --- | --- |
@@ -35,10 +35,10 @@ Dit document is de centrale voortgangsregistratie voor de desktop-GUI. Het oorsp
 | WP2 — Operatiecontracten | Voltooid | WP1 | Voortgang, cancellation en typed fouten |
 | WP3 — Frameworkspikes en ADR | Afgesloten op gebruikersbesluit | WP1; WP2 voor progress/cancellation | Onderbouwde frameworkkeuze |
 | WP4 — Desktop-shell en session | Voltooid | WP2, WP3 | Responsieve shell en veilige lifecycle |
-| WP5 — Viewer-release | Open | WP4 | Geen mutaties aan projectinhoud, staging, branches of refs |
+| WP5 — Viewer-release | Voltooid | WP4 | Geen mutaties aan projectinhoud, staging, branches of refs |
 | WP6 — Lokale mutaties | Open | WP5 | Preflight, bevestiging en recovery |
 | WP7 — Clone en remotes | Open | WP6 | Backendconforme samenwerking |
-| WP8 — Productisering voor Windows, macOS en Linux | Open | Start bij WP3/WP4; afronding na WP7 | Gevalideerde Windows-release |
+| WP8 — Productisering voor Windows, macOS en Linux | Open | Start bij WP3/WP4; afronding na WP7 | Gevalideerde multi-OS-release |
 
 Werkpakketten zijn opleverbaar in kleine wijzigingen. Packaging, CI, privacy en toegankelijkheid beginnen vroeg; WP8 is geen reden om die uit te stellen.
 
@@ -107,14 +107,14 @@ mag worden gebouwd; native kwaliteit en distributie op de drie OS'en blijven rel
 
 ### WP5 — Viewer-release zonder projectinhoudmutaties
 
-- [ ] WP5-01 — Startscherm met openen, recente repositories en afhandeling van ongeldige repositories opleveren.
-- [ ] WP5-02 — Dashboard met branch, HEAD, statusaantallen en afzonderlijke laad-/fouttoestanden bouwen.
-- [ ] WP5-03 — Changes-view met groepering, zoeken, selectie en virtualisatie bouwen, zonder stagingacties.
-- [ ] WP5-04 — Begrensde/gepagineerde history en commit-/snapshotdetails aanbieden; ontbrekende queries via Application toevoegen.
-- [ ] WP5-05 — Scan, doctor en fsck met voortgang, annulering en geredacteerde rapportexport aansluiten.
-- [ ] WP5-06 — Beschikbare dependencygegevens tonen en filteren zonder bindacties.
-- [ ] WP5-07 — Loading-, empty-, success- en errorstates testen; CLI/GUI-resultaten semantisch vergelijken met gedeelde fixtures.
-- [ ] WP5-08 — Cachewrites en overige metadata-neveneffecten controleren en documenteren; voorkom dat SQLite-corruptieherstel staged entries wist bij viewer/statusgebruik. Viewer-smoketest en Windows-previewpublicatie uitvoeren.
+- [x] WP5-01 — Startscherm met openen, recente repositories en afhandeling van ongeldige repositories opleveren.
+- [x] WP5-02 — Dashboard met branch, HEAD, statusaantallen en afzonderlijke laad-/fouttoestanden bouwen.
+- [x] WP5-03 — Changes-view met groepering, zoeken, selectie en virtualisatie bouwen, zonder stagingacties.
+- [x] WP5-04 — Begrensde/gepagineerde history en commit-/snapshotdetails aanbieden; ontbrekende queries via Application toevoegen.
+- [x] WP5-05 — Scan, doctor en fsck met voortgang, annulering en geredacteerde rapportexport aansluiten.
+- [x] WP5-06 — Beschikbare dependencygegevens tonen en filteren zonder bindacties.
+- [x] WP5-07 — Loading-, empty-, success- en errorstates testen; CLI/GUI-resultaten semantisch vergelijken met gedeelde fixtures.
+- [x] WP5-08 — Cachewrites en overige metadata-neveneffecten controleren en documenteren; voorkom dat SQLite-corruptieherstel staged entries wist bij viewer/statusgebruik. Viewer-smoketest en Windows-previewpublicatie uitvoeren.
 
 **Acceptatie:** Geen wijzigingen aan projectbestanden, staging, branches of refs. De status-hashcache kan wel worden bijgewerkt; de release wordt daarom niet als strikt schrijfloos beschreven. Init, restore en andere muterende acties ontbreken nog.
 
@@ -334,3 +334,23 @@ Gebruik bij volgende updates hetzelfde formaat: datum, taak-ID's, bestanden/resu
 - **CI:** Het Windows-spikeworkflow reageert nu ook op WP4-pushes en deze Infrastructure-wijziging, zodat de gemelde test opnieuw wordt uitgevoerd. Remote uitkomst nog niet beschikbaar in deze sessie.
 - **E2E-fixture:** De disposed-guard maakte zichtbaar dat de rollbacktest dezelfde context teruggaf aan checkout en geneste status. De factory maakt nu per aanroep een eigen context en ruimt ook de verificatiecontext op; rollbackasserties blijven behouden.
 - **Validatie:** Nieuwe native-handle-regressietest faalt aantoonbaar tegen de oude code; met de fix 556/556 hoofdsolutiontests en 4/4 spike-tests geslaagd (exacte gemelde `--no-build --logger trx`-stap), nul skips. Release-builds van hoofdsolution en spikes: 0 fouten/waarschuwingen; volledige hoofdsolution-opmaakcontrole en `git diff --check` geslaagd. Ruwe samenvatting in `gui/evidence/wp4/sqlite-pool-fix.json`. Windows-CI moet de Windows-uitkomst nog bevestigen.
+
+
+### 16 november 2026 — WP5 gestart vanaf feat_GUI
+
+- **Branch/basis:** `feat/gui-wp5-viewer`, exact vanaf `origin/feat_GUI` (`f27413f`, merge van WP4 incl. SQLite-poolfix). Geen featurebranches als basis gebruikt.
+- **Implementatie:** Onafhankelijke metadata/status-loadstates, gegroepeerde/gefilterde/geselecteerde virtuele changes, begrensde history/snapshot/dependencyqueries via Application, scan/doctor/fsck via dezelfde backendoverloads en een allowlist-export zonder machinepaden/vrije tekst. Geen project-/staging-/ref-/branchmutators.
+- **Data-integriteit:** De destructieve index-corruptie-reset is vervangen door een getypeerde fout met behoud van database/journals; ADR-009, Recovery Guide en CLI-beperkingen bijgewerkt. Normale status-cachewrites blijven expliciet toegestaan.
+- **Bewijs in uitvoering:** Integratietests vergelijken met dezelfde Application-resultaten die de CLI gebruikt, controleren staged intent/project/ref-behoud en echte 10.000-rijen-virtualisatie. Native smoke en platformpublicaties volgen hieronder; Windows/macOS-native releaseacceptatie blijft WP8.
+
+
+### 16 november 2026 — WP5 afgerond
+
+- **Taken:** WP5-01 t/m WP5-08 voltooid. Werkende viewer voor overview/status, gegroepeerde changes, history/snapshot, dependencies en diagnostics. Geen lokale/remote mutators toegevoegd; WP6 blijft open.
+- **Application:** `ViewerQueries` met begrensde cursor-/offsetpagina's en project/branch/HEAD; DI-registratie en registratietest. Oorspronkelijke CLI-logquery blijft intact en wordt semantisch vergeleken. Nieuwe `StagingIndexCorruptException` wordt als integrity failure gepresenteerd.
+- **Databehoud:** Verwijdering/reset van corrupte `index.db` is geschrapt; echte corruptie-/viewer-tests behouden staged intent en databasebytes. Metadata, history en diagnostics blijven apart bruikbaar als status faalt. Normale hashcachewrites en object-tempdirectorycreatie zijn gedocumenteerd.
+- **UI/lifecycle:** Afzonderlijke loading/empty/success/error/cancelled-states, filters/selectie en 10.000-rijen-virtualisatie; late sessie-/selectieresultaten worden genegeerd. Reportexport bevat alleen vaste typed samenvattingen/tellers en weigert repo-doelen. De activityfooter meldt geen oude fase na taakafronding.
+- **Definitieve validatie:** 567/567 tests geslaagd, nul skips (291 Application, 23 Desktop, 28 Bootstrap, overige regressies); Release-build 0 fouten/0 waarschuwingen; volledige `dotnet format --verify-no-changes --no-restore`, whitespace en documentatielinks geslaagd. Linux x64, SDK 10.0.404. Tests omvatten CLI-usecase-equivalentie, paginering, staged/project/ref-behoud, corruptie, cancellation en virtualisatie.
+- **Native smoke:** Self-contained Linux-app met echte muis/toetsenbordinput onder lokale Xvfb door alle vijf viewerpagina's bediend. Eén stagingentry en 15 project/ref/objectbestanden voor/na ongewijzigd; native exitcode 0. Screenshots en assemblyhash in `gui/evidence/wp5`, toelichting in `gui/WP5_Validation.md`.
+- **Previewpublicatie:** win-x64, linux-x64, osx-arm64 en osx-x64 self-contained geslaagd. Desktop-CI test nu de hele solution op Windows/macOS/Linux en publiceert artifacts. Geen GitHub-release/deployment, PR-approval of merge; remote Windows/macOS-uitkomsten zijn hier niet geverifieerd.
+- **Grenzen:** Full snapshot-objectdeserialisatie blijft; alleen output/UI-pagina's zijn begrensd. First-parent history, page-local dependencyfilters en maximaal 200 zichtbare diagnosticregels; summaryexport bevat geen volledige vrije details. Native Windows/macOS en fysieke DPI/accessibility/performance/distributiechecks blijven WP8.

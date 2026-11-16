@@ -115,3 +115,17 @@ dawvc fsck --artifacts
 The Application API distinguishes cancellation from incomplete rollback. Await a cancelled operation until compensation has finished. Cancellation does not guarantee an unchanged repository: commit, fetch, pull and clone can leave durable effects.
 
 If `IncompleteRollbackException` is returned, stop further mutations and preserve its `RecoveryPath`. A journal backup directory contains the original files that could not be restored and survives journal disposal. A repository-root path identifies failed ref/index compensation; it is not a complete metadata backup. Inspect the retained technical causes locally for nested journal paths. Preserve these paths before attempting manual recovery and run `doctor`/`fsck` as appropriate. Redact machine paths and technical exception details before sharing diagnostics. There is no new GUI recovery action or CLI command in this change.
+
+## Corrupt staging index: viewer/status now stop instead of resetting it
+
+As of WP5 (16 November 2026), SQLite initialization errors CORRUPT/NOTADB produce
+`StagingIndexCorruptException`. The database contains staged user intent as well as
+the derived hash cache; it is no longer deleted/rebuilt automatically. The viewer
+keeps repository metadata and diagnostics available while showing a status error.
+
+Stop operations and preserve `.dawvc/index.db` and any `index.db-wal`/`index.db-shm`
+files before attempting recovery. Use an offline copy for SQLite recovery tooling.
+`doctor`/`fsck` inspect repository/artifact integrity; they do not reconstruct staged
+intent. There is no new automatic repair/reset command. Do not treat removing the
+index as harmless cache cleanup; doing so can lose staged entries. Project and object
+bytes are not changed by the viewer's corruption handling. See ADR-009's amendment.

@@ -34,6 +34,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IDawAdapterRegistry>(sp => new DawAdapterRegistry([new FLStudioAdapter()]));
         services.AddTransient<InitRepositoryUseCase>();
         services.AddTransient<OpenRepositoryUseCase>();
+        services.AddTransient<DawVcs.Application.Viewing.ViewerQueries>();
         services.AddTransient<CommitUseCase>(sp => new CommitUseCase(
             sp.GetRequiredService<Func<string, IRepositoryContext>>(),
             sp.GetRequiredService<IDawAdapterRegistry>()));

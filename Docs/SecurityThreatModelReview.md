@@ -145,3 +145,19 @@ view. Cancellation awaits backend/resource completion. A late cancel does not hi
 a successful backend publication. Desktop serialization is process-local and does
 not replace existing engine protection against concurrent CLI use. Native platform
 privacy/accessibility/security and release packaging remain open WP8 gates.
+
+## WP5 viewer and diagnostic exports (16 November 2026)
+
+The viewer exposes no stage/commit/restore/branch/bind/remote mutators. Status may
+write derived hashes; metadata queries and snapshot inspection do not request index
+recovery. A corrupt staging index is preserved and access fails closed (ADR-009).
+The UI remains usable for metadata/history/diagnostics when working-tree status fails.
+
+Report export is an allowlist projection: schema version, fixed diagnostic kind,
+health and fixed count keys only. Names, messages, targets, paths, locators, author
+fields, environment details and credentials are not serialized, even if an unexpected
+count key is supplied. User-selected destinations must be JSON outside the repository;
+linked ancestors and broken links are resolved for that check. This is not a sandbox
+against a same-user filesystem race between validation and opening the target.
+Dependency views omit original paths/provenance locators and display snapshot state
+separately from live Doctor verification. History text is rendered as plain text.

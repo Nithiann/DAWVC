@@ -1,0 +1,63 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:vm="using:DawVcs.Desktop.ViewModels" xmlns:log="using:DawVcs.Application.Commits" xmlns:data="using:DawVcs.Application.Viewing"
+ x:Class="DawVcs.Desktop.Views.ViewerView" x:DataType="vm:ViewerViewModel">
+ <Grid>
+  <StackPanel IsVisible="{Binding IsOverview}" Spacing="18">
+   <Button Content="Refresh overview and changes" Command="{Binding RefreshCommand}" />
+   <TextBlock Text="{Binding MetadataState.Caption}" Classes="caption" /><TextBlock Text="{Binding MetadataState.Error}" TextWrapping="Wrap" />
+   <TextBlock Text="{Binding Project}" FontSize="28" FontWeight="SemiBold" />
+   <TextBlock Text="{Binding Branch}" FontSize="20" /><TextBlock Text="{Binding Head}" TextWrapping="Wrap" Classes="caption" />
+   <Border BorderThickness="1" BorderBrush="{DynamicResource Color.Border.Subtle}" Padding="20" CornerRadius="12">
+    <StackPanel Spacing="12"><TextBlock Text="Working tree" FontSize="20" /><TextBlock Text="{Binding ChangesState.Caption}" /><TextBlock Text="{Binding Counts}" TextWrapping="Wrap" /><TextBlock Text="{Binding ChangesState.Error}" TextWrapping="Wrap" /></StackPanel>
+   </Border>
+   <TextBlock Text="Viewer mode · no staging, commit, restore or branch actions" Classes="caption" />
+  </StackPanel>
+  <Grid IsVisible="{Binding IsChanges}" RowDefinitions="Auto,Auto,Auto,*,Auto">
+   <Grid ColumnDefinitions="*,Auto"><TextBox Text="{Binding ChangeSearch, Mode=TwoWay}" PlaceholderText="Search paths" AutomationProperties.Name="Search changes" /><Button Grid.Column="1" Content="Refresh" Command="{Binding RefreshCommand}" /></Grid>
+   <StackPanel Grid.Row="1"><TextBlock Text="{Binding ChangesState.Caption}" /><Grid ColumnDefinitions="100,*,100" Margin="0,8"><TextBlock Text="State" Classes="caption" /><TextBlock Grid.Column="1" Text="Path" Classes="caption" /><TextBlock Grid.Column="2" Text="Bytes" Classes="caption" /></Grid></StackPanel><TextBlock Grid.Row="2" Text="{Binding ChangesState.Error}" TextWrapping="Wrap" />
+   <ListBox Grid.Row="3" x:Name="ChangesList" ItemsSource="{Binding Changes}" SelectedItem="{Binding SelectedChange, Mode=TwoWay}">
+    <ListBox.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate></ListBox.ItemsPanel>
+    <ListBox.ItemTemplate><DataTemplate x:DataType="vm:ChangeRow"><StackPanel>
+     <TextBlock IsVisible="{Binding HasGroupHeader}" Text="{Binding GroupHeader}" FontWeight="Bold" FontSize="18" Margin="0,10,0,5" />
+     <Grid ColumnDefinitions="100,*,100"><TextBlock Text="{Binding State}" Classes="caption" /><TextBlock Grid.Column="1" Text="{Binding Path}" /><TextBlock Grid.Column="2" Text="{Binding Bytes}" /></Grid>
+    </StackPanel></DataTemplate></ListBox.ItemTemplate>
+   </ListBox>
+   <StackPanel Grid.Row="4"><TextBlock Text="{Binding SelectedChange.Path}" /><TextBlock Text="{Binding SelectedChange.PreviousPath}" Classes="caption" /></StackPanel>
+  </Grid>
+  <Grid IsVisible="{Binding IsHistory}" RowDefinitions="Auto,Auto,Auto,*" ColumnDefinitions="*,*">
+   <StackPanel Orientation="Horizontal" Spacing="8" Grid.ColumnSpan="2"><Button Content="Newest" Command="{Binding HistoryNewestCommand}" /><Button Content="Older page" Command="{Binding HistoryOlderCommand}" /><Button Content="Show selected commit" Command="{Binding ShowCommitCommand}" /></StackPanel>
+   <StackPanel Grid.Row="1"><TextBlock Text="{Binding HistoryState.Caption}" /><TextBlock Text="{Binding HistoryState.Error}" TextWrapping="Wrap" /></StackPanel>
+   <StackPanel Grid.Row="1" Grid.Column="1"><TextBlock Text="{Binding DetailsState.Caption}" /><TextBlock Text="{Binding DetailsState.Error}" TextWrapping="Wrap" /></StackPanel>
+   <TextBlock Grid.Row="2" Text="First-parent history · up to 50 commits per page" Classes="caption" />
+   <ListBox Grid.Row="3" ItemsSource="{Binding History}" SelectedItem="{Binding SelectedCommit, Mode=TwoWay}">
+    <ListBox.ItemTemplate><DataTemplate x:DataType="log:CommitLogEntry"><StackPanel Spacing="4"><TextBlock Text="{Binding Message}" FontWeight="SemiBold" TextWrapping="Wrap" /><TextBlock Text="{Binding Timestamp}" Classes="caption" /><TextBlock Text="{Binding Author}" Classes="caption" /><TextBlock Text="{Binding Id}" FontSize="10" /></StackPanel></DataTemplate></ListBox.ItemTemplate>
+   </ListBox>
+   <Grid Grid.Row="3" Grid.Column="1" RowDefinitions="Auto,Auto,Auto,Auto,Auto,*">
+    <TextBlock Text="{Binding Details.Commit.Message}" TextWrapping="Wrap" FontWeight="SemiBold" />
+    <StackPanel Grid.Row="1"><TextBlock Text="{Binding Details.Commit.Id}" FontSize="10" /><TextBlock Text="{Binding CommitParents}" FontSize="10" TextWrapping="Wrap" /></StackPanel>
+    <TextBlock Grid.Row="2" Text="{Binding Details.Commit.SnapshotId}" FontSize="10" />
+    <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8"><TextBlock Text="Snapshot complete:" /><TextBlock Text="{Binding Details.IsComplete}" /><TextBlock Text="Files:" /><TextBlock Text="{Binding Details.TotalFiles}" /></StackPanel>
+    <Button Grid.Row="4" Content="Next files page" Command="{Binding MoreFilesCommand}" />
+    <ListBox Grid.Row="5" ItemsSource="{Binding Files}"><ListBox.ItemTemplate><DataTemplate x:DataType="data:SnapshotFile"><StackPanel><TextBlock Text="{Binding Path}" /><TextBlock Text="{Binding Bytes}" Classes="caption" /><TextBlock Text="{Binding Role}" Classes="caption" /><TextBlock Text="{Binding Hash}" FontSize="10" /></StackPanel></DataTemplate></ListBox.ItemTemplate></ListBox>
+   </Grid>
+  </Grid>
+  <Grid IsVisible="{Binding IsDependencies}" RowDefinitions="Auto,Auto,Auto,Auto,*">
+   <TextBlock Text="{Binding DependencySource}" TextWrapping="Wrap" Classes="caption" />
+   <Grid Grid.Row="1" ColumnDefinitions="*,160,Auto,Auto"><TextBox Text="{Binding DependencySearch, Mode=TwoWay}" PlaceholderText="Search this page" /><ComboBox Grid.Column="1" ItemsSource="{Binding DependencyKinds}" SelectedItem="{Binding DependencyKind, Mode=TwoWay}" /><Button Grid.Column="2" Content="Refresh snapshot" Command="{Binding DependenciesRefreshCommand}" /><Button Grid.Column="3" Content="Next page" Command="{Binding DependenciesNextCommand}" /></Grid>
+   <TextBlock Grid.Row="2" Text="{Binding DependenciesState.Caption}" /><TextBlock Grid.Row="3" Text="{Binding DependenciesState.Error}" TextWrapping="Wrap" />
+   <ListBox Grid.Row="4" ItemsSource="{Binding Dependencies}"><ListBox.ItemTemplate><DataTemplate x:DataType="data:SnapshotDependency"><Grid ColumnDefinitions="*,100,130,120"><StackPanel><TextBlock Text="{Binding Name}" /><TextBlock Text="{Binding Version}" Classes="caption" /></StackPanel><TextBlock Grid.Column="1" Text="{Binding Kind}" /><TextBlock Grid.Column="2" Text="{Binding Status}" /><TextBlock Grid.Column="3" Text="{Binding Portability}" /></Grid></DataTemplate></ListBox.ItemTemplate></ListBox>
+  </Grid>
+  <Grid IsVisible="{Binding IsDiagnostics}" RowDefinitions="Auto,Auto,*,Auto">
+   <StackPanel Orientation="Horizontal" Spacing="8"><Button Content="Scan" Command="{Binding ScanCommand}" /><Button Content="Doctor" Command="{Binding DoctorCommand}" /><Button Content="Fsck" Command="{Binding FsckCommand}" /><Button Content="Export last summary" Command="{Binding ExportCommand}" /></StackPanel>
+   <TextBlock Grid.Row="1" Text="Up to 200 findings per report. Export contains full counts only, without paths or free-text details." TextWrapping="Wrap" Classes="caption" />
+   <ScrollViewer Grid.Row="2"><StackPanel Spacing="12">
+    <TextBlock Text="Scan" FontSize="20" FontWeight="SemiBold" /><TextBlock Text="{Binding ScanState.Caption}" /><TextBlock Text="{Binding ScanState.Error}" TextWrapping="Wrap" /><TextBlock Text="{Binding ScanSummary}" TextWrapping="Wrap" />
+    <TextBlock Text="Doctor" FontSize="20" FontWeight="SemiBold" /><TextBlock Text="{Binding DoctorState.Caption}" /><TextBlock Text="{Binding DoctorState.Error}" TextWrapping="Wrap" /><TextBlock Text="{Binding DoctorSummary}" TextWrapping="Wrap" />
+    <ItemsControl ItemsSource="{Binding DoctorRows}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="vm:DiagnosticRow"><Grid ColumnDefinitions="130,*,130"><TextBlock Text="{Binding Category}" /><TextBlock Grid.Column="1" Text="{Binding Subject}" TextWrapping="Wrap" /><TextBlock Grid.Column="2" Text="{Binding Status}" /></Grid></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+    <TextBlock Text="Fsck" FontSize="20" FontWeight="SemiBold" /><TextBlock Text="{Binding FsckState.Caption}" /><TextBlock Text="{Binding FsckState.Error}" TextWrapping="Wrap" /><TextBlock Text="{Binding FsckSummary}" TextWrapping="Wrap" />
+    <ItemsControl ItemsSource="{Binding FsckRows}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="vm:DiagnosticRow"><Grid ColumnDefinitions="130,*,130"><TextBlock Text="{Binding Category}" /><TextBlock Grid.Column="1" Text="{Binding Subject}" /><TextBlock Grid.Column="2" Text="{Binding Status}" /></Grid></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+   </StackPanel></ScrollViewer>
+   <TextBlock Grid.Row="3" Text="{Binding ExportNotice}" TextWrapping="Wrap" />
+  </Grid>
+ </Grid>
+</UserControl>

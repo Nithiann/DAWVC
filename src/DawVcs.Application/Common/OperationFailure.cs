@@ -38,7 +38,7 @@ public sealed record OperationFailure(OperationFailureCategory Category, Excepti
             RejectedNonFastForwardException => OperationFailureCategory.NonFastForward,
             IncompatibleRepositoryException or IncompatibleRemoteRepositoryException or UnsupportedEnvelopeVersionException or UnsupportedCompressionModeException => OperationFailureCategory.IncompatibleRepository,
             CheckoutStagingException { InnerException: IOException or UnauthorizedAccessException } => OperationFailureCategory.PermissionOrIoFailure,
-            InvalidEnvelopeException or CheckoutStagingException => OperationFailureCategory.IntegrityFailure,
+            StagingIndexCorruptException or InvalidEnvelopeException or CheckoutStagingException => OperationFailureCategory.IntegrityFailure,
             TimeoutException => OperationFailureCategory.Timeout,
             OperationCanceledException => OperationFailureCategory.Cancellation,
             RemoteException => OperationFailureCategory.RemoteUnavailable,

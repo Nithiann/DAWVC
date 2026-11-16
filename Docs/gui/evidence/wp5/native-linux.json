@@ -1,0 +1,16 @@
+{
+  "platform": "Linux x64, local Xvfb",
+  "kind": "native-viewer-smoke",
+  "exitCode": 0,
+  "stagedEntriesPreserved": 1,
+  "protectedFilesPreserved": 15,
+  "screenshots": [
+    "overview.png",
+    "changes.png",
+    "history.png",
+    "dependencies.png",
+    "diagnostics.png"
+  ],
+  "assemblySha256": "d5bc649e70b045b3352e2a242a3c075b5a5d3ea52f673a1f901cf13ecd698ed0",
+  "note": "Screenshots inspected separately; native Windows/macOS and physical desktop QA remain open."
+}

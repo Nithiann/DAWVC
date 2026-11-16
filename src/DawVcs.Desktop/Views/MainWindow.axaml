@@ -1,5 +1,5 @@
 <Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
- xmlns:vm="using:DawVcs.Desktop.ViewModels" xmlns:svc="using:DawVcs.Desktop.Services"
+ xmlns:views="using:DawVcs.Desktop.Views" xmlns:vm="using:DawVcs.Desktop.ViewModels" xmlns:svc="using:DawVcs.Desktop.Services"
  x:Class="DawVcs.Desktop.Views.MainWindow" x:DataType="vm:ShellViewModel"
  Background="{DynamicResource Color.Background.Base}" Title="DAWVC" Width="1180" Height="780" MinWidth="820" MinHeight="560">
   <Grid RowDefinitions="*,Auto" ColumnDefinitions="230,*">
@@ -18,9 +18,16 @@
         </StackPanel>
       </DockPanel>
     </Border>
-    <ScrollViewer Grid.Column="1">
+    <Grid Grid.Column="1" Margin="24" RowDefinitions="Auto,Auto,Auto,*" IsVisible="{Binding ShowViewer}">
+      <Grid ColumnDefinitions="*,Auto"><TextBlock Text="{Binding PageTitle}" FontSize="30" FontWeight="SemiBold" /><StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"><Button Content="Open folder" Command="{Binding OpenExplorerCommand}" /><Button Content="Open repository" Command="{Binding OpenCommand}" /></StackPanel></Grid>
+      <TextBlock Grid.Row="1" Text="{Binding Operations.RepositoryPath}" Classes="caption" Margin="0,8,0,12" />
+      <TextBlock Grid.Row="2" Text="{Binding FailureMessage}" TextWrapping="Wrap" />
+      <views:ViewerView Grid.Row="3" DataContext="{Binding Viewer}" />
+    </Grid>
+    <StackPanel Grid.Column="1" Margin="24" Spacing="20" IsVisible="{Binding ShowSettings}"><TextBlock Text="Settings" FontSize="30" /><Button Content="Dark / light" Command="{Binding ToggleThemeCommand}" /><TextBlock Text="Recent paths are stored only in your local preferences." /></StackPanel>
+    <ScrollViewer Grid.Column="1" IsVisible="{Binding ShowHome}">
       <StackPanel Margin="{StaticResource Spacing.Page}" Spacing="20">
-        <Grid ColumnDefinitions="*,Auto"><TextBlock Text="{Binding PageTitle}" FontSize="30" FontWeight="SemiBold" /><Button Grid.Column="1" Content="Open repository" Command="{Binding OpenCommand}" /></Grid>
+        <Grid ColumnDefinitions="*,Auto"><TextBlock Text="{Binding PageTitle}" FontSize="30" FontWeight="SemiBold" /><StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"><Button Content="Open folder" Command="{Binding OpenExplorerCommand}" /><Button Content="Open repository" Command="{Binding OpenCommand}" /></StackPanel></Grid>
         <TextBlock Text="{Binding PageDescription}" TextWrapping="Wrap" Classes="caption" />
         <Border BorderBrush="{DynamicResource Color.Border.Subtle}" BorderThickness="1" CornerRadius="{StaticResource Radius.Panel}" Padding="20">
           <StackPanel Spacing="12">

@@ -323,3 +323,12 @@ dawvc fsck [--artifacts] [--json] [--dir <path>]
 
 *Exits with code `6` if repository or artifact corruption is detected.*
 
+
+### Index corruption behavior (16 November 2026)
+
+Commands that need the staging index, including `status`, now stop on detected
+SQLite CORRUPT/NOTADB instead of automatically deleting/recreating `index.db`.
+Staged entries are user intent, not a rebuildable cache. Preserve the database and
+journal files; follow the Recovery Guide before explicit offline recovery. Doctor
+and fsck do not repair staged intent. Command signatures and normal JSON output are
+unchanged; no repair/reset flag has been added.

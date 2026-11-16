@@ -41,3 +41,17 @@ We select **SQLite** via `Microsoft.Data.Sqlite` combined with **Dapper** micro-
 - **Positive:** Standardized SQL transactional semantics for staging operations; sub-second warm `status` performance.
 - **Positive:** Zero dependency leakage into `DawVcs.Domain` (domain only interacts with the `IStagingIndex` port).
 - **Negative:** Adds `Microsoft.Data.Sqlite` and `Dapper` to `DawVcs.Infrastructure`.
+
+## Amendment — preserve staging on corrupt-index reads (WP5, 16 November 2026)
+
+The original rebuildability/auto-recovery wording above applies only to derived
+filesystem hashes. `staging_entries` records user intent and cannot be reconstructed
+from HEAD and the working tree. Because both tables currently share `index.db`,
+automatically deleting/recreating that database is unsafe and is superseded here.
+
+On SQLite CORRUPT/NOTADB during initialization, throw the typed
+`StagingIndexCorruptException` and preserve the database. Never delete the database,
+WAL or SHM files automatically. Other provider errors propagate without rebuild.
+The viewer may show unavailable status while metadata/history/doctor/fsck remain
+independently accessible. Explicit recovery must preserve originals and staged
+intent; no new destructive repair command is introduced. No schema version changes.

@@ -29,6 +29,7 @@ public sealed class ServiceCollectionExtensionsTests
     {
         typeof(InitRepositoryUseCase),
         typeof(OpenRepositoryUseCase),
+        typeof(DawVcs.Application.Viewing.ViewerQueries),
         typeof(CommitUseCase),
         typeof(LogUseCase),
         typeof(CheckoutRestoreUseCase),

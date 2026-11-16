@@ -75,47 +75,14 @@ CREATE TABLE IF NOT EXISTS filesystem_cache (
             }
             catch (SqliteException ex) when (ex.SqliteErrorCode == 11 /* SQLITE_CORRUPT */ || ex.SqliteErrorCode == 26 /* SQLITE_NOTADB */)
             {
-                // Crash recovery / rebuildable cache (R-006): purge corrupted db and recreate
-                SqliteConnection.ClearAllPools();
-                TryDeleteDatabaseFiles();
-
-                await using var connection = new SqliteConnection(_connectionString);
-                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
-
-                await connection.ExecuteAsync(new CommandDefinition("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;", cancellationToken: cancellationToken)).ConfigureAwait(false);
-                const string createSql = @"
-CREATE TABLE IF NOT EXISTS staging_entries (
-    path TEXT PRIMARY KEY,
-    blob_id TEXT NOT NULL,
-    hash TEXT NOT NULL,
-    size INTEGER NOT NULL,
-    role INTEGER NOT NULL,
-    staged_at INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS filesystem_cache (
-    path TEXT PRIMARY KEY,
-    file_length INTEGER NOT NULL,
-    last_modified_utc INTEGER NOT NULL,
-    blake3_hash TEXT NOT NULL,
-    checked_at INTEGER NOT NULL
-);
-";
-                await connection.ExecuteAsync(new CommandDefinition(createSql, cancellationToken: cancellationToken)).ConfigureAwait(false);
-                _initialized = true;
+                // Staged entries are user state, not a rebuildable hash cache. Never discard them on read.
+                throw new StagingIndexCorruptException(_dbPath, ex);
             }
         }
         finally
         {
             _lock.Release();
         }
-    }
-
-    private void TryDeleteDatabaseFiles()
-    {
-        try { if (File.Exists(_dbPath)) File.Delete(_dbPath); } catch { }
-        try { if (File.Exists(_dbPath + "-wal")) File.Delete(_dbPath + "-wal"); } catch { }
-        try { if (File.Exists(_dbPath + "-shm")) File.Delete(_dbPath + "-shm"); } catch { }
     }
 
     public async Task StageEntryAsync(ArtifactEntry entry, CancellationToken cancellationToken = default)

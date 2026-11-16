@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "platform": "Linux x64",
+  "sdk": "10.0.404",
+  "baseBranch": "feat_GUI",
+  "baseCommit": "f27413f54f4b2d8ea5ef5f6b9dca5ea9f3e17630",
+  "passed": 567,
+  "skipped": 0,
+  "applicationPassed": 291,
+  "desktopPassed": 23,
+  "bootstrapPassed": 28,
+  "buildWarnings": 0,
+  "buildErrors": 0,
+  "formatVerified": true,
+  "notes": [
+    "Native validation under temporary Xvfb; shared desktop tools unavailable",
+    "No native Windows/macOS acceptance claimed",
+    "Corruption-initialization reset intentionally removed; no schema migration"
+  ]
+}

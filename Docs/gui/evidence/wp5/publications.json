@@ -1,0 +1,26 @@
+[
+  {
+    "rid": "win-x64",
+    "seconds": 19.49430393300281,
+    "bytes": 219723566,
+    "fileCount": 250
+  },
+  {
+    "rid": "linux-x64",
+    "seconds": 10.403718924000714,
+    "bytes": 111481475,
+    "fileCount": 247
+  },
+  {
+    "rid": "osx-arm64",
+    "seconds": 8.71262325799762,
+    "bytes": 121483610,
+    "fileCount": 247
+  },
+  {
+    "rid": "osx-x64",
+    "seconds": 8.61400825400051,
+    "bytes": 114625454,
+    "fileCount": 247
+  }
+]

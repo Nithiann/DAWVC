@@ -39,6 +39,7 @@ public sealed partial class App : Avalonia.Application
         services.AddSingleton<IFolderPicker>(sp => sp.GetRequiredService<DesktopPlatform>());
         services.AddSingleton<IUserDialogs>(sp => sp.GetRequiredService<DesktopPlatform>());
         services.AddSingleton<IFileExplorer>(sp => sp.GetRequiredService<DesktopPlatform>());
+        services.AddSingleton<IDiagnosticExporter>(_ => new DiagnosticExporter(owner));
         services.AddSingleton<ShellViewModel>();
         return services.BuildServiceProvider();
     }
