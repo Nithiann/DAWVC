@@ -96,3 +96,12 @@ operations. The target is a local filesystem directory. Provisioning never asks
 SSH serve to create an arbitrary remote path; expose the resulting host path
 through an explicitly configured alias/push policy. First Push keeps the same
 repository identity and fast-forward/closure/conditional-publication checks.
+
+
+## Explicit Merge compatibility (WP-SYNC-05)
+
+Explicit local Merge uses the existing multi-parent commit payload and a reused
+snapshot ID. Object traversal/closure validation and fast-forward checks already
+follow all parents; no hello, ref, object, publication operation or wire version
+changes. Fetch precedes local Merge; publication remains ordinary Push. Receivers
+need the existing compatible DAWVC protocol, not a native FLP merge service.

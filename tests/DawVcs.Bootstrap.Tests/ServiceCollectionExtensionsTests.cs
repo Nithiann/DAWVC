@@ -32,6 +32,7 @@ public sealed class ServiceCollectionExtensionsTests
         typeof(DawVcs.Application.Viewing.ViewerQueries),
         typeof(CommitUseCase),
         typeof(LogUseCase),
+        typeof(MergeUseCase),
         typeof(CheckoutRestoreUseCase),
         typeof(CheckoutUseCase),
         typeof(BindDependencyUseCase),

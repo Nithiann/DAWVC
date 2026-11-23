@@ -409,3 +409,42 @@ before storing them, without initiating an SSH connection.
 
 See [SSH hosting](Self_Hosting_SSH.md) for setup/permissions and
 [Remote Protocol](Remote_Protocol.md) for streaming, deadlines and error mapping.
+
+
+## `dawvc merge` — explicit project version selection
+
+```powershell
+dawvc fetch origin
+dawvc merge origin/main --take incoming -m "Choose collaborator version"
+# Or --take local to retain the current project's complete snapshot.
+dawvc push origin main
+```
+
+Syntax: `merge <reference> --take <local|incoming> -m <message> [--author <name>]
+[--dir <path>]`. Choices are case-sensitive and required. References use the
+existing resolver: local branches first, then remote-tracking refs, full IDs or
+unambiguous object prefixes. Prefer full commit IDs when a local branch shadows
+a tracking name. Fetch first; Merge performs no network transfer and observes the
+already-local incoming tip, which may be stale relative to its host.
+
+This resolves **diverged history**, not binary FLP contents. It creates a two-parent
+commit (local first, incoming second), choosing one complete snapshot: FLP, all
+recorded assets, dependency metadata and completeness status. It never mixes
+samples from one snapshot with FLP from the other. Both original snapshots remain
+restorable; `log` displays merge parent IDs and still follows the first-parent
+chain. No support for `HEAD^`, `--abort`, `--continue`, dry-run or force is added.
+
+Only diverged tips with a common ancestor are accepted. Identical, ancestor/
+descendant, unrelated, missing and unborn tips return validation exit 7; use Pull
+for a fast-forward. Dirty tracked/staged state or selected untracked collisions
+return 4. Corrupt/missing objects or unsafe snapshot paths return 3; cancellation
+returns 130. Unexpected permission/compensation failures are reported and require
+local inspection. Both tip snapshots/blobs are verified; historical snapshots and
+blobs require Fsck for a full audit. Metadata traversal limits: 50k commits, 1m
+parent edges, 2 MiB/object and 64 MiB cumulative metadata payload.
+
+Merge does not modify source branches/tracking refs. Push/Pull stay fast-forward
+only. After remote movement another Fetch/Merge may be necessary. Never run local
+mutating commands concurrently. Failed/cancelled preparation can leave an
+unreachable merge object; cancellation/errors after publication may leave the
+merge committed. Inspect `log` and `status` before retrying. See Recovery Guide.

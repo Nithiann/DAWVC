@@ -1027,12 +1027,73 @@ BARE-07 stays open until PR creation is confirmed. The agent does not approve/me
 Branch CI (Windows/Ubuntu):
 [![WP-SYNC-04 CI](https://github.com/Nithiann/DAWVC/actions/workflows/ci.yml/badge.svg?branch=feat%2Fsync-bare-provisioning)](https://github.com/Nithiann/DAWVC/actions?query=branch%3Afeat%2Fsync-bare-provisioning)
 
-Next functional work after review: design explicit divergence/conflict resolution
-for FLP collaboration, preserving both histories without semantic FLP merging.
-This is backlog, not implemented by WP-SYNC-04.
+At WP-SYNC-04 completion, the next functional work was explicit divergence
+resolution preserving both histories without semantic FLP merging. It is now
+scoped in WP-SYNC-05 below; it was not delivered by WP-SYNC-04.
 
 
 Publication: implementation `959e1b8` pushed to `feat/sync-bare-provisioning`.
 Both GraphQL (`gh pr create`) and REST (`POST /repos/Nithiann/DAWVC/pulls`)
 returned Forbidden. PR creation therefore remains a maintainer action through
 the pinned develop comparison above; no approval/merge was performed.
+
+
+# 29. WP-SYNC-05 — Explicit whole-snapshot divergence resolution
+
+Base: `feat/sync-bare-provisioning` at `6ef26ed`.
+Branch: `feat/sync-explicit-merge`; review/approval/merge remain manual.
+
+- [x] MERGE-01: inspect ancestry, immutable multi-parent commits and checkout journal.
+- [x] MERGE-02: define explicit local/incoming whole-snapshot choice and safety limits.
+- [x] MERGE-03: implement shared use case and CLI, preserving both parent histories.
+- [x] MERGE-04: test divergence resolution, Push/Pull continuation, assets, dirty state,
+  corruption, cancellation, unrelated history and changed-branch rejection.
+- [x] MERGE-05: requirements/ADR/reference/workflow/recovery/limitations updates.
+- [x] MERGE-06: full tests, Release build, formatting, SSH smoke, branch CI.
+- [ ] MERGE-07: publish stacked PR; never approve or merge.
+
+Scope: `merge <reference> --take local|incoming -m <message>` uses already-local
+history (Fetch first). Only genuinely diverged tips with a common ancestor are
+accepted. Commit parents are current local tip first and incoming tip second;
+reuse exactly one complete immutable snapshot, including samples/dependencies.
+No automatic FLP editing, semantic/per-file merge, force, network access, persistent
+merge state or GUI. Guard tracked/staged changes, incoming untracked collisions,
+metadata budgets, tip snapshot/blob integrity and expected active branch/tip.
+The existing checkout journal publishes files/ref/index with handled rollback;
+crash recovery/global workspace locking remain deferred. Failed/cancelled runs
+can leave an unreachable immutable merge object, but do not deliberately rewrite
+parent commits or source refs. Pull/Push remain fast-forward only; the merge
+commit makes both parents ancestors so subsequent fast-forward sync can resume.
+
+
+Implementation/local validation (23 November 2026, Linux, SDK 10.0.404):
+
+- Full Release suite: 687 passed, 0 failed, 0 skipped; 39 new merge acceptance
+  cases plus one Bootstrap registration case over the WP-SYNC-04 baseline.
+- Filesystem and transient-SSH cases cover both choices, both original versions
+  remaining restorable, subsequent Push/Pull and clean Fsck. Guards cover tracked/
+  staged/untracked conflicts, cancellation, ancestry/ref errors, branch/tip changes,
+  both-side corruption, schemas/types/shape/aggregate/size, reserved metadata paths
+  and a symlink introduced at publication. Linux executes the symlink case;
+  Windows link creation requires separate privileges and deployment validation.
+- Real unprivileged OpenSSH workflow passed: independent FLP commits, rejected
+  non-fast-forward Push, Fetch, explicit Merge, subsequent Push/Pull, byte identity
+  and Fsck. Existing bare provisioning and strict host-key rejection also passed.
+- Requirements, ADR-REM-006, CLI/log, integration, workflow, Quick Start, recovery,
+  protocol, limitations and security guidance updated. No new dependencies, GUI,
+  native FLP writer, persisted schema or wire format.
+- Release build: 0 warnings/errors; formatting verification passed. Branch CI is separate from these local checks.
+
+Remaining release work after this WP: real Windows FL Studio multi-workstation
+acceptance and deployment-specific NAS/SMB/OpenSSH evidence; persistent hard-crash
+publication recovery is separate. Semantic/per-file FLP merging remains deferred.
+
+
+Publication target: stacked PR against `feat/sync-bare-provisioning`, not develop.
+MERGE-07 remains open until PR creation is confirmed. Existing GitHub API
+restrictions may require manual creation using the explicitly pinned comparison:
+https://github.com/Nithiann/DAWVC/compare/feat/sync-bare-provisioning...feat/sync-explicit-merge?expand=1
+No approval or merge is performed by the agent.
+
+Branch CI (Windows/Ubuntu):
+[![WP-SYNC-05 CI](https://github.com/Nithiann/DAWVC/actions/workflows/ci.yml/badge.svg?branch=feat%2Fsync-explicit-merge)](https://github.com/Nithiann/DAWVC/actions?query=branch%3Afeat%2Fsync-explicit-merge)

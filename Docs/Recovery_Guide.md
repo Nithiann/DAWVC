@@ -175,3 +175,22 @@ abandoned staging only after confirming ownership/inactivity, then retry into an
 absent/empty destination. Do not merge staging directories into live storage.
 An interrupted SSH connection/source read does not provision a target on the SSH
 host; configuration and destination creation happen on the initiating machine.
+
+
+## Explicit snapshot Merge recovery
+
+Merge has no persistent conflicted state: there is no `merge --abort`/`--continue`.
+It requires a committed workspace and chooses one complete pre-existing snapshot.
+Before publication, dirty/collision/integrity/state-change failures do not
+intentionally move the active branch; an immutable unreachable merge object can
+remain. Checkout's existing journal compensates handled publication failures.
+If compensation fails, preserve recovery data reported by IncompleteRollbackException.
+
+After cancellation, a hard process stop or an error during post-publication
+binding resolution, inspect `dawvc log` and `dawvc status` before retrying. A merge
+may already be committed. Never delete object storage to undo it. Both parent
+IDs are printed by log; inspect/restore either old project in a separate directory:
+`dawvc checkout <full-parent-id> --restore-to <empty-directory>`. Restore outputs
+are ordinary files for review; the active branch is unaffected. Do not use Git's
+`HEAD^` syntax: it is not implemented. Keep source refs or note full IDs when
+reviewing alternate versions, and commit subsequent manual edits normally.

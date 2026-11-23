@@ -162,3 +162,30 @@ Collaborators use normal `dawvc clone`, not `clone --bare`, to obtain working
 files. Neither provisioning command copies source bindings/index or installs
 plugins. Targets must be absent/empty. Fast-forward-only collaboration and FL
 Studio search-folder/relinking requirements remain unchanged.
+
+
+## Resolving two independently committed project versions
+
+First commit/save your own work, then fetch the other producer's history. If Pull
+rejects divergence, inspect both versions separately before choosing:
+
+```powershell
+dawvc fetch origin
+# Optional: inspect the fetched version outside your workspace:
+dawvc checkout origin/main --restore-to D:\Review\IncomingSong
+# Choose one entire snapshot, retaining both histories:
+dawvc merge origin/main --take incoming -m "Use incoming arrangement and samples"
+# Alternatively --take local retains your committed project and recorded assets.
+dawvc push origin main
+```
+
+This choice applies to the whole project, including bundled samples/dependencies;
+it is not a per-track/per-file merge. Both parent IDs appear in `dawvc log` and
+can be restored with `checkout <full-id> --restore-to <empty-directory>`. To combine
+musical ideas manually, restore the other version separately, edit in FL Studio,
+explicitly add any newly imported assets, and commit the result normally.
+
+Merge refuses staged or modified/missing tracked work and untracked collisions.
+It does not fetch automatically, install plugins or configure FL Studio search
+paths. Do not run simultaneous local mutating commands. If the remote advances
+before Push, fetch and reassess; no force-push or history rewriting is needed.

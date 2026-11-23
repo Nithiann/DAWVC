@@ -230,3 +230,12 @@ Or seed all branches/history without working files:
 Both require absent/empty local destinations; source may be a path or dawvc:// URL.
 Then configure filesystem origin or the host's SSH alias and Push normally. See
 [SSH hosting](Docs/Self_Hosting_SSH.md) for provisioning and authorization details.
+
+
+## Explicit divergence resolution
+
+After `dawvc fetch origin`, choose one complete committed project snapshot with
+`dawvc merge origin/main --take local -m "Keep local project version"` or
+`--take incoming`. A two-parent commit preserves both histories; normal Push/Pull
+can then resume. This does not combine FLP contents or mix assets automatically.
+Commit your tracked/staged changes first. See [collaboration workflow](Docs/Collaborator_Workflow.md).

@@ -135,6 +135,45 @@ public static class Program
             catch (Exception ex) { invocation.ExitCode = 1; WriteError(ex.Message); }
         });
 
+        // Explicit whole-snapshot resolution; no semantic FLP merge or implicit Fetch.
+        var mergeCommand = new Command("merge", "Resolve diverged history by choosing one complete project snapshot");
+        var mergeReference = new Argument<string>("reference", "Fetched tracking ref, local branch or commit ID");
+        var mergeTake = new Option<string>("--take", "Required: local or incoming (entire project snapshot)") { IsRequired = true };
+        var mergeMessage = new Option<string>(MessageAliases, "Merge commit message") { IsRequired = true };
+        var mergeAuthor = new Option<string?>("--author", "Author name/identity");
+        var mergeDir = new Option<string?>("--dir", "Working repository directory");
+        mergeCommand.AddArgument(mergeReference);
+        mergeCommand.AddOption(mergeTake);
+        mergeCommand.AddOption(mergeMessage);
+        mergeCommand.AddOption(mergeAuthor);
+        mergeCommand.AddOption(mergeDir);
+        mergeCommand.SetHandler(async (InvocationContext invocation) =>
+        {
+            try
+            {
+                var parsed = invocation.ParseResult;
+                var take = parsed.GetValueForOption(mergeTake) switch
+                {
+                    "local" => MergeSnapshotChoice.Local,
+                    "incoming" => MergeSnapshotChoice.Incoming,
+                    _ => throw new ArgumentException("--take must be local or incoming; it selects the complete project snapshot.")
+                };
+                var result = await serviceProvider.GetRequiredService<MergeUseCase>().ExecuteAsync(new MergeRequest(
+                    ResolveRepoDirectory(parsed.GetValueForOption(mergeDir)), parsed.GetValueForArgument(mergeReference),
+                    take, parsed.GetValueForOption(mergeMessage)!, parsed.GetValueForOption(mergeAuthor)), invocation.GetCancellationToken());
+                AnsiConsole.MarkupLine($"[green]✓[/] Created merge [bold]{result.CommitId.ToString()[..8]}[/] using the {take.ToString().ToLowerInvariant()} snapshot; both parent histories are preserved.");
+            }
+            catch (DirtyWorkspaceException ex) { invocation.ExitCode = 4; WriteError(ex.Message); }
+            catch (RepositoryStateChangedException ex) { invocation.ExitCode = 7; WriteError(ex.Message); }
+            catch (ArgumentException ex) { invocation.ExitCode = 7; WriteError(ex.Message); }
+            catch (InvalidEnvelopeException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
+            catch (PathSecurityException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
+            catch (CheckoutStagingException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
+            catch (FileNotFoundException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
+            catch (OperationCanceledException) { invocation.ExitCode = 130; WriteError("Merge cancelled. Inspect the current branch before retrying; a completed publication is not undone."); }
+            catch (Exception ex) { invocation.ExitCode = 1; WriteError(ex.Message); }
+        });
+
         // --- dawvc commit ---
         var commitCommand = new Command("commit", "Record changes to the repository");
         var commitMessageOption = new Option<string>(MessageAliases, "Commit message describing the changes") { IsRequired = true };
@@ -207,6 +246,8 @@ public static class Program
                     AnsiConsole.MarkupLine($"Author:    {Markup.Escape(entry.Author)}");
                     AnsiConsole.MarkupLine($"Date:      {entry.Timestamp:yyyy-MM-dd HH:mm:ss zzz}");
                     AnsiConsole.MarkupLine($"Snapshot:  [dim]{entry.SnapshotId}[/]");
+                    if (entry.Parents.Count > 1)
+                        AnsiConsole.MarkupLine($"Parents:   [dim]{string.Join(" ", entry.Parents)}[/]");
                     AnsiConsole.WriteLine();
                     AnsiConsole.WriteLine($"    {entry.Message}");
                     AnsiConsole.WriteLine();
@@ -1347,6 +1388,7 @@ public static class Program
         // 3. Branching & navigation
         rootCommand.AddCommand(branchCommand);
         rootCommand.AddCommand(switchCommand);
+        rootCommand.AddCommand(mergeCommand);
         rootCommand.AddCommand(checkoutCommand);
 
         // 4. Remote collaboration & synchronization

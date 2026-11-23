@@ -149,6 +149,20 @@ LogLevel VERBOSE
                 assert (clone / "Song.flp").read_bytes() == first_bytes
                 cli("pull", "--dir", clone, env=env)
                 assert (clone / "Song.flp").read_bytes() == (local / "Song.flp").read_bytes()
+                # Make two independent versions, then join their histories explicitly.
+                (clone / "Song.flp").write_bytes(first_bytes.replace(b"25.2.5.5319", b"25.2.5.5321"))
+                cli("commit", "-m", "Collaborator version", "--dir", clone)
+                cli("push", "--dir", clone, env=env)
+                (local / "Song.flp").write_bytes(first_bytes.replace(b"25.2.5.5319", b"25.2.5.5322"))
+                cli("commit", "-m", "Local independent version", "--dir", local)
+                cli("push", "--dir", local, env=env, expected=9)
+                cli("fetch", "--dir", local, env=env)
+                cli("merge", "origin/main", "--take", "incoming", "-m", "Choose collaborator version", "--dir", local)
+                assert (local / "Song.flp").read_bytes() == (clone / "Song.flp").read_bytes()
+                cli("push", "--dir", local, env=env)
+                cli("pull", "--dir", clone, env=env)
+                cli("fsck", "--dir", local)
+                print("Explicit merge resolves divergence and resumes SSH Push/Pull: passed.", flush=True)
                 subprocess.run(
                     ["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(root / "wronghost")],
                     check=True,

@@ -1428,3 +1428,15 @@ rename after disposing resources. Clone copies verified fetched tips to branch
 heads, without checkout/Doctor. Empty init copies source identity/configuration
 only. Existing nonempty targets, links/junctions and force replacement are refused.
 Host alias/SSH permissions remain operator-owned; no remote arbitrary-path create.
+
+
+# Explicit snapshot Merge amendment — WP-SYNC-05
+
+ADR-REM-006 introduces deliberate whole-snapshot divergence resolution. Reuse the
+existing multi-parent commit payload: parents are local/incoming tips in that
+order; snapshotId is exactly one chosen existing snapshot. No new object/schema
+or protocol format. Validate bounded complete commit ancestry and both tip
+snapshots/blobs, then reuse staged checkout publication with dirty/collision
+guards and opt-in expected branch/tip checking. Source/tracking refs are retained;
+Push/Pull continue enforcing fast-forward ancestry. No semantic/native FLP writer,
+per-file merge, force, persistent merge state or global transaction is introduced.

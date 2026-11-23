@@ -768,3 +768,21 @@ missing closure objects, interrupted transfers, expected-tip races and CLI exits
 
 No `init --bare` with random identity, remote provisioning wire command, mirror
 update, force replacement, GUI, merge or additional DAW adapter is introduced.
+
+
+# Post-MVP amendment: explicit snapshot merge (23 November 2026)
+
+| ID | Priority | Requirement |
+|---|---|---|
+| FR-MRG-001 | Must | `merge <reference> --take local|incoming -m <message>` requires explicit whole-snapshot choice and message; no semantic/native FLP rewriting. |
+| FR-MRG-002 | Must | A new immutable commit retains local and incoming tips as ordered parents and references the exact chosen snapshot ID, preserving asset/dependency/metadata/completeness semantics. |
+| FR-MRG-003 | Must | Accept only existing diverged local histories with a common ancestor. Reject unborn, identical, ancestor/descendant, unrelated or missing references without moving refs. |
+| FR-MRG-004 | Must | Verify commit ancestry and both tip snapshots/blobs before publication; reject corrupt/missing data, unsafe paths, unsupported schemas/types and oversized metadata. |
+| FR-MRG-005 | Must | Bound traversal to 50,000 unique commits, 1,000,000 parent edges, 2 MiB per metadata object and 64 MiB cumulative metadata payload. |
+| FR-MRG-006 | Must | Block tracked/staged local changes and collisions with untracked files. No force option. Reuse checkout staged publication/compensation. |
+| FR-MRG-007 | Must | Detect expected active-branch/tip changes before checkout journal application. Document cooperating-client, crash and incomplete-rollback limits; no global transaction claim. |
+| FR-MRG-008 | Must | Preserve source/tracking refs and both histories; a later normal Push/Pull may fast-forward through either parent. No automatic network transfer inside Merge. |
+| FR-MRG-009 | Must | Shared API supports typed failures, progress/cancellation; log displays merge parents. Publication may survive later cancellation/failure; unreachable immutable objects may remain. |
+
+This amendment supersedes the historical blanket deferral of merging for this
+explicit snapshot-choice workflow only. Semantic/per-file merges remain deferred.

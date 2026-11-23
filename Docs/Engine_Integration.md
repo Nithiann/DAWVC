@@ -108,3 +108,22 @@ Source providers must include matching configuration in their handshake. Custom
 Fetch providers must supply accurate updated refs/verified objects in the new
 empty staging repository. The target is local, even when the source uses SSH.
 See ADR-REM-005 and the recovery guide for publication and cleanup boundaries.
+
+
+## Explicit merge integration (WP-SYNC-05)
+
+Resolve `MergeUseCase`; pass MergeRequest(repository, reference,
+MergeSnapshotChoice.Local/Incoming, message, author). There is no default snapshot
+choice. The result exposes new commit ID, both ordered parent IDs, selected
+snapshot ID, active branch and restored files. Merge accepts only diverged related
+local tips; clients own Fetch, review and deliberate snapshot selection. Both tip
+snapshots/blobs are verified, selected metadata/dependencies/completeness are
+reused by identity, and checkout publishes the result without force.
+
+Progress uses existing typed stages and nested completion suppression. Await
+cancellation; a durable merge is not undone after publication. State-change errors
+classify as Validation. `FastForwardTarget.RequireExpectedState` opts into active
+branch/tip checks immediately before journal application; Merge sets it. Existing
+callers retain their prior behavior. This is no operation-wide concurrency lock.
+No persisted schema, wire contract, UI or dependency changes. Failed operations
+can leave unreachable objects; full historical snapshot/blob auditing remains Fsck.

@@ -37,7 +37,7 @@
 ## 4. Remote Synchronization & Transports (v0.2 Baseline)
 
 - **Supported Transports:** DAWVC v0.2 supports remote collaboration via the filesystem transport (`FileSystemRemoteTransport`), covering local paths, external drives, and network UNC shares (`\\server\share\repo`). The SSH extension adds `dawvc://` through OpenSSH; HTTPS and standard Git hosting remain unsupported. See [Self-hosting SSH](Self_Hosting_SSH.md).
-- **Fast-Forward Only Synchronization:** In v0.2, synchronization operations (`dawvc pull` and `dawvc push`) enforce fast-forward integration (`--ff-only`). If histories diverge (e.g. concurrent commits made on different machines), the pull is rejected with exit code `9` (`NonFastForward`) to prevent automated binary corruption. Three-way structural merging of DAW projects is planned for future releases.
+- **Fast-Forward Only Synchronization:** In v0.2, synchronization operations (`dawvc pull` and `dawvc push`) enforce fast-forward integration (`--ff-only`). If histories diverge (e.g. concurrent commits made on different machines), the pull is rejected with exit code `9` (`NonFastForward`) to prevent automated binary corruption. WP-SYNC-05 adds explicit whole-snapshot Merge to join diverged history; three-way structural merging of DAW projects remains deferred.
 - **Quarantine Ingestion:** All remote payloads pass through incoming staging (`.dawvc/incoming/<sessionId>/`) with envelope inspection, BLAKE3 verification, and strict path traversal validation (`NFR-SEC-001..003`) before promotion to `.dawvc/objects/`.
 
 ---
@@ -133,3 +133,32 @@ best-effort; crashes/permissions can leave `.dawvc-provision-*` sibling director
 There is no provisioning recovery journal, secure erase or protection from a
 hostile writer replacing parent directories between checks. Restrict parent
 permissions and do not manipulate staging/destination paths concurrently.
+
+
+## Explicit snapshot Merge boundaries (WP-SYNC-05)
+
+`merge --take local|incoming` chooses an entire immutable snapshot, not individual
+tracks, plugins or files. Both original commits remain parents of a new commit.
+Only diverged histories with a common ancestor are accepted. No automatic Fetch,
+force, dry-run, merge state/abort, semantic FLP merge or ref rewriting. Log remains
+first-parent and displays both merge parent IDs for explicit restoration.
+
+Both tip snapshots/blobs and commit histories are verified; earlier snapshots/
+blobs need Fsck for exhaustive auditing. Graph/metadata limits are 50k commits,
+1m parent edges, 2 MiB/object and 64 MiB cumulative metadata payload. Selected
+incomplete snapshots retain their incomplete flag; choosing a version does not
+make missing external plugins/libraries reproducible.
+
+Expected branch/tip checks catch changes before checkout publication, but there
+is no global workspace lock spanning file/ref/index updates. Do not run local
+mutating commands concurrently. Handled publication failures use existing
+compensation; incomplete rollback can retain recovery data. Hard crashes and
+post-publication dependency-resolution failure/cancellation need inspection.
+An unreachable immutable merge object can remain after failure; no GC is added.
+
+Merge-specific mutation guards also reject reserved `.dawvc`/`.git`/`dawvc.yaml`
+artifact roots and link/junction ancestry in affected workspace/metadata paths.
+Checks repeat after the publication progress callback; trusted local writers
+must still avoid concurrent path replacement. Snapshot container shape and
+aggregate hash must match their entries. The new merge object must itself fit
+the metadata/graph limits (including its two parent edges).

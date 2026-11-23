@@ -263,3 +263,23 @@ dawvc pull
 All sync commands share the same transport-independent engine behavior. The host
 need not keep DAWVC running; SSH starts the temporary receiver. See
 [Self-hosting SSH](Self_Hosting_SSH.md) for PC/NAS/server requirements and limits.
+
+
+### When both collaborators have committed changes
+
+Pull/Push reject diverged history. Commit your local tracked/staged changes,
+fetch the other version, inspect it if necessary, and choose one complete project:
+
+```powershell
+dawvc fetch origin
+dawvc checkout origin/main --restore-to D:\Review\IncomingSong
+dawvc merge origin/main --take incoming -m "Choose incoming project and samples"
+# --take local keeps your committed snapshot instead.
+dawvc push origin main
+```
+
+Both original commits remain in history. `dawvc log` shows both merge parent IDs;
+restore either to a separate folder for review. This chooses FLP and assets
+as a set, without combining tracks or automatically rewriting FL Studio files.
+Do not run local mutating commands concurrently. A newer remote commit may
+require another fetch/review/merge before Push succeeds.

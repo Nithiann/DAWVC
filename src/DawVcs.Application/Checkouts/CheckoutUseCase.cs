@@ -24,7 +24,10 @@ public sealed record FastForwardTarget(
     string RepositoryDirectory,
     BranchName Branch,
     CommitId? OldCommitId,
-    CommitId NewCommitId);
+    CommitId NewCommitId)
+{
+    public bool RequireExpectedState { get; init; }
+}
 
 public sealed record CheckoutResult(
     CommitId CommitId,
@@ -534,6 +537,18 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
             }
 
             progress?.Report(new OperationProgress(OperationStage.PublishingFiles));
+
+            cancellationToken.ThrowIfCancellationRequested();
+            if (target.RequireExpectedState && (context.GetCurrentBranch() != target.Branch || context.GetBranchCommit(target.Branch) != target.OldCommitId))
+                throw new RepositoryStateChangedException("Local branch changed before workspace publication. Retry the operation.");
+            if (target.RequireExpectedState)
+            {
+                WorkspaceMutationGuard.Repository(repoRoot);
+                WorkspaceMutationGuard.Reference(repoRoot, target.Branch);
+                WorkspaceMutationGuard.Artifacts(repoRoot, entries.Select(e => e.Path.Value));
+                if (oldSnapshot is not null)
+                    WorkspaceMutationGuard.Artifacts(repoRoot, oldSnapshot.Project.Root.GetEntries().Select(e => e.Path.Value));
+            }
 
             // 6. PublicationJournal & branch advance (atomic publication)
             await using var journal = new PublicationJournal(repoRoot, Path.Combine(repoRoot, ".dawvc"));

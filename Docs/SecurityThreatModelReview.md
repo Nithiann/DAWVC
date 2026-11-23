@@ -151,3 +151,28 @@ replacement; restrict parent ACLs/permissions to trusted operators. Cleanup may
 leave staging after a crash/permissions failure and is not secure erasure. Existing
 empty placeholders may be absent if final publication fails. Remote sources can
 consume staging space up to existing transfer limits; provision adequate disk.
+
+
+## Explicit snapshot Merge review — WP-SYNC-05
+
+Merge performs no network calls, native FLP editing or plugin execution. Input
+references use the existing local resolver; fetched objects must already have
+passed transport verification. Merge additionally validates bounded commit
+metadata/ancestry and both tip snapshots/blobs, with existing path traversal and
+collision guards. Unknown schemas/type mismatches and missing/corrupt objects
+fail before workspace publication. Whole-snapshot selection avoids silently
+combining incompatible FLP/asset sets. Both parent histories stay reachable.
+
+No force or implicit history rewrite. Dirty/staged work and selected untracked
+collisions are refused. Expected branch/tip checks reduce callback-observable
+state-change windows; a hostile/concurrent local writer is not sandboxed and
+there is no global workspace lock. Existing journal/rollback/crash boundaries
+apply. Earlier snapshots/blobs require Fsck; an unreachable merge object may
+remain on failure. Selected incomplete snapshots remain incomplete.
+
+Merge-specific mutation guards also reject reserved `.dawvc`/`.git`/`dawvc.yaml`
+artifact roots and link/junction ancestry in affected workspace/metadata paths.
+Checks repeat after the publication progress callback; trusted local writers
+must still avoid concurrent path replacement. Snapshot container shape and
+aggregate hash must match their entries. The new merge object must itself fit
+the metadata/graph limits (including its two parent edges).
