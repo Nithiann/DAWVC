@@ -838,7 +838,8 @@ Application API, no GUI or server. Work proceeds in this order:
 - [x] PUSH-04: expose `dawvc push` and shared Bootstrap registration.
 - [x] PUSH-05: test create/update/no-op/rejection/corruption/cancellation/concurrency and CLI behavior.
 - [x] PUSH-06: update reference, workflow, limitations and architecture; Release build, full tests and format.
-- [ ] PUSH-07: push branch and open PR for manual review; do not approve or merge.
+- [x] PUSH-07a: publish branch `feat/cli-push`, based on `feat/core-gui-readiness`.
+- [ ] PUSH-07b: open PR for manual review; do not approve or merge. Blocked: GitHub GraphQL and REST PR creation both return `Forbidden`.
 
 Acceptance: only missing verified objects transfer; blobs/snapshots precede commit
 publication; refs change only after complete closure validation and expected-tip
@@ -872,4 +873,10 @@ Validation evidence (23 November 2026, Linux, .NET SDK 10.0.404):
 Final local checks: Release build 0 warnings/errors;
 `dotnet format --no-restore --verify-no-changes` passed. PUSH-06 is complete for
 local validation; Windows and actual UNC-share validation remain explicitly
-pending as noted above. PUSH-07 remains open until PR creation is confirmed.
+pending as noted above. PUSH-07b remains open until PR creation is confirmed.
+
+Publication: implementation commit `bb955dc` was pushed to `feat/cli-push`.
+PR creation was attempted through both `gh pr create` and the REST pulls endpoint;
+both were denied with `Forbidden`. Manual creation link (base explicitly pinned):
+https://github.com/Nithiann/DAWVC/compare/feat/core-gui-readiness...feat/cli-push?expand=1
+No approval or merge was performed.
