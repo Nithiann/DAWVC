@@ -120,6 +120,11 @@ SQLite initialization errors CORRUPT/NOTADB now throw
 intentionally changes CLI failure behavior: staged user intent must be preserved.
 Stop operations and preserve `.dawvc/index.db` and any `index.db-wal`/`index.db-shm`
 files before recovery. Use an offline copy for SQLite recovery tooling.
+Before raw-file inspection or offline copying, await active operations and dispose
+their repository contexts/indexes. Even a failed initialization can retain an idle
+pooled native connection until its owner is disposed; Windows can otherwise deny
+access to `index.db`. Do not bypass this lifetime requirement with retries or
+process-wide connection-pool clearing.
 `doctor`/`fsck` do not reconstruct staged intent. There is no new automatic reset
 command. See [ADR-009](adr/ADR-009-sqlite-local-index.md).
 

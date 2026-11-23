@@ -948,3 +948,22 @@ skips, explicit Release build 0 warnings/errors, formatting verification passed,
 and the real OpenSSH loopback script passed again with the exact-length check.
 The loopback flow includes a second commit, verifies Fetch leaves the clone
 workspace unchanged, and verifies Pull installs the updated bytes.
+
+### Windows CI follow-up — corrupt-index preservation test
+
+The Windows run at
+https://github.com/Nithiann/DAWVC/actions/runs/45173332329 failed in
+`CorruptIndex_IsPreservedInsteadOfRecreatingAndLosingStagedEntries` while reading
+the raw database after the expected corrupt-index exception. The test kept its
+index alive with a method-scoped `using var`; pooled native handles were still
+owned by that index. Scope the failed read in a `using` block and dispose the index
+before comparing database bytes. Existing disposal tests cover native-handle
+release and isolation from unrelated pools. The corruption/preservation assertion
+remains unchanged; no production behavior, global pool clearing or retry is added.
+The recovery guide now states this offline-inspection lifetime explicitly.
+
+Follow-up validation: all 6 `SqliteStagingIndexTests` passed locally on Linux with
+0 failures/skips; the project and dependencies built successfully with warnings
+treated as errors. `dotnet format --no-restore --verify-no-changes` passed. The
+Windows-specific sharing failure is validated by the subsequent CI run; Linux
+results alone are not claimed as a native Windows reproduction.

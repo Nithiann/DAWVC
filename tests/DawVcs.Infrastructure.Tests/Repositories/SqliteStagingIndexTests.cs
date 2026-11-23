@@ -154,9 +154,13 @@ public sealed class SqliteStagingIndexTests : IDisposable
         var bytes = await File.ReadAllBytesAsync(dbPath);
         bytes[0] = 0; // Damage the header of an actual index containing staged user state.
         await File.WriteAllBytesAsync(dbPath, bytes);
-        using var corrupt = new SqliteStagingIndex(_testDir);
-        var read = () => corrupt.GetStagedEntriesAsync();
-        await read.Should().ThrowAsync<StagingIndexCorruptException>();
+        using (var corrupt = new SqliteStagingIndex(_testDir))
+        {
+            var read = () => corrupt.GetStagedEntriesAsync();
+            await read.Should().ThrowAsync<StagingIndexCorruptException>();
+        }
+        // Even failed initialization can leave an idle pooled native handle. Release
+        // the owning index before offline inspection, which Windows otherwise rejects.
         (await File.ReadAllBytesAsync(dbPath)).Should().Equal(bytes);
     }
 
