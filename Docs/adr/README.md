@@ -17,6 +17,8 @@ This registry contains all formal architecture decisions for DAWVC.
 
 | [ADR-REM-001](ADR-REM-001-filesystem-push.md) | Verified filesystem push | Proposed | WP-PUSH-01 |
 
+| [ADR-REM-002](ADR-REM-002-ssh-hosting.md) | dawvc:// over SSH with transient receiver | Proposed | WP-SSH-01 |
+
 ---
 
 ## Workflow for New Decisions

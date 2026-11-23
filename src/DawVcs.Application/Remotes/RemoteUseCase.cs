@@ -15,10 +15,12 @@ public sealed record RemoteListResult(IReadOnlyList<RemoteConfig> Remotes);
 public sealed class RemoteUseCase
 {
     private readonly Func<string, IRepositoryContext> _contextFactory;
+    private readonly IRemoteTransportFactory? _transportFactory;
 
-    public RemoteUseCase(Func<string, IRepositoryContext> contextFactory)
+    public RemoteUseCase(Func<string, IRepositoryContext> contextFactory, IRemoteTransportFactory? transportFactory = null)
     {
         _contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
+        _transportFactory = transportFactory;
     }
 
     public RemoteConfig AddRemote(RemoteAddRequest request)
@@ -42,7 +44,14 @@ public sealed class RemoteUseCase
             throw new InvalidOperationException($"Remote '{remoteName.Value}' already exists.");
         }
 
-        var config = new RemoteConfig(remoteName, request.Url.Trim());
+        var url = request.Url.Trim();
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && Uri.UnescapeDataString(uri.UserInfo).Contains(':'))
+            throw new ArgumentException("Remote URLs must not contain passwords.", nameof(request));
+        if (_transportFactory is not null)
+        {
+            using var validated = _transportFactory.CreateTransport(url);
+        }
+        var config = new RemoteConfig(remoteName, url);
         context.SaveRemote(config);
         return config;
     }

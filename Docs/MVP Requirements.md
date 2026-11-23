@@ -737,3 +737,17 @@ the existing filesystem collaboration baseline, without GUI or hosted services.
 Acceptance tests cover creation, fast-forward, deduplication, dry-run, no-op,
 remote-ahead/divergence, active destination, identity/schema mismatch, damaged or
 missing closure objects, interrupted transfers, expected-tip races and CLI exits.
+
+# Post-MVP amendment: self-hosted SSH synchronization (23 November 2026)
+
+| ID | Requirement |
+|---|---|
+| FR-SSH-001 | Accept `dawvc://[user@]host[:port]/repository-alias`, SSH port 22 by default. Reject credentials, query/fragment, malformed escapes, traversal and unsupported schemes. |
+| FR-SSH-002 | Use the installed OpenSSH client, public-key/agent authentication, strict known-host verification and noninteractive operation; disable agent/X11/port forwarding and local commands. |
+| FR-SSH-003 | Start only the constant remote command `dawvc serve`; send aliases and protocol data on stdin, never interpolate URL fields into a remote shell command. |
+| FR-SSH-004 | Host configuration maps aliases to absolute initialized repository paths. Missing aliases deny access; writes require explicit AllowPush. A forced command/config per SSH principal or key supplies authorization. |
+| FR-SSH-005 | A versioned, length-bounded stdio protocol provides config handshake, refs, object reads/existence, and push validation/reception/publication. Transport-independent engine integrity and fast-forward rules remain unchanged. |
+| FR-SSH-006 | Bound frames, payload lengths, total transferred bytes, request count and session lifetime. Reject links/reparse points in served metadata. No client-selected filesystem paths or executable commands. |
+| FR-SSH-007 | Cancellation, EOF, protocol errors and process exit clean up receiving sessions and release locks. A lost reply after publication is ambiguous and requires ref inspection. |
+| FR-SSH-008 | Serve stdout is protocol-only. Errors carry safe typed codes rather than raw host paths/exception messages. Private keys/passwords are never stored in repository configuration or wire frames. |
+| FR-SSH-009 | PC, NAS and server hosting use identical SSH/DAWVC behavior where compatible OpenSSH and DAWVC are installed. Existing GitHub/GitLab Git endpoints are not DAWVC protocol endpoints. |

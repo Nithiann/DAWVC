@@ -66,14 +66,14 @@ public sealed partial class FileSystemRemoteTransport
     private string GetPushRefPath(BranchName branch) => Path.Combine(_refsHeadsPath, branch.Value.Replace('/', Path.DirectorySeparatorChar));
 
     // Fail closed on links/junctions in existing metadata path components, including the root.
-    private static void GuardWritablePath(string path)
+    internal static void GuardWritablePath(string path)
     {
         for (var current = Path.GetFullPath(path); current is not null; current = Path.GetDirectoryName(current))
         {
             try
             {
                 if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
-                    throw new PushRejectedException("Push does not follow symbolic links or reparse points in repository metadata.");
+                    throw new PushRejectedException("Repository transport does not follow symbolic links or reparse points in repository metadata.");
             }
             catch (FileNotFoundException) { }
             catch (DirectoryNotFoundException) { }

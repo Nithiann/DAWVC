@@ -137,3 +137,17 @@ Preserve evidence first; only remove an identified abandoned session when no wri
 is using it. Never remove `ref-write.lock` to break a live writer's lock: it is a
 persistent file whose open handle supplies synchronization, and is harmless when
 closed. No automatic garbage collection or destructive index reset is introduced.
+
+## SSH disconnection or lost acknowledgement
+
+On handled EOF, protocol error or host deadline, the transient receiver disposes
+its push session and releases the ref lock. Killing the host can leave abandoned
+quarantine even though OS locks are released. Cancellation stops the client's SSH
+process; the host handles the disconnected channel or session deadline.
+
+A broken connection after atomic publication can lose the success reply. Fetch
+and compare the remote tip before retrying; do not assume an error means the
+branch was unchanged. Strict host-key failure requires independent verification
+of the host identity. Never disable verification or delete known_hosts entries
+merely to bypass an unexpected key change. Preserve evidence and fix the host
+policy/key permissions locally for denied access; protocol errors omit raw paths.

@@ -880,3 +880,53 @@ PR creation was attempted through both `gh pr create` and the REST pulls endpoin
 both were denied with `Forbidden`. Manual creation link (base explicitly pinned):
 https://github.com/Nithiann/DAWVC/compare/feat/core-gui-readiness...feat/cli-push?expand=1
 No approval or merge was performed.
+
+# 27. WP-SSH-01 — Hosting-independent synchronization over SSH
+
+Base: `feat/cli-push`. User-approved direction: `dawvc://` addresses use SSH;
+OpenSSH starts a temporary `dawvc serve` process per connection. No permanent
+DAWVC daemon or dependency on a particular hosting vendor.
+
+- [x] SSH-01: inspect current transports and specify protocol/security boundaries.
+- [x] SSH-02: bounded versioned stdio framing and host repository allowlist.
+- [x] SSH-03: strict `dawvc://` parsing and OpenSSH transport for all sync use cases.
+- [x] SSH-04: transient `serve` command, read/write permissions, streaming and cleanup.
+- [x] SSH-05: protocol, isolation, malformed input, lifecycle and sync acceptance tests.
+- [x] SSH-06: update architecture/security/hosting docs; full Release tests and format.
+- [ ] SSH-07: publish branch/PR for manual review; never approve or merge.
+
+Acceptance: existing clone/fetch/pull/push use the same engine through either
+filesystem or SSH. Unknown/changed host keys and interactive/password login fail
+closed. URL repository names map to operator-configured aliases, never arbitrary
+remote filesystem paths. Forced commands select host policy; client input cannot
+change it. Protocol frames, object lengths, request counts, session duration and
+transfer totals are bounded. Disconnect/cancellation releases push sessions.
+Native Windows/OpenSSH and NAS/network validation must be identified separately
+from Linux/local-process protocol tests. See ADR-REM-002 and Remote_Protocol.md.
+
+SSH integration evidence so far: local child-process protocol acceptance exercises
+Push → Clone → Fetch → Pull, byte identity, read-only/unknown alias denial, frame
+version/length limits, corrupt upload, abandoned downloads, EOF lock/session cleanup
+and cancellation even on an input stream that ignores cancellation. A real Linux
+OpenSSH daemon with temporary Ed25519 host/client keys and strict ownership/host
+verification passed all four sync operations; unknown and changed host keys were
+refused with exit 8. No production SSH settings or accounts were modified.
+
+Validation evidence (23 November 2026, Linux, .NET SDK 10.0.404):
+
+- Full core/CLI solution: 611 tests passed, 0 failed, 0 skipped (41 new SSH cases).
+- Release build: 0 warnings, 0 errors; existing central NuGet catalog and solution
+  membership unchanged. No new GUI or SSH NuGet dependency.
+- `scripts/test_ssh_loopback.py`: real unprivileged localhost OpenSSH daemon,
+  temporary Ed25519 keys, strict host verification, all four synchronization
+  commands, byte identity and denied unknown/changed keys passed. Temporary
+  resources were removed; no production SSH configuration was changed.
+- Linux CI now runs the full solution, including transient-process protocol tests.
+  The native OpenSSH smoke script is an explicit operator/developer check, not
+  silently assumed to run in every CI job.
+- Windows OpenSSH, vendor NAS deployments and real UNC/SMB stores remain
+  unvalidated here. SSH-06 local validation does not certify those environments.
+
+Final local formatting: `dotnet format --no-restore --verify-no-changes` passed.
+SSH-06 is complete for local checks; external platform validation remains open
+as stated above. SSH-07 publication/PR creation is recorded separately below.

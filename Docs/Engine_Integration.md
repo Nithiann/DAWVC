@@ -81,3 +81,11 @@ before transfer. No local tracking or upstream changes are made.
 is a typed remote failure. Missing/corrupt closure objects are integrity failures.
 Progress completion follows publication; await the task rather than inferring
 rollback from cancellation. See ADR-REM-001 for the cooperating-writer model.
+
+## SSH integration
+
+The default transport factory recognizes `dawvc://`; the same Application APIs
+work for local and SSH remotes. No SSH subprocess is started merely by validating
+or adding a remote. Keys/host trust come from OpenSSH configuration and agent,
+not engine or GUI credential fields. A host exposes only aliases in its policy
+through transient `serve`. See Remote_Protocol.md and Self_Hosting_SSH.md.

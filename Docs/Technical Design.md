@@ -1082,7 +1082,10 @@ Pessimistic project locking for binary files prevents concurrent editing conflic
 
 # 34. Remote Model
 
-Supports `clone`, `fetch`, `pull`, and `push` over HTTPS REST endpoints with content negotiation.
+The default network model is `dawvc://` over SSH, with versioned stdio object
+negotiation and a transient `dawvc serve` receiver. Local/filesystem transports
+remain available. HTTPS REST is an optional future hosted transport, not required
+for self-hosting. See [Remote Protocol](Remote_Protocol.md).
 
 ---
 
@@ -1094,13 +1097,20 @@ Clients exchange missing object inventories and stream only missing blobs, follo
 
 # 36. Remote Storage Architecture
 
-PostgreSQL for relational metadata and access control; S3-compatible object storage for immutable blobs.
+Basic self-hosting uses initialized DAWVC repositories on an operator-selected
+filesystem, with per-account/key alias policies. PostgreSQL and S3-compatible
+object storage are optional future hosted-service architecture, not dependencies
+of the SSH baseline.
 
 ---
 
 # 37. Authentication & Authorization
 
-OIDC/OAuth2 bearer tokens with local credential store integration. Role-based permissions (Owner, Maintainer, Contributor, ReadOnly).
+The SSH baseline uses OpenSSH public-key/agent authentication, strict known-host
+verification and forced-command policies. Allowlisted aliases grant reads;
+AllowPush grants writes. Per-key/account policy and OS permissions provide the
+current authorization boundary. OIDC/OAuth2 and hosted application roles are
+future service options rather than implemented dependencies.
 
 ---
 
@@ -1391,3 +1401,17 @@ to read bare-repository configuration without constructing a writable context
 and accidentally creating a `.dawvc` directory in the source. No on-disk schema
 changes. See [ADR-REM-001](adr/ADR-REM-001-filesystem-push.md), FR-PSH-001..010
 and WP-PUSH-01 in the existing implementation plan.
+
+# SSH transport amendment (23 November 2026)
+
+`IRemoteTransport` and the optional push capability are implemented by
+`SshRemoteTransport`. The existing Application clone/fetch/pull/push use cases
+remain transport-independent. Host metadata reads reject reparse points as well
+as writes; advertised refs are bounded in count and file length. `remote add`
+validates transports and refuses embedded passwords before persisting them.
+
+The OpenSSH child uses argument-list execution and a fixed command. A host starts
+`serve` per connection; there is no permanent DAWVC daemon. No new NuGet dependency
+or on-disk repository schema is introduced. Operational policy/protocol definitions
+are in [Self-hosting SSH](Self_Hosting_SSH.md), [Remote Protocol](Remote_Protocol.md)
+and [ADR-REM-002](adr/ADR-REM-002-ssh-hosting.md).

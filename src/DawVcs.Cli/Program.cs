@@ -3,7 +3,6 @@ using System.CommandLine.Invocation;
 using System.Text.Json;
 
 using DawVcs.Adapters.Abstractions;
-
 using DawVcs.Application.Branches;
 using DawVcs.Application.Checkouts;
 using DawVcs.Application.Commits;
@@ -19,9 +18,8 @@ using DawVcs.Bootstrap;
 using DawVcs.Domain.Remotes;
 using DawVcs.Domain.Repositories;
 using DawVcs.Domain.Storage;
-
+using DawVcs.Infrastructure.Remotes.Ssh;
 using DawVcs.Infrastructure.Repositories;
-
 
 using Microsoft.Extensions.DependencyInjection;
 
@@ -58,6 +56,25 @@ public static class Program
         using var serviceProvider = services.BuildServiceProvider();
 
         var rootCommand = new RootCommand("DAWVC — Version control and dependency management for DAWs");
+
+        // Protocol-only stdout: this command runs transiently under OpenSSH.
+        var serveCommand = new Command("serve", "Serve allowlisted repositories over an SSH stdio session");
+        var serveConfig = new Option<string?>("--config", "Host-owned policy file (default: ~/.config/dawvc/serve.json)");
+        serveCommand.AddOption(serveConfig);
+        serveCommand.SetHandler(async (InvocationContext invocation) =>
+        {
+            try
+            {
+                var policy = ServeConfiguration.Load(invocation.ParseResult.GetValueForOption(serveConfig) ?? ServeConfiguration.DefaultPath);
+                invocation.ExitCode = await RemoteProtocolServer.RunAsync(Console.OpenStandardInput(), Console.OpenStandardOutput(), policy, invocation.GetCancellationToken());
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or ArgumentException or DawVcs.Domain.Remotes.RemoteException)
+            {
+                Console.Error.WriteLine("DAWVC host policy could not be loaded. Check the host configuration and permissions locally.");
+                invocation.ExitCode = 8;
+            }
+        });
+        rootCommand.AddCommand(serveCommand);
 
         // --- dawvc init ---
         var initCommand = new Command("init", "Initialize a new DAWVC repository");
@@ -1195,7 +1212,7 @@ public static class Program
         }, pullRemoteArg, pullBranchArg, pullForceOption, pullFfOnlyOption, pullDryRunOption, pullDirOption);
 
         // --- dawvc push ---
-        var pushCommand = new Command("push", "Push a local branch to a filesystem remote (fast-forward only)");
+        var pushCommand = new Command("push", "Push a local branch to a filesystem or dawvc:// SSH remote (fast-forward only)");
         var pushRemoteArg = new Argument<string?>("remote", () => null, "Destination remote (default: upstream or origin)");
         var pushBranchArg = new Argument<string?>("branch", () => null, "Local and destination branch (default: active branch/upstream)");
         var pushDryRunOption = new Option<bool>("--dry-run", "Verify and preview without destination writes");

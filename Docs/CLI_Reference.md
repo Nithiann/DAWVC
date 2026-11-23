@@ -332,7 +332,7 @@ dawvc push [<remote>] [<branch>] [--dry-run] [--dir <path>]
 ```
 
 Pushes a committed local branch to an initialized remote with the same repository
-ID. Supports local paths, external drives, `file://` URLs and UNC shares. Without
+ID. Supports local paths, external drives, `file://` URLs, UNC shares and `dawvc://` over SSH. Without
 arguments it uses the active branch's upstream remote/branch, falling back to
 `origin` and the active branch name. An explicit remote uses the active branch
 name; an explicit branch selects that local branch and the same destination name.
@@ -356,3 +356,34 @@ Exit codes: 0 success/preview; 3 corrupt or unsafe objects; 7 invalid push argum
 parser's nonzero code. Cancelled/failed operations can leave unreachable verified
 objects; inspect the destination ref before retrying after an interrupted process.
 See [Recovery Guide](Recovery_Guide.md) for cleanup boundaries.
+
+## SSH remotes and `dawvc serve`
+
+All four sync operations use the selected transport:
+
+```powershell
+dawvc remote add origin dawvc://alice@host/projects/song
+dawvc push --dry-run
+dawvc push
+dawvc clone dawvc://alice@host/projects/song MySong
+dawvc fetch
+dawvc pull
+```
+
+The scheme is `dawvc://` (one colon), always SSH; port defaults to 22 and may be
+explicit (`host:2222`). The URL path is an allowlisted logical repository alias.
+Passwords, queries, fragments, URI-escaped aliases and traversal are refused.
+OpenSSH uses strict known_hosts/public-key authentication; preconfigure verified
+host keys and an unlocked agent/IdentityFile. Login failures are not interactive.
+
+`dawvc serve [--config <absolute-host-policy-path>]` is an operator-facing stdio
+receiver started by SSH. Its default policy is `~/.config/dawvc/serve.json`. It
+produces binary protocol on stdout and is not an interactive CLI session or
+network listener. The remote client always requests the constant `dawvc serve`
+command; SSH forced-command policy can select the host config. Missing/invalid
+host policy exits 8 with a safe stderr message. The policy path is never accepted
+from protocol requests. `remote add` validates configured transport addresses
+before storing them, without initiating an SSH connection.
+
+See [SSH hosting](Self_Hosting_SSH.md) for setup/permissions and
+[Remote Protocol](Remote_Protocol.md) for streaming, deadlines and error mapping.

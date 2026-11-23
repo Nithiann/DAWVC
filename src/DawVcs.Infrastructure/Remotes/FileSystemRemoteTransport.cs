@@ -61,6 +61,8 @@ public sealed partial class FileSystemRemoteTransport : IRemoteTransport, IRemot
 
         try
         {
+            GuardWritablePath(_configDir);
+            GuardWritablePath(Path.Combine(_configDir, YamlRepositoryConfigManager.ConfigFileName));
             var config = YamlRepositoryConfigManager.ReadFromDirectory(_configDir);
             return Task.FromResult(new RemoteHandshake(config.SchemaVersion, config.RepositoryId, "0.2.0") { Configuration = config });
         }
@@ -88,12 +90,15 @@ public sealed partial class FileSystemRemoteTransport : IRemoteTransport, IRemot
         }
 
         var results = new List<RemoteRef>();
-        var files = Directory.GetFiles(_refsHeadsPath, "*", SearchOption.AllDirectories);
+        GuardWritablePath(_refsHeadsPath);
+        var files = EnumerateSafeRefFiles(_refsHeadsPath);
 
+        var scanned = 0;
         foreach (var file in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            if (++scanned > 4096 || new FileInfo(file).Length > 512) throw new RemoteException("Remote reference count or size exceeds limits.");
             var rel = Path.GetRelativePath(_refsHeadsPath, file).Replace('\\', '/');
             var hashHex = (await File.ReadAllTextAsync(file, cancellationToken).ConfigureAwait(false)).Trim();
 
@@ -115,6 +120,7 @@ public sealed partial class FileSystemRemoteTransport : IRemoteTransport, IRemot
         var rest = hashStr[2..].ToLowerInvariant();
 
         var objectPath = Path.Combine(_objectsPath, prefix, rest);
+        GuardWritablePath(objectPath);
         if (!File.Exists(objectPath))
         {
             return Task.FromResult<Stream?>(null);
@@ -133,7 +139,21 @@ public sealed partial class FileSystemRemoteTransport : IRemoteTransport, IRemot
         var rest = hashStr[2..].ToLowerInvariant();
 
         var objectPath = Path.Combine(_objectsPath, prefix, rest);
+        GuardWritablePath(objectPath);
         return Task.FromResult(File.Exists(objectPath));
+    }
+
+    private static IEnumerable<string> EnumerateSafeRefFiles(string directory)
+    {
+        foreach (var entry in Directory.EnumerateFileSystemEntries(directory))
+        {
+            GuardWritablePath(entry);
+            if (Directory.Exists(entry))
+            {
+                foreach (var file in EnumerateSafeRefFiles(entry)) yield return file;
+            }
+            else yield return entry;
+        }
     }
 
     public void Dispose()

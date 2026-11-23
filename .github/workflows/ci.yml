@@ -43,7 +43,7 @@ jobs:
         run: dotnet test --no-build -c Release --verbosity normal --logger "trx;LogFileName=test_results.trx"
 
   build-and-test-linux:
-    name: Core Domain & App Integrity (Ubuntu)
+    name: Core, CLI & Protocol Integrity (Ubuntu)
     runs-on: ubuntu-latest
 
     steps:
@@ -58,14 +58,8 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
-      - name: Build Domain & Application
-        run: |
-          dotnet build src/DawVcs.Domain/DawVcs.Domain.csproj -c Release
-          dotnet build src/DawVcs.Application/DawVcs.Application.csproj -c Release
-          dotnet build tests/DawVcs.Domain.Tests/DawVcs.Domain.Tests.csproj -c Release
-          dotnet build tests/DawVcs.Application.Tests/DawVcs.Application.Tests.csproj -c Release
+      - name: Build full core solution
+        run: dotnet build --no-restore -c Release
 
-      - name: Run Domain & Application Tests on Linux
-        run: |
-          dotnet test tests/DawVcs.Domain.Tests/DawVcs.Domain.Tests.csproj -c Release --no-build
-          dotnet test tests/DawVcs.Application.Tests/DawVcs.Application.Tests.csproj -c Release --no-build
+      - name: Run all tests including transient SSH protocol tests
+        run: dotnet test --no-build -c Release --logger "trx;LogFileName=test_results.trx"

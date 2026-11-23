@@ -105,3 +105,30 @@ All runtime dependencies in `src/` were analyzed for licensing terms and potenti
 - **Bounded Concurrency (`NFR-PERF-006`):**
   - Hashing and filesystem scanning leverage `ConcurrencyLimiter` bounded to `Math.Clamp(ProcessorCount, 1, 8)`.
 
+
+## SSH synchronization extension (23 November 2026)
+
+The historical local-only assessment does not cover network hosting. The SSH
+extension establishes the following explicit boundaries (FR-SSH-001..009):
+
+- OpenSSH authenticates the server (strict known_hosts) and user (public key/agent),
+  encrypts the channel and denies interactive/password fallback. No custom crypto.
+- Argument-list execution and a constant remote command prevent URL-to-shell
+  interpolation. Protocol aliases map to operator-owned repository allowlists.
+- Forced commands/restricted keys and OS permissions are required to prevent
+  bypass via an unrestricted SSH shell. Read access is allowlisted; writes need
+  AllowPush. No centralized tenant/user authorization is claimed.
+- Bounded frames, metadata, object bodies, transfer totals, requests and deadlines
+  limit individual sessions. Operators enforce aggregate connection/disk quotas.
+- Host filesystem reads and writes reject symlinks/reparse points in metadata.
+  Integrity/quarantine/fast-forward/conditional-ref checks still run at receipt.
+- stdout is protocol-only; error codes omit raw host exceptions/paths. SSH stderr
+  is drained without exporting arbitrary server output. URLs cannot persist
+  passwords through remote add. Keys remain in OpenSSH/agent storage.
+- EOF/deadlines dispose sessions; abrupt loss after publication can lose the
+  acknowledgement. Cooperating ref locks do not protect against hostile local
+  actors or older writers ignoring the lock. No automatic destructive recovery.
+
+See ADR-REM-002, Remote_Protocol.md and Self_Hosting_SSH.md for the implemented
+contract. Linux protocol/OpenSSH validation is not a full production security
+audit or certification of every NAS/Windows/OpenSSH deployment.

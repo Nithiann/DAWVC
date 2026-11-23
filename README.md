@@ -112,7 +112,7 @@ For options, exit codes, and JSON schemas, see the complete **[CLI Command Refer
 | `dawvc branch [name]` | Lists existing branches or creates a new branch pointer. |
 | `dawvc switch <branch>` | Safely switches the workspace to a different branch. |
 | `dawvc checkout <commit>` | Restores a specific snapshot (supports `--restore-to` and `--force`). |
-| `dawvc push [remote] [branch]` | Sends committed history to a filesystem/UNC remote, fast-forward only; supports `--dry-run`. |
+| `dawvc push [remote] [branch]` | Sends committed history to a filesystem/UNC or dawvc:// SSH remote, fast-forward only; supports `--dry-run`. |
 | `dawvc bind <id> <path>` | Links an external asset to a logical dependency ID. |
 | `dawvc doctor` | Verifies environment health, checking local presence and compatible versions (`installed >= required`) for plugins, samples, and dependencies. |
 | `dawvc fsck` | Validates internal integrity across the object store and refs. |
@@ -209,3 +209,13 @@ Copyright (c) 2026 DAWVC Contributors.
 ## Engine integration
 
 The CLI and independent clients can share the framework-independent engine through `DawVcs.Bootstrap`. See [Engine integration](Docs/Engine_Integration.md) for ownership, progress, cancellation, typed failures and paged queries. No desktop framework is required.
+
+## Self-hosted synchronization
+
+Use `dawvc://[user@]host[:port]/repository-alias` for clone, fetch, pull and push
+over SSH, alongside existing filesystem remotes. Host on your own PC, compatible
+NAS or server with OpenSSH and DAWVC installed. SSH starts a temporary receiver;
+no permanent DAWVC daemon is required. Strict host-key verification, public-key
+authentication and host-owned repository policies apply. See
+[SSH hosting](Docs/Self_Hosting_SSH.md) and [Protocol v1](Docs/Remote_Protocol.md).
+This is DAWVC synchronization, not compatibility with GitHub/GitLab Git endpoints.

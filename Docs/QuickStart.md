@@ -235,3 +235,21 @@ The recipient can fetch and explicitly pull that branch. Nothing is automaticall
 installed in their workspace by Push. Bare repositories have no active worktree
 restriction; this change does not introduce an `init --bare` command. See the
 [CLI reference](CLI_Reference.md) for argument defaults and rejection codes.
+
+### Using a PC, NAS or server over SSH
+
+Once the host administrator has configured the DAWVC receiver and you have
+verified its SSH host key and configured your key/agent:
+
+```powershell
+dawvc clone dawvc://alice@studio-server/projects/song MySong
+cd MySong
+# Work and commit, then publish:
+dawvc push
+# Receive another contributor's committed work:
+dawvc pull
+```
+
+All sync commands share the same transport-independent engine behavior. The host
+need not keep DAWVC running; SSH starts the temporary receiver. See
+[Self-hosting SSH](Self_Hosting_SSH.md) for PC/NAS/server requirements and limits.
