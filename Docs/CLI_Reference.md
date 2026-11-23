@@ -33,27 +33,49 @@ Initializes a new DAWVC repository in the current or specified directory.
 
 ```powershell
 dawvc init [--dir <path>] [--name <string>] [--primary <path>]
+dawvc init --bare --from <source> [--dir <path>]
 ```
 
 | Option | Type | Description |
 |---|---|---|
 | `--dir` | Path | Target directory to initialize (default: current working directory). |
+| `--bare` | Flag | Create an empty bare receiver using the source configuration/identity; requires `--from`. |
+| `--from` | Path/URL | Source repository for bare init; filesystem/file:// or dawvc:// over SSH. |
 | `--name` | String | Custom logical project name (default: directory name). |
 | `--primary` | Path | Explicit relative path to primary DAW project file (e.g. `Project.flp`). |
 
 ---
 
+Bare init copies configuration, not history or working files. It requires an
+absent/empty destination, rejects `--name`/`--primary` overrides, and never
+reinitializes an existing nonempty repository. Run it on the host or mounted
+storage, then configure the SSH alias if applicable. A source-derived ID allows
+the existing source to perform its first Push without weakening identity checks.
+
 ### 2. `dawvc clone`
 Clones a remote repository (directory or UNC share) into a new local directory, checks out the default branch, and materializes all project files and bundled sample assets.
 
 ```powershell
-dawvc clone <url> [<dir>]
+dawvc clone <url> [<dir>] [--bare]
 ```
 
 | Argument/Option | Type | Description |
 |---|---|---|
 | `<url>` | Argument | **Required.** Remote repository path (filesystem path or `\\server\share\path`). |
 | `<dir>` | Argument | Target directory for the new repository (defaults to project name). |
+
+`--bare` creates hosting storage: all fetched branches plus verified reachable
+objects, no FLP/sample checkout, index access or Doctor. HEAD retains the source
+configured default branch, even when unborn. Origin is recorded but no upstream
+is configured for this hosting copy. This is a one-time clone, not a live mirror.
+Target must be absent/empty; `--bare --force` is invalid (exit 7). Filesystem/file://
+and dawvc:// sources are supported. Normal Clone behavior is unchanged.
+
+Bare roots contain `dawvc.yaml`, `HEAD`, `objects/`, and `refs/heads/` directly;
+normal workspace commands target working copies, not bare roots. Invalid options
+or nonempty targets return exit 7; remote failures 8, corrupt objects/unsafe paths
+3, cancellation 130. Inspect the destination after interruption; isolated
+`.dawvc-provision-*` staging may remain after a crash or failed cleanup.
 
 #### Post-Clone Verification:
 `dawvc clone` automatically configures `origin` pointing to `<url>`, checks out the default branch (`main`), materializes all bundled audio samples into `./Samples/`, and runs a silent `doctor` check, reporting immediate reproducibility readiness.

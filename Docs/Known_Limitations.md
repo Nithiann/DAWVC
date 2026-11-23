@@ -68,7 +68,7 @@
 
 - The original filesystem Push baseline supports filesystem/file:// and UNC
   repositories with matching identity. The SSH extension below adds authenticated
-  network hosting. Neither extension adds `init --bare` or force-push.
+  network hosting. WP-SYNC-04 adds source-derived bare provisioning; force-push remains unsupported.
 - Non-bare checked-out destination branches are refused. Do not concurrently use
   destination worktrees while pushing to inactive branches.
 - Push and cooperating local branch/HEAD writers share a destination-wide
@@ -114,3 +114,22 @@ boundaries apply unchanged. A lost publish reply does not imply rollback.
 Platform evidence is recorded in WP-SSH-01 in the implementation plan. Real Windows
 OpenSSH, specific NAS deployments and actual UNC/SMB storage need independent
 validation; a successful Linux loopback test does not establish those guarantees.
+
+
+## Bare provisioning boundaries (WP-SYNC-04)
+
+`init --bare --from` prepares an empty receiver with source identity;
+`clone --bare` copies verified history/all fetched branches without a workspace.
+Both reject existing nonempty destinations and links/junctions in destination
+ancestry. Bare cloning rejects force. No bare mirror update, source-local
+bindings/index copy, random-ID receiver adoption or SSH remote-create operation.
+Bare roots are hosting endpoints; use normal Clone to obtain a working copy.
+
+Publication is a same-volume directory rename after preparation. Failures before
+publication do not expose a partial repository. Existing empty placeholders are
+deleted immediately before rename; a failed rename may leave that placeholder
+absent. Parent directories created during preparation may remain. Cleanup is
+best-effort; crashes/permissions can leave `.dawvc-provision-*` sibling directories.
+There is no provisioning recovery journal, secure erase or protection from a
+hostile writer replacing parent directories between checks. Restrict parent
+permissions and do not manipulate staging/destination paths concurrently.

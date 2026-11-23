@@ -35,7 +35,7 @@ policy path in the SSH forced command. The client cannot select that file.
 Only configured aliases are readable; writes default to denied. Paths must be
 absolute initialized DAWVC repositories with dawvc.yaml. Bare repositories use
 objects/ and refs/heads/ in the root; ordinary repositories use .dawvc/. There is
-still no `init --bare` command: provisioning bare layout is an operator task.
+now an `init --bare --from` command for host-local provisioning (see below).
 Push to an ordinary repository's active branch is refused. An initial remote
 must have the same repository ID as its source; do not independently initialize
 unrelated repositories and expect their IDs to match. Never copy machine-local
@@ -45,6 +45,34 @@ On Windows, use absolute paths such as `D:\\DawVcs\\Song` in JSON and configure
 OpenSSH to run the Windows DAWVC deployment. Repository aliases remain portable.
 A NAS needs a supported runtime/deployment or compatible container plus SSH; an
 SMB share alone does not provide an SSH endpoint. There is no vendor dependency.
+
+## Provisioning a host repository
+
+Run locally on the host, using a source path the host can read (including a mounted
+share), or a trusted dawvc:// source:
+
+```powershell
+# Empty receiver, same project identity; no history copied yet:
+dawvc init --bare --from D:\Music\Song --dir D:\DawVcs\Song
+# Alternatively seed all branches and history immediately, without a working tree:
+dawvc clone D:\Music\Song D:\DawVcs\Song --bare
+```
+
+Choose one command and an absent/empty destination. Then configure its absolute
+path in `serve.json`, set `AllowPush` explicitly, and authorize the SSH account/key.
+On the producer PC:
+
+```powershell
+dawvc remote add origin dawvc://producer@host/projects/song
+dawvc push origin main
+```
+
+The source and target IDs match by construction. Existing unrelated repos are
+not adopted or overwritten; `--force` is not supported for bare cloning. A source
+URL does not create a target on that SSH host: the destination is always a local
+filesystem path on the machine running provisioning. Bindings, source index and
+working files are never copied. Keep provisioning parents operator-controlled;
+real NAS/SMB rename semantics and Windows OpenSSH still need platform validation.
 
 ## SSH authorization
 

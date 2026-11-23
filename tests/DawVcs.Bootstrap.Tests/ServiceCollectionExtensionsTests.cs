@@ -45,6 +45,7 @@ public sealed class ServiceCollectionExtensionsTests
         typeof(RemoteUseCase),
         typeof(ObjectGraphWalker),
         typeof(FetchUseCase),
+        typeof(BareRepositoryUseCase),
         typeof(PushUseCase),
         typeof(AncestryService),
         typeof(PullUseCase),

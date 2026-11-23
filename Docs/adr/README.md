@@ -12,12 +12,10 @@ This registry contains all formal architecture decisions for DAWVC.
 | [ADR-OBJ-001](ADR-OBJ-001-canonical-object-envelope.md) | Canonical object envelope format (v1) | Accepted | WP-01 (Spike C), WP-02 |
 | [ADR-IO-001](ADR-IO-001-windows-atomic-file-replace.md) | Windows atomic file replace & staging primitives | Accepted | WP-01 (Spike D), WP-02, WP-07 |
 | [ADR-009](ADR-009-sqlite-local-index.md) | SQLite + Dapper for Local Workspace Metadata & Staging Index | Accepted | WP-04 |
-
 | [ADR-CORE-001](ADR-CORE-001-shared-engine-composition.md) | Shared engine composition for independent clients | Proposed | CLI/engine integration |
-
 | [ADR-REM-001](ADR-REM-001-filesystem-push.md) | Verified filesystem push | Proposed | WP-PUSH-01 |
-
 | [ADR-REM-002](ADR-REM-002-ssh-hosting.md) | dawvc:// over SSH with transient receiver | Proposed | WP-SSH-01 |
+| [ADR-REM-005](ADR-REM-005-bare-provisioning.md) | Source-derived bare hosting and clone | Proposed | WP-SYNC-04 |
 
 ---
 

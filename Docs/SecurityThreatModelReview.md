@@ -132,3 +132,22 @@ extension establishes the following explicit boundaries (FR-SSH-001..009):
 See ADR-REM-002, Remote_Protocol.md and Self_Hosting_SSH.md for the implemented
 contract. Linux protocol/OpenSSH validation is not a full production security
 audit or certification of every NAS/Windows/OpenSSH deployment.
+
+
+## Bare provisioning review — WP-SYNC-04
+
+Provisioning inherits an explicit compatible source identity and shared config;
+there is no first-writer identity adoption. Source reads use existing filesystem
+or strict-key SSH transports. History ingestion reuses Fetch envelope/hash/path
+validation; no source index, binding store or native project execution occurs.
+SSH exposes no arbitrary-path repository-creation command. Host path/alias and
+AllowPush policies remain administrative settings.
+
+Local destinations reject URLs, existing files/nonempty dirs and link/junction
+ancestry, and are rechecked before publication. A same-parent staged directory is
+renamed only after validation and resource disposal. Concurrent destination data
+is not recursively removed. These path checks do not sandbox malicious parent
+replacement; restrict parent ACLs/permissions to trusted operators. Cleanup may
+leave staging after a crash/permissions failure and is not secure erasure. Existing
+empty placeholders may be absent if final publication fails. Remote sources can
+consume staging space up to existing transfer limits; provision adequate disk.

@@ -84,14 +84,35 @@ public static class Program
         initCommand.AddOption(initDirOption);
         initCommand.AddOption(initNameOption);
         initCommand.AddOption(initPrimaryOption);
+        var initBareOption = new Option<bool>("--bare", "Create an empty hosting repository with the source identity");
+        var initFromOption = new Option<string?>("--from", "Source repository path or dawvc:// URL (required with --bare)");
+        initCommand.AddOption(initBareOption);
+        initCommand.AddOption(initFromOption);
 
-        initCommand.SetHandler(async (dir, name, primary) =>
+        initCommand.SetHandler(async (InvocationContext invocation) =>
         {
             try
             {
+                var parsed = invocation.ParseResult;
+                var dir = parsed.GetValueForOption(initDirOption);
+                var name = parsed.GetValueForOption(initNameOption);
+                var primary = parsed.GetValueForOption(initPrimaryOption);
+                var bare = parsed.GetValueForOption(initBareOption);
+                var from = parsed.GetValueForOption(initFromOption);
                 var targetDir = string.IsNullOrWhiteSpace(dir) ? Directory.GetCurrentDirectory() : dir;
+                if (bare)
+                {
+                    if (string.IsNullOrWhiteSpace(from) || name is not null || primary is not null)
+                        throw new ArgumentException("init --bare requires --from <source>; --name and --primary are inherited and cannot be overridden.");
+                    var provisioned = await serviceProvider.GetRequiredService<BareRepositoryUseCase>()
+                        .ExecuteAsync(new BareRepositoryRequest(from, targetDir), invocation.GetCancellationToken());
+                    AnsiConsole.MarkupLine($"[green]✓[/] Initialized empty bare repository in [bold]{Markup.Escape(PathRedactor.Redact(provisioned.TargetDirectory))}[/]");
+                    AnsiConsole.MarkupLine($"  [dim]Repository ID:[/] {provisioned.Configuration.RepositoryId}");
+                    return;
+                }
+                if (from is not null) throw new ArgumentException("--from requires --bare.");
                 var useCase = serviceProvider.GetRequiredService<InitRepositoryUseCase>();
-                var result = await useCase.ExecuteAsync(new InitRequest(targetDir, name, primary));
+                var result = await useCase.ExecuteAsync(new InitRequest(targetDir, name, primary), invocation.GetCancellationToken());
 
                 if (result.WasAlreadyInitialized)
                 {
@@ -107,11 +128,12 @@ public static class Program
                 AnsiConsole.MarkupLine($"  [dim]Primary File:[/]  [cyan]{Markup.Escape(result.PrimaryArtifact.Value)}[/]");
                 AnsiConsole.MarkupLine($"  [dim]Branch:[/]        [yellow]{result.DefaultBranch.Value}[/]");
             }
-            catch (Exception ex)
-            {
-                WriteError(ex.Message, 1);
-            }
-        }, initDirOption, initNameOption, initPrimaryOption);
+            catch (OperationCanceledException) { invocation.ExitCode = 130; WriteError("Initialization cancelled; inspect the destination before retrying."); }
+            catch (RemoteException ex) { invocation.ExitCode = 8; WriteError(ex.Message); }
+            catch (PathSecurityException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
+            catch (ArgumentException ex) { invocation.ExitCode = 7; WriteError(ex.Message); }
+            catch (Exception ex) { invocation.ExitCode = 1; WriteError(ex.Message); }
+        });
 
         // --- dawvc commit ---
         var commitCommand = new Command("commit", "Record changes to the repository");
@@ -1258,13 +1280,18 @@ public static class Program
         cloneCommand.AddArgument(cloneUrlArg);
         cloneCommand.AddArgument(cloneDirArg);
         cloneCommand.AddOption(cloneForceOption);
+        var cloneBareOption = new Option<bool>("--bare", "Copy all branches and objects for hosting, without a working tree");
+        cloneCommand.AddOption(cloneBareOption);
 
-        cloneCommand.SetHandler(async (url, dir, force) =>
+        cloneCommand.SetHandler(async (InvocationContext invocation) =>
         {
             try
             {
+                var parsed = invocation.ParseResult;
                 var useCase = serviceProvider.GetRequiredService<CloneUseCase>();
-                var result = await useCase.ExecuteAsync(new CloneRequest(url, dir, force));
+                var result = await useCase.ExecuteAsync(new CloneRequest(parsed.GetValueForArgument(cloneUrlArg),
+                    parsed.GetValueForArgument(cloneDirArg), parsed.GetValueForOption(cloneForceOption),
+                    parsed.GetValueForOption(cloneBareOption)), invocation.GetCancellationToken());
 
                 AnsiConsole.MarkupLine($"[green]✓[/] Cloned project [bold]{Markup.Escape(result.ProjectName)}[/] into [cyan]{Markup.Escape(PathRedactor.Redact(result.TargetDirectory))}[/]");
                 if (result.HeadCommit.HasValue)
@@ -1300,11 +1327,10 @@ public static class Program
             {
                 WriteError($"Security violation in remote snapshot (Exit Code 3): {ex.Message}", 3);
             }
-            catch (Exception ex)
-            {
-                WriteError(ex.Message, 1);
-            }
-        }, cloneUrlArg, cloneDirArg, cloneForceOption);
+            catch (OperationCanceledException) { invocation.ExitCode = 130; WriteError("Clone cancelled; inspect the destination before retrying."); }
+            catch (ArgumentException ex) { invocation.ExitCode = 7; WriteError(ex.Message); }
+            catch (Exception ex) { invocation.ExitCode = 1; WriteError(ex.Message); }
+        });
 
         // Chronologically ordered workflow:
         // 1. Getting started / Setup

@@ -751,3 +751,20 @@ missing closure objects, interrupted transfers, expected-tip races and CLI exits
 | FR-SSH-007 | Cancellation, EOF, protocol errors and process exit clean up receiving sessions and release locks. A lost reply after publication is ambiguous and requires ref inspection. |
 | FR-SSH-008 | Serve stdout is protocol-only. Errors carry safe typed codes rather than raw host paths/exception messages. Private keys/passwords are never stored in repository configuration or wire frames. |
 | FR-SSH-009 | PC, NAS and server hosting use identical SSH/DAWVC behavior where compatible OpenSSH and DAWVC are installed. Existing GitHub/GitLab Git endpoints are not DAWVC protocol endpoints. |
+
+
+# Post-MVP amendment: bare hosting and first publication (23 November 2026)
+
+| ID | Priority | Requirement |
+|---|---|---|
+| FR-BARE-001 | Must | `init --bare --from <source> --dir <target>` creates an empty bare receiver with the source identity, configuration and default branch; no primary file is needed at the target. |
+| FR-BARE-002 | Must | Source configuration must be available through a compatible matching handshake. Identity checks are not relaxed for first Push. |
+| FR-BARE-003 | Must | `clone <source> [target] --bare` transfers verified reachable objects and creates every fetched branch without workspace materialization or Doctor/index access. |
+| FR-BARE-004 | Must | Bare layout has dawvc.yaml, HEAD, objects/ and refs/heads/ at its root, with no nested .dawvc or copied source bindings/index. Empty histories and unborn defaults are valid. |
+| FR-BARE-005 | Must | Destinations must be absent or empty; existing files/nonempty repositories, bare force and destination links/junctions are rejected without replacing user data. |
+| FR-BARE-006 | Must | Prepare under the target parent and publish the complete layout only after success. Corruption, incompatible identity and cancellation before publication must not expose a partial repository. |
+| FR-BARE-007 | Must | Both built-in filesystem/file:// and dawvc:// sources work; destination provisioning remains a host-local administrative operation, with explicit SSH alias/push authorization. |
+| FR-BARE-008 | Must | Shared API and CLI expose cancellation/progress and typed errors; completion follows publication. Document crash/cleanup/empty-placeholder and cooperating-writer boundaries. |
+
+No `init --bare` with random identity, remote provisioning wire command, mirror
+update, force replacement, GUI, merge or additional DAW adapter is introduced.

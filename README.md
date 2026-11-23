@@ -219,3 +219,14 @@ no permanent DAWVC daemon is required. Strict host-key verification, public-key
 authentication and host-owned repository policies apply. See
 [SSH hosting](Docs/Self_Hosting_SSH.md) and [Protocol v1](Docs/Remote_Protocol.md).
 This is DAWVC synchronization, not compatibility with GitHub/GitLab Git endpoints.
+
+
+## Bare hosting and first publication
+
+Create an empty receiver with the existing project's identity:
+`dawvc init --bare --from <source> --dir <hosting-path>`.
+Or seed all branches/history without working files:
+`dawvc clone <source> <hosting-path> --bare`.
+Both require absent/empty local destinations; source may be a path or dawvc:// URL.
+Then configure filesystem origin or the host's SSH alias and Push normally. See
+[SSH hosting](Docs/Self_Hosting_SSH.md) for provisioning and authorization details.

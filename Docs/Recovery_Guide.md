@@ -156,3 +156,22 @@ branch was unchanged. Strict host-key failure requires independent verification
 of the host identity. Never disable verification or delete known_hosts entries
 merely to bypass an unexpected key change. Preserve evidence and fix the host
 policy/key permissions locally for denied access; protocol errors omit raw paths.
+
+
+## Interrupted bare provisioning
+
+Bare init/clone prepares in `.dawvc-provision-<id>` under the destination parent.
+It publishes the complete bare layout by directory rename and never recursively
+replaces an existing destination. Before publication, errors/cancellation leave
+no partial repository at the target. An empty target placeholder can disappear
+if the final rename fails after removing it; existing user data is not overwritten.
+
+After a hard crash or cleanup permission failure, staging can remain. First await
+or stop the owning process and check that nobody is provisioning that target.
+Inspect the destination using its dawvc.yaml, HEAD, objects/ and refs/heads/;
+absence of .dawvc is expected for bare storage. Use normal Clone to obtain and
+check a working copy; do not point workspace commands at a bare root. Remove
+abandoned staging only after confirming ownership/inactivity, then retry into an
+absent/empty destination. Do not merge staging directories into live storage.
+An interrupted SSH connection/source read does not provision a target on the SSH
+host; configuration and destination creation happen on the initiating machine.

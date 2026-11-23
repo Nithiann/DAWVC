@@ -89,3 +89,22 @@ work for local and SSH remotes. No SSH subprocess is started merely by validatin
 or adding a remote. Keys/host trust come from OpenSSH configuration and agent,
 not engine or GUI credential fields. A host exposes only aliases in its policy
 through transient `serve`. See Remote_Protocol.md and Self_Hosting_SSH.md.
+
+
+## Bare hosting integration (WP-SYNC-04)
+
+Resolve `BareRepositoryUseCase` from Bootstrap. `BareRepositoryRequest(Source,
+TargetDirectory)` initializes an empty same-identity receiver; `CopyHistory: true`
+fetches verified reachable history and publishes all fetched branch heads. Results
+include configuration, copied branch count, default tip and transfer counts.
+`CloneRequest.Bare` exposes the same copy path through Clone without checkout or
+Doctor; `Force` plus `Bare` is rejected. Existing positional request arguments keep
+their meaning. No GUI or new package/protocol dependency is introduced.
+
+Contexts/transports are disposed before publishing the bare root. Child completion
+is suppressed; top-level completion follows directory publication. Await the call
+on cancellation; it does not reserve the destination or undo a completed rename.
+Source providers must include matching configuration in their handshake. Custom
+Fetch providers must supply accurate updated refs/verified objects in the new
+empty staging repository. The target is local, even when the source uses SSH.
+See ADR-REM-005 and the recovery guide for publication and cleanup boundaries.

@@ -85,3 +85,14 @@ observes disconnect/EOF and releases its session. Abrupt host termination releas
 OS locks but may leave quarantine. Acknowledgement loss after ref publication is
 ambiguous: fetch/inspect refs before retrying. Push-session disposal closes that
 SSH connection. No implicit tracking-ref/upstream changes or destructive repair.
+
+
+## Bare provisioning compatibility (WP-SYNC-04)
+
+Bare init/clone adds no wire operation or version change. A local operator uses
+`init --bare --from <source>` to read source configuration via hello, or
+`clone --bare` to read configuration/refs/verified objects via the existing read
+operations. The target is a local filesystem directory. Provisioning never asks
+SSH serve to create an arbitrary remote path; expose the resulting host path
+through an explicitly configured alias/push policy. First Push keeps the same
+repository identity and fast-forward/closure/conditional-publication checks.

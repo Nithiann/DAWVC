@@ -967,3 +967,66 @@ Follow-up validation: all 6 `SqliteStagingIndexTests` passed locally on Linux wi
 treated as errors. `dotnet format --no-restore --verify-no-changes` passed. The
 Windows-specific sharing failure is validated by the subsequent CI run; Linux
 results alone are not claimed as a native Windows reproduction.
+
+
+# 28. WP-SYNC-04 — Bare hosting and first publication
+
+Base: develop at `19f37b7`; branch `feat/sync-bare-provisioning`.
+The separate upstream/preview feature branches are not included in this base.
+Scope: CLI/shared engine, FL Studio preview; no GUI, merge or new wire format.
+
+- [x] BARE-01: inspect existing bare transport, identity checks and provisioning gaps.
+- [x] BARE-02: define source-derived identity and safe destination publication.
+- [x] BARE-03: implement `init --bare --from <source>` and `clone --bare`.
+- [x] BARE-04: verify first push, all-branch clone, empty histories, corruption,
+  cancellation, destination preservation and filesystem/SSH compatibility.
+- [x] BARE-05: update requirements, reference, hosting/workflow/recovery docs and ADR.
+- [x] BARE-06: full Release tests/build, formatting and real SSH smoke validation.
+- [ ] BARE-07: publish PR against develop; maintainer approves/merges manually.
+
+Contract: Init copies source configuration/identity without objects or working
+files. Bare Clone fetches verified history and publishes every fetched branch,
+without checkout, staging-index access or environment/plugin probing. Both
+require an absent or empty destination, reject links/junctions in its ancestry,
+and publish a same-volume staged directory only after successful preparation.
+Existing nonempty repositories are never reinitialized; bare clone rejects force.
+Host-side provisioning is a local administrative operation; dawvc:// reads a
+source through SSH but does not create arbitrary repositories on the remote host.
+
+
+Implementation: source-derived empty Init and verified all-branch Bare Clone are
+registered in shared Bootstrap and exposed in the CLI. Default branch (including
+nested/unborn), policies and repository identity are preserved. Local source
+paths recorded as origin are made absolute. No source workspace/index/bindings
+are copied or read. Normal Clone behavior is retained.
+
+Initial validation: 27 targeted acceptance cases and the first full Release suite
+passed. Final added regressions cover custom default/policies, file://, cancellation
+during transfer, URL destinations and source-local privacy/corrupt-index isolation.
+
+
+Final local validation (23 November 2026, Linux, .NET SDK 10.0.404):
+
+- Full Release suite: 647 passed, 0 failed, 0 skipped (35 additional cases over
+  this develop baseline: 34 bare acceptance cases plus Bootstrap registration).
+- Release build: 0 warnings/errors; `dotnet format --no-restore --verify-no-changes` passed.
+- Real unprivileged OpenSSH: bare init and bare clone from SSH, first publication,
+  subsequent push/clone/fetch/pull and byte identity passed; strict unknown/changed
+  host-key rejection passed. Only temporary keys/configuration were used.
+- Synthetic fixtures only. No new dependencies, GUI, adapter, schema or wire change.
+- Windows CI and actual Windows OpenSSH/NAS/UNC validation are separate evidence;
+  Linux success does not certify those deployments. The symlink fixture executes
+  on Linux; Windows link creation requires separate privileges.
+
+Publication target: PR against develop, with manual maintainer approval/merge.
+The GitHub API has previously returned Forbidden in this environment; if it
+persists, create the PR using the explicitly pinned comparison:
+https://github.com/Nithiann/DAWVC/compare/develop...feat/sync-bare-provisioning?expand=1
+BARE-07 stays open until PR creation is confirmed. The agent does not approve/merge.
+
+Branch CI (Windows/Ubuntu):
+[![WP-SYNC-04 CI](https://github.com/Nithiann/DAWVC/actions/workflows/ci.yml/badge.svg?branch=feat%2Fsync-bare-provisioning)](https://github.com/Nithiann/DAWVC/actions?query=branch%3Afeat%2Fsync-bare-provisioning)
+
+Next functional work after review: design explicit divergence/conflict resolution
+for FLP collaboration, preserving both histories without semantic FLP merging.
+This is backlog, not implemented by WP-SYNC-04.

@@ -233,7 +233,17 @@ dawvc push origin shared-mix
 
 The recipient can fetch and explicitly pull that branch. Nothing is automatically
 installed in their workspace by Push. Bare repositories have no active worktree
-restriction; this change does not introduce an `init --bare` command. See the
+restriction. Provision one locally on the hosting machine or mounted storage:
+
+```powershell
+dawvc init --bare --from D:\Music\Song --dir D:\Hosting\Song
+# Or copy all existing branches/history instead of preparing an empty receiver:
+# dawvc clone D:\Music\Song D:\Hosting\Song --bare
+```
+
+Choose one command and an absent/empty destination. For SSH, configure the target
+alias and push authorization on the host before the first Push. The source may
+also be a trusted dawvc:// URL; the destination remains a local path. See the
 [CLI reference](CLI_Reference.md) for argument defaults and rejection codes.
 
 ### Using a PC, NAS or server over SSH

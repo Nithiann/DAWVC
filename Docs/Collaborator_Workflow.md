@@ -137,3 +137,28 @@ and server hosts use the same protocol; standard Git hosting is a different
 protocol. A non-bare host's active branch cannot receive Push. Push publishes
 committed history without changing the host workspace; divergence requires
 explicit integration, not force-push.
+
+
+## First publication to your own hosting storage
+
+On the host or a machine with the storage mounted, provision a receiver from the
+existing project rather than independently generating a different project ID:
+
+```powershell
+dawvc init --bare --from D:\Music\Song --dir D:\Hosting\Song
+# Or copy all existing history immediately (choose one provisioning command):
+# dawvc clone D:\Music\Song D:\Hosting\Song --bare
+```
+
+For a share, configure the resulting filesystem path as origin on the producer.
+For SSH, configure its host-owned alias and explicitly permit Push first, then:
+
+```powershell
+dawvc remote add origin dawvc://producer@host/projects/song
+dawvc push origin main
+```
+
+Collaborators use normal `dawvc clone`, not `clone --bare`, to obtain working
+files. Neither provisioning command copies source bindings/index or installs
+plugins. Targets must be absent/empty. Fast-forward-only collaboration and FL
+Studio search-folder/relinking requirements remain unchanged.

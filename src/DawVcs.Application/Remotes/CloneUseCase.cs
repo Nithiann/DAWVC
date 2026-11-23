@@ -13,7 +13,8 @@ namespace DawVcs.Application.Remotes;
 public sealed record CloneRequest(
     string Url,
     string? TargetDirectory = null,
-    bool Force = false);
+    bool Force = false,
+    bool Bare = false);
 
 public sealed record CloneResult(
     string TargetDirectory,
@@ -69,6 +70,9 @@ public sealed class CloneUseCase
         ArgumentException.ThrowIfNullOrWhiteSpace(request.Url);
 
         cancellationToken.ThrowIfCancellationRequested();
+        if (request.Bare && request.TargetDirectory?.Contains("://", StringComparison.Ordinal) == true)
+            throw new ArgumentException("Bare destination must be a local filesystem path, not a URL.");
+        if (request.Bare && request.Force) throw new ArgumentException("--bare cannot be combined with --force.");
         var nestedProgress = progress is null ? null : new NestedOperationProgress(progress);
         progress?.Report(new OperationProgress(OperationStage.ConnectingRemote));
         var remoteUrl = request.Url.Trim();
@@ -89,6 +93,14 @@ public sealed class CloneUseCase
         var targetDir = !string.IsNullOrWhiteSpace(request.TargetDirectory)
             ? Path.GetFullPath(request.TargetDirectory)
             : DeriveTargetDirectory(remoteUrl, remoteConfig.ProjectName);
+
+        if (request.Bare)
+        {
+            var bare = await new BareRepositoryUseCase(_contextFactory, _transportFactory, _fetchUseCase)
+                .ExecuteAsync(new BareRepositoryRequest(remoteUrl, targetDir, CopyHistory: true), cancellationToken, nestedProgress).ConfigureAwait(false);
+            return new CloneResult(bare.TargetDirectory, bare.Configuration.ProjectName, bare.Configuration.DefaultBranch,
+                bare.HeadCommit, bare.ObjectsFetched, bare.BytesFetched, Array.Empty<string>(), null);
+        }
 
         if (Directory.Exists(targetDir) && Directory.EnumerateFileSystemEntries(targetDir).Any() && !request.Force)
         {

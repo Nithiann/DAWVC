@@ -1415,3 +1415,16 @@ The OpenSSH child uses argument-list execution and a fixed command. A host start
 or on-disk repository schema is introduced. Operational policy/protocol definitions
 are in [Self-hosting SSH](Self_Hosting_SSH.md), [Remote Protocol](Remote_Protocol.md)
 and [ADR-REM-002](adr/ADR-REM-002-ssh-hosting.md).
+
+
+# Bare provisioning amendment — WP-SYNC-04
+
+ADR-REM-005 defines explicit source-derived empty receivers and bare cloning.
+A bare root uses dawvc.yaml, HEAD, objects/ and refs/heads/ directly, as already
+understood by filesystem/SSH transports. No schema or wire-format change.
+Application provisioning reuses normal contexts only in isolated sibling staging,
+then publishes their metadata/shared configuration as bare storage by same-volume
+rename after disposing resources. Clone copies verified fetched tips to branch
+heads, without checkout/Doctor. Empty init copies source identity/configuration
+only. Existing nonempty targets, links/junctions and force replacement are refused.
+Host alias/SSH permissions remain operator-owned; no remote arbitrary-path create.
