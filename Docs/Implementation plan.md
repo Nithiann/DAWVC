@@ -1082,3 +1082,11 @@ Final local validation (23 November 2026, Linux, SDK 10.0.404):
 
 Publication target: stacked PR against `feat/sync-upstream-workflow`; maintainer
 approval/merge remains manual. WP-SYNC-04 remains next, after this WP is reviewed.
+
+Publication: branch pushed. Automatic PR creation returned GitHub API `Forbidden`;
+PREVIEW-07 remains open until the maintainer creates the PR using the pinned base:
+https://github.com/Nithiann/DAWVC/compare/feat/sync-upstream-workflow...feat/sync-fresh-preview?expand=1
+No approval or merge performed.
+
+Branch CI (Windows/Ubuntu):
+[![WP-SYNC-03 CI](https://github.com/Nithiann/DAWVC/actions/workflows/ci.yml/badge.svg?branch=feat%2Fsync-fresh-preview)](https://github.com/Nithiann/DAWVC/actions?query=branch%3Afeat%2Fsync-fresh-preview)
