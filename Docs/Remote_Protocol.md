@@ -32,7 +32,8 @@ No banners, progress messages or terminal escape sequences belong on stdout.
 The first request is `{"Version":1,"Operation":"hello","Repository":"projects/song"}`.
 The host binds the connection to that alias and replies with `Configuration`, the
 versioned repository YAML (not host policy). Subsequent requests must omit
-Repository. Configuration is capped at 256 KiB at the client. Unknown versions,
+Repository. Configuration is capped at 262,144 UTF-16 code units at the client and remains
+subject to the 1 MiB frame byte limit. Unknown versions,
 operations and state transitions terminate the session with a safe error code.
 
 | Operation | Request fields | Response / body |
@@ -49,7 +50,8 @@ Only one request/body is outstanding on a connection. A bounded body stream neve
 consumes the next frame. Closing an incompletely read download faults the client
 connection. A put payload has no envelope header on wire: the host constructs it
 from the declared identity/type/length and verifies the resulting envelope and
-BLAKE3 against the expected hash. Downloads preserve the original full envelope.
+BLAKE3 against the expected hash. Downloads preserve the original full envelope. Shared incoming verification also
+rejects any trailing bytes beyond its declared payload, for filesystem and SSH.
 
 Errors contain only `Error`: `incompatible`, `non-fast-forward`, `integrity`,
 `validation`, `denied`, `timeout` or `remote`. No raw host exception messages,

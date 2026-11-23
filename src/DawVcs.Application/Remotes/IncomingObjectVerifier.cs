@@ -104,7 +104,9 @@ public static class IncomingObjectVerifier
                 totalPayloadRead += (ulong)bytesRead;
             }
 
-            // Verify no trailing extra bytes in stream if source has known length
+            // Every source stream represents exactly one envelope, including bounded SSH bodies.
+            if (await remoteSourceStream.ReadAsync(buffer.AsMemory(0, 1), cancellationToken).ConfigureAwait(false) != 0)
+                throw new PayloadLengthMismatchException("Object contains trailing bytes beyond its declared payload.");
             var computedHash = hasher.FinalizeHash();
             if (computedHash != header.PayloadHash)
             {

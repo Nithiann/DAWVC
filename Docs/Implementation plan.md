@@ -893,7 +893,8 @@ DAWVC daemon or dependency on a particular hosting vendor.
 - [x] SSH-04: transient `serve` command, read/write permissions, streaming and cleanup.
 - [x] SSH-05: protocol, isolation, malformed input, lifecycle and sync acceptance tests.
 - [x] SSH-06: update architecture/security/hosting docs; full Release tests and format.
-- [ ] SSH-07: publish branch/PR for manual review; never approve or merge.
+- [x] SSH-07a: publish `feat/ssh-transport`, based on `feat/cli-push`.
+- [ ] SSH-07b: create PR for manual review. Blocked: both GitHub GraphQL and REST PR creation return `Forbidden`. Never approve or merge.
 
 Acceptance: existing clone/fetch/pull/push use the same engine through either
 filesystem or SSH. Unknown/changed host keys and interactive/password login fail
@@ -914,7 +915,8 @@ refused with exit 8. No production SSH settings or accounts were modified.
 
 Validation evidence (23 November 2026, Linux, .NET SDK 10.0.404):
 
-- Full core/CLI solution: 611 tests passed, 0 failed, 0 skipped (41 new SSH cases).
+- Full core/CLI solution: 612 tests passed, 0 failed, 0 skipped (41 new SSH cases
+  plus a shared incoming-envelope trailing-byte integrity regression).
 - Release build: 0 warnings, 0 errors; existing central NuGet catalog and solution
   membership unchanged. No new GUI or SSH NuGet dependency.
 - `scripts/test_ssh_loopback.py`: real unprivileged localhost OpenSSH daemon,
@@ -930,3 +932,19 @@ Validation evidence (23 November 2026, Linux, .NET SDK 10.0.404):
 Final local formatting: `dotnet format --no-restore --verify-no-changes` passed.
 SSH-06 is complete for local checks; external platform validation remains open
 as stated above. SSH-07 publication/PR creation is recorded separately below.
+
+Publication: implementation commit `fd32e4b` was pushed to `feat/ssh-transport`.
+Final review additionally tightened shared incoming verification to refuse trailing
+bytes after an otherwise valid envelope, so filesystem and SSH fetch/clone have
+the same exact-length rule. The full suite then passed at 612 tests.
+
+PR creation was attempted with `gh pr create` and the REST pulls endpoint; both
+returned `Forbidden`. Manual compare/PR link (base pinned to the Push branch):
+https://github.com/Nithiann/DAWVC/compare/feat/cli-push...feat/ssh-transport?expand=1
+No approval or merge was performed.
+
+Final integrity follow-up verification: full Release suite 612/612 passed with no
+skips, explicit Release build 0 warnings/errors, formatting verification passed,
+and the real OpenSSH loopback script passed again with the exact-length check.
+The loopback flow includes a second commit, verifies Fetch leaves the clone
+workspace unchanged, and verifies Pull installs the updated bytes.
