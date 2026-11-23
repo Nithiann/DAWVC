@@ -1374,3 +1374,20 @@ GUI in this core solution. See [Engine integration](Engine_Integration.md) and
 The SQLite index contains staged intent in addition to derived hashes. Automatic
 corrupt-index deletion/rebuilding is superseded by the preservation amendment in
 [ADR-009](adr/ADR-009-sqlite-local-index.md). Persisted schemas are unchanged.
+
+# Filesystem Push amendment (23 November 2026)
+
+Sections 34–37 describe the long-term hosted architecture. The implemented
+filesystem collaboration baseline now adds fast-forward-only `push` to clone,
+fetch and pull. `IRemotePushTransport` is an optional capability, with caller-owned
+`IRemotePushSession` reception; the read-only transport API is unchanged.
+Application plans and verifies complete immutable closure; Infrastructure repeats
+closure validation at receipt, promotes objects and conditionally publishes refs
+under a shared ref-writer lock. Checked-out destination branches are refused.
+The CLI uses the same Bootstrap-registered `PushUseCase` as independent clients.
+
+Filesystem handshakes optionally carry versioned configuration, allowing Clone
+to read bare-repository configuration without constructing a writable context
+and accidentally creating a `.dawvc` directory in the source. No on-disk schema
+changes. See [ADR-REM-001](adr/ADR-REM-001-filesystem-push.md), FR-PSH-001..010
+and WP-PUSH-01 in the existing implementation plan.

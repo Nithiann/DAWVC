@@ -1,4 +1,5 @@
 using System.CommandLine;
+using System.CommandLine.Invocation;
 using System.Text.Json;
 
 using DawVcs.Adapters.Abstractions;
@@ -1193,6 +1194,44 @@ public static class Program
             }
         }, pullRemoteArg, pullBranchArg, pullForceOption, pullFfOnlyOption, pullDryRunOption, pullDirOption);
 
+        // --- dawvc push ---
+        var pushCommand = new Command("push", "Push a local branch to a filesystem remote (fast-forward only)");
+        var pushRemoteArg = new Argument<string?>("remote", () => null, "Destination remote (default: upstream or origin)");
+        var pushBranchArg = new Argument<string?>("branch", () => null, "Local and destination branch (default: active branch/upstream)");
+        var pushDryRunOption = new Option<bool>("--dry-run", "Verify and preview without destination writes");
+        var pushDirOption = new Option<string?>("--dir", "Repository directory");
+        pushCommand.AddArgument(pushRemoteArg);
+        pushCommand.AddArgument(pushBranchArg);
+        pushCommand.AddOption(pushDryRunOption);
+        pushCommand.AddOption(pushDirOption);
+        pushCommand.SetHandler(async (InvocationContext invocation) =>
+        {
+            try
+            {
+                var parsed = invocation.ParseResult;
+                var useCase = serviceProvider.GetRequiredService<PushUseCase>();
+                var result = await useCase.ExecuteAsync(new PushRequest(
+                    ResolveRepoDirectory(parsed.GetValueForOption(pushDirOption)),
+                    parsed.GetValueForArgument(pushRemoteArg), parsed.GetValueForArgument(pushBranchArg),
+                    parsed.GetValueForOption(pushDryRunOption)), invocation.GetCancellationToken());
+                var action = result.IsDryRun ? "Would push" : "Pushed";
+                var message = result.UpToDate ? $"Already up to date: {result.RemoteName}/{result.RemoteBranch.Value}."
+                    : $"{action} {result.LocalBranch.Value} to {result.RemoteName}/{result.RemoteBranch.Value}: {result.ObjectsTransferred} object(s), {FormatBytes(result.BytesTransferred)} payload.";
+                AnsiConsole.MarkupLine($"[green]✓[/] {Markup.Escape(PathRedactor.Redact(message))}");
+            }
+            catch (PushNonFastForwardException ex) { invocation.ExitCode = 9; WriteError(ex.Message); }
+            catch (RemoteException ex) { invocation.ExitCode = 8; WriteError(ex.Message); }
+            catch (InvalidEnvelopeException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
+            catch (PathSecurityException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
+            catch (FileNotFoundException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
+            catch (OperationCanceledException) { invocation.ExitCode = 130; WriteError("Push cancelled. If publication already finished, the destination may have advanced; inspect its branch before retrying."); }
+            catch (ArgumentException ex) { invocation.ExitCode = 7; WriteError(ex.Message); }
+            catch (NotSupportedException ex) { invocation.ExitCode = 8; WriteError(ex.Message); }
+            catch (IOException ex) { invocation.ExitCode = 8; WriteError(ex.Message); }
+            catch (UnauthorizedAccessException ex) { invocation.ExitCode = 8; WriteError(ex.Message); }
+            catch (Exception ex) { invocation.ExitCode = 1; WriteError(ex.Message); }
+        });
+
         // --- dawvc clone ---
         var cloneCommand = new Command("clone", "Clone a remote DAWVC repository into a new directory (FR-REM-001..012, FR-PUL-001..012)");
         var cloneUrlArg = new Argument<string>("url", "URL, filesystem path, or network share of the remote repository to clone");
@@ -1271,6 +1310,7 @@ public static class Program
         rootCommand.AddCommand(remoteCommand);
         rootCommand.AddCommand(fetchCommand);
         rootCommand.AddCommand(pullCommand);
+        rootCommand.AddCommand(pushCommand);
 
         // 5. Diagnostics, reproducibility & maintenance
         rootCommand.AddCommand(doctorCommand);

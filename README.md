@@ -112,6 +112,7 @@ For options, exit codes, and JSON schemas, see the complete **[CLI Command Refer
 | `dawvc branch [name]` | Lists existing branches or creates a new branch pointer. |
 | `dawvc switch <branch>` | Safely switches the workspace to a different branch. |
 | `dawvc checkout <commit>` | Restores a specific snapshot (supports `--restore-to` and `--force`). |
+| `dawvc push [remote] [branch]` | Sends committed history to a filesystem/UNC remote, fast-forward only; supports `--dry-run`. |
 | `dawvc bind <id> <path>` | Links an external asset to a logical dependency ID. |
 | `dawvc doctor` | Verifies environment health, checking local presence and compatible versions (`installed >= required`) for plugins, samples, and dependencies. |
 | `dawvc fsck` | Validates internal integrity across the object store and refs. |

@@ -24,6 +24,10 @@ public sealed class OperationFailureTests
             .Category.Should().Be(OperationFailureCategory.IncompatibleRepository);
         OperationFailure.FromException(new PayloadHashMismatchException("validation"))
             .Category.Should().Be(OperationFailureCategory.IntegrityFailure);
+        OperationFailure.FromException(new PushNonFastForwardException("origin", "main"))
+            .Category.Should().Be(OperationFailureCategory.NonFastForward);
+        OperationFailure.FromException(new PushRejectedException("active branch"))
+            .Category.Should().Be(OperationFailureCategory.RemoteUnavailable);
         OperationFailure.FromException(new RemoteException("timeout"))
             .Category.Should().Be(OperationFailureCategory.RemoteUnavailable);
     }

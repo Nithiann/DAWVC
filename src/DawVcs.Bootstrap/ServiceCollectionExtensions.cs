@@ -62,6 +62,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<Func<string, IQuarantineStore>>(_ => dir => new QuarantineObjectStore(dir));
         services.AddTransient<ObjectGraphWalker>();
         services.AddTransient<FetchUseCase>();
+        services.AddTransient<PushUseCase>();
         services.AddTransient<AncestryService>();
         services.AddTransient<PullUseCase>(sp => new PullUseCase(
             sp.GetRequiredService<Func<string, IRepositoryContext>>(),

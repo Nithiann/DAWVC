@@ -802,7 +802,12 @@ When requirements change, `DAWVC_MVP_Requirements.md` must be amended prior to c
 
 # 25. Post-MVP Backlog
 
-The following items are recognized but explicitly deferred beyond v0.1:
+The following items were explicitly deferred beyond v0.1. The filesystem
+clone/fetch/pull baseline and Push extension are now implemented on the core/Push
+feature branches; hosted transports remain deferred. See section 26 for current
+Push scope and validation.
+
+Historical backlog:
 
 - Remote object negotiation, synchronization protocol, and central server;
 - `dawvc clone`, `fetch`, `push`, and `pull`;
@@ -821,3 +826,50 @@ The following items are recognized but explicitly deferred beyond v0.1:
 - Automatic update checks and opt-in crash telemetry.
 
 This backlog will be prioritized only after achieving the v0.1 MVP release gate.
+
+# 26. CLI remote completion — WP-PUSH-01
+
+Base: `feat/core-gui-readiness`. Scope: filesystem/file:// and UNC push, shared
+Application API, no GUI or server. Work proceeds in this order:
+
+- [x] PUSH-01: inspect existing transports, CLI and documentation; define requirements.
+- [x] PUSH-02: implement verified object reception and conditional, locked ref publication.
+- [x] PUSH-03: implement full closure planning, fast-forward checks, dry-run, cancellation and progress.
+- [x] PUSH-04: expose `dawvc push` and shared Bootstrap registration.
+- [x] PUSH-05: test create/update/no-op/rejection/corruption/cancellation/concurrency and CLI behavior.
+- [x] PUSH-06: update reference, workflow, limitations and architecture; Release build, full tests and format.
+- [ ] PUSH-07: push branch and open PR for manual review; do not approve or merge.
+
+Acceptance: only missing verified objects transfer; blobs/snapshots precede commit
+publication; refs change only after complete closure validation and expected-tip
+comparison. Reject checked-out destination branches, incompatible repositories,
+non-fast-forward updates and concurrent writers. Dry-run performs no destination
+writes. Failure before publication leaves the remote ref unchanged; cancellation
+after publication may observe a completed push. Unreachable promoted objects may
+remain after failure. No force-push, branch deletion, authentication or new network
+transport. See FR-PSH-001..010 in the requirements amendment and ADR-REM-001.
+
+Implementation note: the push/clone acceptance flow revealed that Clone's source
+configuration lookup created `.dawvc` inside bare remotes. Filesystem handshake
+configuration now avoids that mutation. Clone publishes its local HEAD through
+the same context method/ref lock as other cooperating writers. Existing CI also
+runs for `feat/**` pushes and feature-base PRs so stacked work can be validated.
+
+Validation evidence (23 November 2026, Linux, .NET SDK 10.0.404):
+
+- Full Release suite: 570 passed, 0 failed, 0 skipped, including 25 Push acceptance
+  cases and shared Bootstrap registration coverage.
+- Push → Clone → fsck verifies byte-identical materialization and no `.dawvc`
+  creation in the bare source. Tests cover second-parent ancestry, non-fast-forward
+  rejection, identity/schema, dry-run bytes, staged corruption, missing ancestor
+  blobs, unsafe paths, cancellation, stale tips, active HEAD changes and ref locks.
+- Separate Linux CLI symlink check: exit 8, external target preserved.
+- Windows regression CI remains pending. An actual UNC/SMB share has not been
+  exercised; the current CI workflow does not provision one. Do not interpret
+  successful local tests as network-share certification.
+- Final build/format and publication status are recorded below when completed.
+
+Final local checks: Release build 0 warnings/errors;
+`dotnet format --no-restore --verify-no-changes` passed. PUSH-06 is complete for
+local validation; Windows and actual UNC-share validation remain explicitly
+pending as noted above. PUSH-07 remains open until PR creation is confirmed.

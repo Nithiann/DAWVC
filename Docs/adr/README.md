@@ -15,6 +15,8 @@ This registry contains all formal architecture decisions for DAWVC.
 
 | [ADR-CORE-001](ADR-CORE-001-shared-engine-composition.md) | Shared engine composition for independent clients | Proposed | CLI/engine integration |
 
+| [ADR-REM-001](ADR-REM-001-filesystem-push.md) | Verified filesystem push | Proposed | WP-PUSH-01 |
+
 ---
 
 ## Workflow for New Decisions

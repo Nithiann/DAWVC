@@ -108,6 +108,7 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
 
     public void SetCurrentBranch(BranchName branch)
     {
+        using var refLock = RepositoryRefLock.Acquire(_dotDawvcPath);
         Directory.CreateDirectory(_dotDawvcPath);
         AtomicFileWriter.WriteAtomic(_headFilePath, $"ref: refs/heads/{branch.Value}\n");
     }
@@ -143,6 +144,7 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
 
     public void CreateBranch(BranchName branch, CommitId commitId)
     {
+        using var refLock = RepositoryRefLock.Acquire(_dotDawvcPath);
         var branchRefFile = GetBranchRefFile(branch);
         var dir = Path.GetDirectoryName(branchRefFile);
         if (!string.IsNullOrEmpty(dir))
@@ -160,6 +162,7 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
 
     public bool DeleteBranch(BranchName branch)
     {
+        using var refLock = RepositoryRefLock.Acquire(_dotDawvcPath);
         var currentBranch = GetCurrentBranch();
         if (branch == currentBranch)
         {
@@ -205,6 +208,7 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
 
     public async Task UpdateBranchCommitAsync(BranchName branch, CommitId newCommit, CancellationToken cancellationToken = default)
     {
+        using var refLock = RepositoryRefLock.Acquire(_dotDawvcPath);
         var branchRefFile = GetBranchRefFile(branch);
         var dir = Path.GetDirectoryName(branchRefFile);
         if (!string.IsNullOrEmpty(dir))

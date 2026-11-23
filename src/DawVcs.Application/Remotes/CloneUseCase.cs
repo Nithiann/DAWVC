@@ -83,7 +83,7 @@ public sealed class CloneUseCase
 
         // 2. Read remote config from remote transport or path
         progress?.Report(new OperationProgress(OperationStage.LoadingMetadata));
-        RepositoryConfig remoteConfig = ReadRemoteConfig(remoteUrl, handshake.RepositoryId);
+        RepositoryConfig remoteConfig = handshake.Configuration ?? ReadRemoteConfig(remoteUrl, handshake.RepositoryId);
 
         // 3. Determine target directory
         var targetDir = !string.IsNullOrWhiteSpace(request.TargetDirectory)
@@ -108,8 +108,8 @@ public sealed class CloneUseCase
         context.SaveConfig(remoteConfig);
 
         var defaultBranch = remoteConfig.DefaultBranch;
-        var headPath = Path.Combine(targetDir, ".dawvc", "HEAD");
-        await File.WriteAllTextAsync(headPath, $"ref: refs/heads/{defaultBranch.Value}\n", cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        context.SetCurrentBranch(defaultBranch);
 
         // 5. Configure 'origin' remote & upstream
         context.SaveRemote(new RemoteConfig(RemoteName.Origin, remoteUrl));

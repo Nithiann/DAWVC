@@ -122,3 +122,18 @@ Stop operations and preserve `.dawvc/index.db` and any `index.db-wal`/`index.db-
 files before recovery. Use an offline copy for SQLite recovery tooling.
 `doctor`/`fsck` do not reconstruct staged intent. There is no new automatic reset
 command. See [ADR-009](adr/ADR-009-sqlite-local-index.md).
+
+## Failed or interrupted Push
+
+Push does not alter worktrees. Before final atomic ref publication, transfer,
+verification or cancellation failures leave the destination branch unchanged.
+Verified objects promoted before a later failure may remain unreachable. Once
+publication succeeds, cancellation cannot undo it. Inspect the advertised branch
+(or fetch) to determine whether the new tip was published after process loss.
+
+On handled termination, disposal attempts to remove its `incoming/push-*` session.
+Power loss, access restrictions or cleanup failures can leave session directories.
+Preserve evidence first; only remove an identified abandoned session when no writer
+is using it. Never remove `ref-write.lock` to break a live writer's lock: it is a
+persistent file whose open handle supplies synchronization, and is harmless when
+closed. No automatic garbage collection or destructive index reset is introduced.

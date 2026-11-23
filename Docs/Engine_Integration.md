@@ -68,3 +68,16 @@ Validation on 23 November 2026 (Linux, .NET SDK 10.0.404): Release build
 completed with zero warnings/errors; all 544 core solution tests passed with no
 skips; `dotnet format --no-restore --verify-no-changes` passed. Windows
 verification remains for CI after PR creation.
+
+## Push integration
+
+Resolve `PushUseCase` from Bootstrap and pass `PushRequest`, a cancellation token
+and optional per-call `IProgress<OperationProgress>`. The result pins old/new tips,
+local/destination branch names and transferred payload counts. Dry-run counts are
+estimates of missing objects at planning time; another actor can fill objects
+before transfer. No local tracking or upstream changes are made.
+
+`PushNonFastForwardException` maps to NonFastForward and `PushRejectedException`
+is a typed remote failure. Missing/corrupt closure objects are integrity failures.
+Progress completion follows publication; await the task rather than inferring
+rollback from cancellation. See ADR-REM-001 for the cooperating-writer model.

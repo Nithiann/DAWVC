@@ -212,3 +212,26 @@ dawvc pull
 ```
 If you have uncommitted changes in your workspace, DAWVC will protect your work and refuse to overwrite. Use `dawvc pull --force` to create an automatic timestamped backup in `.dawvc/recovery/` before updating.
 
+
+### Publishing committed changes
+
+After committing, preview and publish to an initialized remote with the same
+repository ID:
+
+```powershell
+dawvc push --dry-run
+dawvc push
+```
+
+A push to the destination's checked-out branch is refused. For an ordinary shared
+repository, publish to an inactive branch instead:
+
+```powershell
+dawvc branch shared-mix
+dawvc push origin shared-mix
+```
+
+The recipient can fetch and explicitly pull that branch. Nothing is automatically
+installed in their workspace by Push. Bare repositories have no active worktree
+restriction; this change does not introduce an `init --bare` command. See the
+[CLI reference](CLI_Reference.md) for argument defaults and rejection codes.

@@ -1,6 +1,7 @@
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Hashing;
 using DawVcs.Domain.Remotes;
+using DawVcs.Domain.Repositories;
 using DawVcs.Infrastructure.Configuration;
 
 namespace DawVcs.Infrastructure.Remotes;
@@ -9,7 +10,7 @@ namespace DawVcs.Infrastructure.Remotes;
 /// Remote transport communicating with local directory paths, external/USB drives, or UNC network shares (FR-REM-001..005).
 /// Supports both non-bare repositories (with a .dawvc subdirectory) and bare repositories.
 /// </summary>
-public sealed class FileSystemRemoteTransport : IRemoteTransport
+public sealed partial class FileSystemRemoteTransport : IRemoteTransport, IRemotePushTransport
 {
     private readonly string _remoteUrl;
     private readonly string _configDir;
@@ -61,11 +62,15 @@ public sealed class FileSystemRemoteTransport : IRemoteTransport
         try
         {
             var config = YamlRepositoryConfigManager.ReadFromDirectory(_configDir);
-            return Task.FromResult(new RemoteHandshake(config.SchemaVersion, config.RepositoryId, "0.2.0"));
+            return Task.FromResult(new RemoteHandshake(config.SchemaVersion, config.RepositoryId, "0.2.0") { Configuration = config });
         }
         catch (FileNotFoundException ex)
         {
             throw new RemoteException($"Remote repository at '{_remoteUrl}' is missing configuration file 'dawvc.yaml'.", ex);
+        }
+        catch (IncompatibleRepositoryException ex)
+        {
+            throw new IncompatibleRemoteRepositoryException(ex.Message);
         }
         catch (Exception ex)
         {

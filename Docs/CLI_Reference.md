@@ -21,7 +21,8 @@ DAWVC uses deterministic process exit codes across all commands:
 | `6` | `DiagnosticFailure` | `doctor` or `fsck` found one or more unresolved warnings or errors. |
 | `7` | `InvalidArguments` | CLI syntax error or mutually incompatible flags passed. |
 | `8` | `RemoteError` | Remote transport failure, unreachable share/directory, repository ID mismatch, or schema error. |
-| `9` | `NonFastForward` | Push or pull rejected because local and remote branch histories have diverged (no fast-forward possible). |
+| `9` | `NonFastForward` | Push or pull rejected because the requested update is not a fast-forward (including a remote-ahead Push). |
+| `130` | `Cancelled` | Push was cooperatively cancelled; inspect the destination ref after an interrupted process. |
 
 ---
 
@@ -323,3 +324,35 @@ dawvc fsck [--artifacts] [--json] [--dir <path>]
 
 *Exits with code `6` if repository or artifact corruption is detected.*
 
+
+## `dawvc push` — filesystem collaboration extension
+
+```powershell
+dawvc push [<remote>] [<branch>] [--dry-run] [--dir <path>]
+```
+
+Pushes a committed local branch to an initialized remote with the same repository
+ID. Supports local paths, external drives, `file://` URLs and UNC shares. Without
+arguments it uses the active branch's upstream remote/branch, falling back to
+`origin` and the active branch name. An explicit remote uses the active branch
+name; an explicit branch selects that local branch and the same destination name.
+No refspec syntax, force-push or branch deletion is supported.
+
+`--dry-run` verifies the complete closure and reports missing object count/payload
+bytes without writing the destination or local tracking refs. Ordinary push sends
+missing objects through verified destination quarantine and atomically creates or
+fast-forwards the branch. Existing objects are verified and never overwritten.
+A checked-out non-bare destination branch is refused; select an inactive branch
+or use an existing bare repository. Push never updates either workspace.
+
+Fetch and integrate changes before retrying a rejected non-fast-forward push.
+Push does not automatically set upstream or update local remote-tracking refs;
+run `fetch` when you want refreshed tracking information. Dirty local work is not
+included: only the selected committed history is sent.
+
+Exit codes: 0 success/preview; 3 corrupt or unsafe objects; 7 invalid push arguments;
+8 remote rejection, unavailable/unsupported transport or concurrent writer;
+9 non-fast-forward; 130 cooperative cancellation. Parser syntax failures use the
+parser's nonzero code. Cancelled/failed operations can leave unreachable verified
+objects; inspect the destination ref before retrying after an interrupted process.
+See [Recovery Guide](Recovery_Guide.md) for cleanup boundaries.

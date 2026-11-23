@@ -1,4 +1,5 @@
 using DawVcs.Domain.Common;
+using DawVcs.Domain.Configuration;
 
 namespace DawVcs.Domain.Remotes;
 
@@ -8,4 +9,8 @@ namespace DawVcs.Domain.Remotes;
 public sealed record RemoteHandshake(
     int SchemaVersion,
     RepositoryId RepositoryId,
-    string? DawvcVersion = null);
+    string? DawvcVersion = null)
+{
+    /// <summary>Optional versioned configuration, read without opening a writable repository context.</summary>
+    public RepositoryConfig? Configuration { get; init; }
+}
