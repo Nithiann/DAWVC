@@ -22,7 +22,7 @@ DAWVC uses deterministic process exit codes across all commands:
 | `7` | `InvalidArguments` | CLI syntax error or mutually incompatible flags passed. |
 | `8` | `RemoteError` | Remote transport failure, unreachable share/directory, repository ID mismatch, or schema error. |
 | `9` | `NonFastForward` | Push or pull rejected because the requested update is not a fast-forward (including a remote-ahead Push). |
-| `130` | `Cancelled` | Push was cooperatively cancelled; inspect the destination ref after an interrupted process. |
+| `130` | `Cancelled` | A sync operation (clone/fetch/pull/push) was cooperatively cancelled; inspect the destination ref after an interrupted process. |
 
 ---
 
@@ -334,8 +334,9 @@ dawvc push [<remote>] [<branch>] [--dry-run] [--dir <path>]
 Pushes a committed local branch to an initialized remote with the same repository
 ID. Supports local paths, external drives, `file://` URLs, UNC shares and `dawvc://` over SSH. Without
 arguments it uses the active branch's upstream remote/branch, falling back to
-`origin` and the active branch name. An explicit remote uses the active branch
-name; an explicit branch selects that local branch and the same destination name.
+`origin` and the active branch name. An explicit remote matching the configured upstream keeps its mapped branch;
+a different remote defaults to the active local branch name. An explicit Push
+branch selects that local branch and the same destination name.
 No refspec syntax, force-push or branch deletion is supported.
 
 `--dry-run` verifies the complete closure and reports missing object count/payload
@@ -387,3 +388,44 @@ before storing them, without initiating an SSH connection.
 
 See [SSH hosting](Self_Hosting_SSH.md) for setup/permissions and
 [Remote Protocol](Remote_Protocol.md) for streaming, deadlines and error mapping.
+
+## `dawvc remote track` — configure the sync upstream
+
+```powershell
+dawvc remote track <remote> <remote-branch> [--local-branch <name>] [--dir <path>]
+```
+
+Persists the selected local branch's upstream (active branch by default), without
+contacting the host. The remote must already be configured and a named local branch
+must exist; the active unborn branch is allowed. The remote branch may be created
+by the next push. Invalid settings return exit 7 and preserve existing settings.
+The operation does not change repository identity or copy credentials. Clone
+continues to configure origin/upstream automatically.
+
+```powershell
+dawvc remote add backup dawvc://alice@nas/projects/song
+dawvc remote track backup published
+dawvc push
+dawvc pull
+```
+
+Both defaults now use backup/published for the active branch. `push backup` and
+`pull backup` preserve that mapping; selecting another remote falls back to the
+local branch name. `push backup alternate` publishes local alternate as remote
+alternate. `pull backup published` integrates remote published into the active
+local branch; it never switches to or updates a different local branch named
+published. Fetch receives the selected remote/branch before ancestry checks.
+
+CLI clone/fetch/pull/push forward Ctrl+C to the engine and return 130 when cancelled,
+after awaiting cleanup/compensation. Already published durable effects can remain.
+
+**Existing Pull preview limitation:** `pull --dry-run` relies on cached tracking
+metadata after Fetch's preview discards incoming metadata. Fresh remote changes
+can be missed or produce an error until an explicit Fetch has updated local
+objects/tracking. It is not a reliable fresh online preview or complete dirty-tree
+conflict preview. WP-SYNC-03 tracks that separate work.
+
+If the active local branch changes while Pull is fetching, it reports a repository
+state error before checkout. Fetched objects/tracking may already exist; select
+the intended local branch and retry. This check is not a lock against all
+concurrent local operations.

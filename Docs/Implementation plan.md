@@ -839,7 +839,7 @@ Application API, no GUI or server. Work proceeds in this order:
 - [x] PUSH-05: test create/update/no-op/rejection/corruption/cancellation/concurrency and CLI behavior.
 - [x] PUSH-06: update reference, workflow, limitations and architecture; Release build, full tests and format.
 - [x] PUSH-07a: publish branch `feat/cli-push`, based on `feat/core-gui-readiness`.
-- [ ] PUSH-07b: open PR for manual review; do not approve or merge. Blocked: GitHub GraphQL and REST PR creation both return `Forbidden`.
+- [x] PUSH-07b: integrated through maintainer-reviewed PR #17 into develop; agent did not approve or merge. API restrictions at initial publication are recorded below.
 
 Acceptance: only missing verified objects transfer; blobs/snapshots precede commit
 publication; refs change only after complete closure validation and expected-tip
@@ -894,7 +894,7 @@ DAWVC daemon or dependency on a particular hosting vendor.
 - [x] SSH-05: protocol, isolation, malformed input, lifecycle and sync acceptance tests.
 - [x] SSH-06: update architecture/security/hosting docs; full Release tests and format.
 - [x] SSH-07a: publish `feat/ssh-transport`, based on `feat/cli-push`.
-- [ ] SSH-07b: create PR for manual review. Blocked: both GitHub GraphQL and REST PR creation return `Forbidden`. Never approve or merge.
+- [x] SSH-07b: maintainer reviewed and merged PR #17 into develop (`19f37b7`). Agent did not approve or merge; original API restriction evidence remains below.
 
 Acceptance: existing clone/fetch/pull/push use the same engine through either
 filesystem or SSH. Unknown/changed host keys and interactive/password login fail
@@ -967,3 +967,70 @@ Follow-up validation: all 6 `SqliteStagingIndexTests` passed locally on Linux wi
 treated as errors. `dotnet format --no-restore --verify-no-changes` passed. The
 Windows-specific sharing failure is validated by the subsequent CI run; Linux
 results alone are not claimed as a native Windows reproduction.
+
+# 28. WP-SYNC-02 — Predictable upstream workflow and CLI cancellation
+
+Base: `origin/develop` at `19f37b7` (PR #17 merged by maintainer).
+Branch: `feat/sync-upstream-workflow`. Work proceeds in this order:
+
+- [x] SYNC-01: inspect merged baseline; identify upstream selection before Fetch and current-branch Pull gaps.
+- [x] SYNC-02: define shared Push/Pull target selection and preserve explicit overrides.
+- [x] SYNC-03: expose validated `remote track <remote> <remote-branch> [--local-branch name]`.
+- [x] SYNC-04: resolve Pull target before fetching; integrate into the active local branch.
+- [x] SYNC-05: forward CLI cancellation to clone/fetch/pull, retaining Push support and exit 130.
+- [x] SYNC-06: verify filesystem and transient SSH workflows, overrides, denied settings and cancellation.
+- [x] SYNC-07: update reference/workflow/limitations; local Release build, tests and formatting verified. Branch CI status is linked below.
+- [ ] SYNC-08: publish PR against develop for maintainer approval; never approve/merge.
+
+Acceptance: default Push and Pull use the active branch's configured upstream; an
+explicit matching remote preserves that mapping, a different remote defaults to
+the local branch name. Push's explicit branch selects a local branch and same
+destination name. Pull's explicit branch selects the remote source, never another
+local branch. Resolve once before Fetch and checkout; local HEAD remains active.
+Track validates configured remote and existing local branch (including active
+unborn branch), permits future remote branches, performs no connection/transfer
+and preserves repository identity. Clone keeps its origin/upstream setup.
+
+Deferred work, kept separate from this WP:
+
+- WP-SYNC-03: fresh Pull dry-run planning without relying on stale/missing local
+  tracking metadata; current Fetch dry-run discards incoming metadata before
+  Pull ancestry checks. This limitation must remain explicit, not marked fixed.
+- WP-SYNC-04: operator-facing bare repository initialization/cloning and first-publish
+  provisioning, with explicit matching repository identity.
+- Later: resumable/large-object transfer and real Windows OpenSSH/NAS/UNC coverage.
+
+Initial validation: the existing 24 Pull/remote-management Application tests
+passed. All 12 new workflow acceptance cases passed, including filesystem and
+transient SSH target selection, explicit matching/different remotes, current-branch
+integration, offline tracking and rejected settings preservation. The Linux
+`scripts/test_sync_cancellation.py` check exercised real SIGINT during blocked
+connection setup for all four sync commands and observed exit 130. Native Windows
+Ctrl+C remains unvalidated; backend/child-process tests are separate evidence.
+
+Final-review precondition: Pull now detects a different active branch after Fetch
+and throws typed RepositoryStateChangedException before checkout. A regression
+changes HEAD inside the fetch callback and asserts no checkout occurs; the error
+is classified as Validation for independent clients. This detects the long-fetch
+branch-switch window, not all possible concurrent local mutations.
+
+Final local validation (23 November 2026, Linux, SDK 10.0.404):
+
+- Full Release suite: 628 passed, 0 failed, 0 skipped. This includes 15 new workflow
+  acceptance cases and the branch-change-during-fetch regression.
+- Release build: 0 warnings/errors; formatting verification passed. No new
+  dependency, persisted schema, wire protocol or GUI code.
+- Real unprivileged OpenSSH loopback push/clone/fetch/pull passed with byte identity
+  and strict unknown/changed host-key rejection.
+- Linux SIGINT check: all four sync commands returned 130 and their SSH child
+  processes had exited. Windows native Ctrl+C remains a separate validation item.
+
+Branch CI (Windows/Ubuntu core and transient-process suites):
+[![WP-SYNC-02 CI](https://github.com/Nithiann/DAWVC/actions/workflows/ci.yml/badge.svg?branch=feat%2Fsync-upstream-workflow)](https://github.com/Nithiann/DAWVC/actions?query=branch%3Afeat%2Fsync-upstream-workflow)
+
+Current phase: implementation/local verification complete; publication and manual
+review against develop. If the existing GitHub API restriction persists, create
+the PR with the explicitly pinned comparison:
+https://github.com/Nithiann/DAWVC/compare/develop...feat/sync-upstream-workflow?expand=1
+The agent does not approve or merge. WP-SYNC-03 and WP-SYNC-04 remain deferred,
+not implicitly delivered by these changes.

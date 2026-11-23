@@ -114,3 +114,21 @@ boundaries apply unchanged. A lost publish reply does not imply rollback.
 Platform evidence is recorded in WP-SSH-01 in the implementation plan. Real Windows
 OpenSSH, specific NAS deployments and actual UNC/SMB storage need independent
 validation; a successful Linux loopback test does not establish those guarantees.
+
+## Upstream workflow and deferred preview work
+
+`remote track` configures existing local branches (including active unborn HEAD)
+against configured remotes; the remote branch may be created later. It does not
+probe permissions, host availability or repository identity. Those checks happen
+when transferring. Clone's automatic origin/upstream setup remains available.
+No automatic post-Push tracking update or `push --set-upstream` is introduced.
+
+Pull now resolves upstream before Fetch and explicit source branches integrate
+into the active local branch. However, fresh `pull --dry-run` remains incomplete:
+Fetch preview discards incoming metadata before Pull checks cached tracking refs
+and ancestry. New changes can be missed or an absent tracking branch can fail.
+An explicit Fetch can populate that cache, but writes objects/tracking itself.
+Fetch preview can also create temporary quarantine metadata/prune stale incoming
+directories. Fully fresh preview/no-write semantics are WP-SYNC-03. Do not treat
+this WP as a fix for those existing preview limitations. Bare-host provisioning
+remains WP-SYNC-04. Windows native Ctrl+C and NAS/UNC require separate validation.

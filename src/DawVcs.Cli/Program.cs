@@ -1029,6 +1029,31 @@ public static class Program
             }
         }, remoteDirOption);
 
+        var remoteTrackCommand = new Command("track", "Set the upstream remote branch for a local branch without contacting the host");
+        var trackRemoteArg = new Argument<string>("name", "Configured remote name");
+        var trackBranchArg = new Argument<string>("branch", "Remote branch name (may be created by a future push)");
+        var trackLocalOption = new Option<string?>("--local-branch", "Local branch (default: active branch)");
+        remoteTrackCommand.AddArgument(trackRemoteArg);
+        remoteTrackCommand.AddArgument(trackBranchArg);
+        remoteTrackCommand.AddOption(trackLocalOption);
+        remoteTrackCommand.AddOption(remoteDirOption);
+        remoteTrackCommand.SetHandler((InvocationContext invocation) =>
+        {
+            try
+            {
+                var parsed = invocation.ParseResult;
+                var result = serviceProvider.GetRequiredService<RemoteUseCase>().TrackRemote(new TrackRemoteRequest(
+                    ResolveRepoDirectory(parsed.GetValueForOption(remoteDirOption)),
+                    parsed.GetValueForArgument(trackRemoteArg), parsed.GetValueForArgument(trackBranchArg),
+                    parsed.GetValueForOption(trackLocalOption)), invocation.GetCancellationToken());
+                AnsiConsole.MarkupLine($"[green]✓[/] {Markup.Escape(result.LocalBranch.Value)} tracks {Markup.Escape(result.RemoteName)}/{Markup.Escape(result.RemoteBranch.Value)}.");
+            }
+            catch (ArgumentException ex) { invocation.ExitCode = 7; WriteError(ex.Message); }
+            catch (OperationCanceledException) { invocation.ExitCode = 130; WriteError("Upstream configuration cancelled."); }
+            catch (Exception ex) { invocation.ExitCode = 1; WriteError(ex.Message); }
+        });
+        remoteCommand.AddCommand(remoteTrackCommand);
+
         remoteCommand.AddCommand(remoteAddCommand);
         remoteCommand.AddCommand(remoteRemoveCommand);
         remoteCommand.AddCommand(remoteListCommand);
@@ -1061,13 +1086,18 @@ public static class Program
         fetchCommand.AddOption(fetchDryRunOption);
         fetchCommand.AddOption(fetchDirOption);
 
-        fetchCommand.SetHandler(async (remote, branch, dryRun, dir) =>
+        fetchCommand.SetHandler(async (InvocationContext invocation) =>
         {
+            var parsed = invocation.ParseResult;
+            var remote = parsed.GetValueForArgument(fetchRemoteArg);
+            var branch = parsed.GetValueForArgument(fetchBranchArg);
+            var dryRun = parsed.GetValueForOption(fetchDryRunOption);
+            var dir = parsed.GetValueForOption(fetchDirOption);
             try
             {
                 var repoDir = ResolveRepoDirectory(dir);
                 var useCase = serviceProvider.GetRequiredService<FetchUseCase>();
-                var result = await useCase.ExecuteAsync(new FetchRequest(repoDir, remote, branch, dryRun));
+                var result = await useCase.ExecuteAsync(new FetchRequest(repoDir, remote, branch, dryRun), invocation.GetCancellationToken());
 
                 if (result.IsDryRun)
                 {
@@ -1103,16 +1133,21 @@ public static class Program
             {
                 WriteError($"Security violation in remote snapshot (Exit Code 3): {ex.Message}", 3);
             }
+            catch (OperationCanceledException)
+            {
+                invocation.ExitCode = 130;
+                WriteError("Synchronization cancelled. Inspect repository state before retrying; cancellation does not guarantee rollback.");
+            }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
             }
-        }, fetchRemoteArg, fetchBranchArg, fetchDryRunOption, fetchDirOption);
+        });
 
         // --- dawvc pull ---
         var pullCommand = new Command("pull", "Fetch and integrate remote changes into the current branch (FR-PUL-001..012, AC-030..AC-037)");
         var pullRemoteArg = new Argument<string?>("remote", () => null, "Remote name to pull from (default: configured upstream or origin)");
-        var pullBranchArg = new Argument<string?>("branch", () => null, "Branch to pull (default: active branch)");
+        var pullBranchArg = new Argument<string?>("branch", () => null, "Remote source branch to integrate into the active local branch (default: upstream)");
         var pullForceOption = new Option<bool>("--force", "Force pull on a dirty workspace after creating a full recovery copy");
         var pullFfOnlyOption = new Option<bool>("--ff-only", () => true, "Refuse to merge and only allow fast-forward updates");
         var pullDryRunOption = new Option<bool>("--dry-run", "Simulate pull without modifying workspace or tracking branches");
@@ -1125,13 +1160,20 @@ public static class Program
         pullCommand.AddOption(pullDryRunOption);
         pullCommand.AddOption(pullDirOption);
 
-        pullCommand.SetHandler(async (remote, branch, force, ffOnly, dryRun, dir) =>
+        pullCommand.SetHandler(async (InvocationContext invocation) =>
         {
+            var parsed = invocation.ParseResult;
+            var remote = parsed.GetValueForArgument(pullRemoteArg);
+            var branch = parsed.GetValueForArgument(pullBranchArg);
+            var force = parsed.GetValueForOption(pullForceOption);
+            var ffOnly = parsed.GetValueForOption(pullFfOnlyOption);
+            var dryRun = parsed.GetValueForOption(pullDryRunOption);
+            var dir = parsed.GetValueForOption(pullDirOption);
             try
             {
                 var repoDir = ResolveRepoDirectory(dir);
                 var useCase = serviceProvider.GetRequiredService<PullUseCase>();
-                var result = await useCase.ExecuteAsync(new PullRequest(repoDir, remote, branch, force, ffOnly, dryRun));
+                var result = await useCase.ExecuteAsync(new PullRequest(repoDir, remote, branch, force, ffOnly, dryRun), invocation.GetCancellationToken());
 
                 if (result.IsDryRun)
                 {
@@ -1205,11 +1247,16 @@ public static class Program
             {
                 WriteError($"Security violation in remote snapshot (Exit Code 3): {ex.Message}", 3);
             }
+            catch (OperationCanceledException)
+            {
+                invocation.ExitCode = 130;
+                WriteError("Synchronization cancelled. Inspect repository state before retrying; cancellation does not guarantee rollback.");
+            }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
             }
-        }, pullRemoteArg, pullBranchArg, pullForceOption, pullFfOnlyOption, pullDryRunOption, pullDirOption);
+        });
 
         // --- dawvc push ---
         var pushCommand = new Command("push", "Push a local branch to a filesystem or dawvc:// SSH remote (fast-forward only)");
@@ -1259,12 +1306,16 @@ public static class Program
         cloneCommand.AddArgument(cloneDirArg);
         cloneCommand.AddOption(cloneForceOption);
 
-        cloneCommand.SetHandler(async (url, dir, force) =>
+        cloneCommand.SetHandler(async (InvocationContext invocation) =>
         {
+            var parsed = invocation.ParseResult;
+            var url = parsed.GetValueForArgument(cloneUrlArg);
+            var dir = parsed.GetValueForArgument(cloneDirArg);
+            var force = parsed.GetValueForOption(cloneForceOption);
             try
             {
                 var useCase = serviceProvider.GetRequiredService<CloneUseCase>();
-                var result = await useCase.ExecuteAsync(new CloneRequest(url, dir, force));
+                var result = await useCase.ExecuteAsync(new CloneRequest(url, dir, force), invocation.GetCancellationToken());
 
                 AnsiConsole.MarkupLine($"[green]✓[/] Cloned project [bold]{Markup.Escape(result.ProjectName)}[/] into [cyan]{Markup.Escape(PathRedactor.Redact(result.TargetDirectory))}[/]");
                 if (result.HeadCommit.HasValue)
@@ -1300,11 +1351,16 @@ public static class Program
             {
                 WriteError($"Security violation in remote snapshot (Exit Code 3): {ex.Message}", 3);
             }
+            catch (OperationCanceledException)
+            {
+                invocation.ExitCode = 130;
+                WriteError("Synchronization cancelled. Inspect repository state before retrying; cancellation does not guarantee rollback.");
+            }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
             }
-        }, cloneUrlArg, cloneDirArg, cloneForceOption);
+        });
 
         // Chronologically ordered workflow:
         // 1. Getting started / Setup

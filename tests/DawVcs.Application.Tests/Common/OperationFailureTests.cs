@@ -1,6 +1,7 @@
 using DawVcs.Application.Common;
 using DawVcs.Application.Exceptions;
 using DawVcs.Domain.Remotes;
+using DawVcs.Domain.Repositories;
 using DawVcs.Domain.Storage;
 
 using FluentAssertions;
@@ -16,6 +17,8 @@ public sealed class OperationFailureTests
     {
         OperationFailure.FromException(new InvalidOperationException("cancelled timeout integrity"))
             .Category.Should().Be(OperationFailureCategory.Unknown);
+        OperationFailure.FromException(new RepositoryStateChangedException("branch changed"))
+            .Category.Should().Be(OperationFailureCategory.Validation);
         OperationFailure.FromException(new TimeoutException("cancelled"))
             .Category.Should().Be(OperationFailureCategory.Timeout);
         OperationFailure.FromException(new OperationCanceledException("timeout"))

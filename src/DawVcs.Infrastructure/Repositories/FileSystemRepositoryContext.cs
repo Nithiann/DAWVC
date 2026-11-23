@@ -475,7 +475,7 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
         {
             Directory.CreateDirectory(dir);
         }
-        File.WriteAllBytes(_remotesFilePath, bytes);
+        AtomicFileWriter.WriteAtomic(_remotesFilePath, stream => stream.Write(bytes));
     }
 
     private sealed class RemotesConfigDto

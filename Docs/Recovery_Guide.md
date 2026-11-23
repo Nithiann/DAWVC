@@ -156,3 +156,12 @@ branch was unchanged. Strict host-key failure requires independent verification
 of the host identity. Never disable verification or delete known_hosts entries
 merely to bypass an unexpected key change. Preserve evidence and fix the host
 policy/key permissions locally for denied access; protocol errors omit raw paths.
+
+## Cancelled CLI synchronization
+
+Clone, Fetch and Pull now forward Ctrl+C to the engine, like Push, and return 130
+after awaited cleanup/compensation. A cancellation result does not guarantee
+unchanged objects/configuration/workspace or remote refs. Follow the operation's
+recovery guidance above, inspect refs/workspace and preserve retained paths before
+retrying. `remote track` is a separate local settings operation, not part of remote
+publication; an unsuccessful Push does not implicitly rewrite upstream settings.

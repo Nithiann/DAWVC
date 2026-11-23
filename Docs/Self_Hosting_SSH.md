@@ -118,3 +118,12 @@ known_hosts/configuration and test repositories, then cleans them up. It verifie
 real push/clone/fetch/pull, byte identity and rejection of unknown/changed keys.
 No production SSH configuration or account state is changed. The source checkout
 must have secure ancestor ownership/modes, as required by OpenSSH StrictModes.
+
+## Choosing a different upstream
+
+After `remote add backup dawvc://alice@nas/projects/song`, use
+`remote track backup published` to make the active local branch push to and pull
+from backup/published. Add `--local-branch name` to configure another existing local
+branch. The host is not contacted while storing this local preference. The same
+rules apply to filesystem remotes. Explicit `pull backup published` always updates
+the active local branch; a matching explicit remote retains its upstream mapping.

@@ -89,3 +89,27 @@ work for local and SSH remotes. No SSH subprocess is started merely by validatin
 or adding a remote. Keys/host trust come from OpenSSH configuration and agent,
 not engine or GUI credential fields. A host exposes only aliases in its policy
 through transient `serve`. See Remote_Protocol.md and Self_Hosting_SSH.md.
+
+## Upstream configuration and sync target selection
+
+Call `RemoteUseCase.TrackRemote(TrackRemoteRequest, CancellationToken)` to configure
+an existing local branch against a configured remote; active unborn HEAD is valid.
+It performs no network I/O. Existing settings are atomically replaced and other
+remote/upstream entries are retained. Resolve Push/Pull through the shared use
+cases rather than reimplementing target rules in a client. Pull's optional Branch
+is the remote source; its result Branch is always the active local destination.
+A matching explicit remote preserves an upstream mapping.
+
+CLI handlers now use the same per-invocation cancellation contract for clone,
+fetch, pull and push. Fresh Pull dry-run metadata remains a known deferred issue
+(WP-SYNC-03), distinct from this selection fix.
+
+For developer validation, `scripts/test_sync_cancellation.py` sends real SIGINT to
+the Linux CLI while an isolated SSH shim blocks connection setup. It checks exit
+130 and SSH child termination for all four sync commands, without a real host or
+keys. Set DAWVC_DOTNET if needed. This is not native Windows Ctrl+C validation.
+
+Pull rechecks the active branch after Fetch. `RepositoryStateChangedException`
+(classified as Validation) stops checkout if the branch changed during transfer.
+Fetched metadata may remain. This precondition check is not a cross-process lock
+against all concurrent local mutations.

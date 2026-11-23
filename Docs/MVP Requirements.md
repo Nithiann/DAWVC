@@ -751,3 +751,18 @@ missing closure objects, interrupted transfers, expected-tip races and CLI exits
 | FR-SSH-007 | Cancellation, EOF, protocol errors and process exit clean up receiving sessions and release locks. A lost reply after publication is ambiguous and requires ref inspection. |
 | FR-SSH-008 | Serve stdout is protocol-only. Errors carry safe typed codes rather than raw host paths/exception messages. Private keys/passwords are never stored in repository configuration or wire frames. |
 | FR-SSH-009 | PC, NAS and server hosting use identical SSH/DAWVC behavior where compatible OpenSSH and DAWVC are installed. Existing GitHub/GitLab Git endpoints are not DAWVC protocol endpoints. |
+
+# Post-MVP amendment: sync target selection (23 November 2026)
+
+| ID | Requirement |
+|---|---|
+| FR-SYN-001 | Push/Pull resolve the configured upstream remote/branch before transfer; fallback is origin and local branch name. |
+| FR-SYN-002 | Explicit matching remote preserves upstream branch mapping; another remote defaults to the local branch name. Explicit Push branch selects that local and destination branch; explicit Pull branch selects the remote source into the active local branch. |
+| FR-SYN-003 | `remote track <remote> <remote-branch> [--local-branch name]` validates names, configured remote and an existing local branch (active unborn allowed), then persists upstream without contacting the host. Unknown remote branches are allowed for first publish. |
+| FR-SYN-004 | Tracking updates preserve other remote/upstream settings and use atomic file replacement; no persisted schema change. |
+| FR-SYN-005 | Pull fetches only its selected remote/source branch before ancestry/materialization; it does not move another local branch or switch HEAD because a remote branch argument was supplied. |
+| FR-SYN-006 | CLI clone/fetch/pull/push forward Ctrl+C cancellation tokens, await engine completion/compensation, and report cancellation with exit 130. Cancellation still does not imply rollback of all durable effects. |
+| FR-SYN-007 | If the active local branch changes during Fetch, Pull stops before checkout with a typed repository-state error. Already fetched objects/tracking may remain. This is not operation-wide cross-process locking. |
+
+Pull dry-run freshness is tracked separately in WP-SYNC-03; no new guarantee of
+accurate online preview is introduced by target selection changes.

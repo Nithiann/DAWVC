@@ -137,3 +137,11 @@ and server hosts use the same protocol; standard Git hosting is a different
 protocol. A non-bare host's active branch cannot receive Push. Push publishes
 committed history without changing the host workspace; divergence requires
 explicit integration, not force-push.
+
+### Tracking a shared branch
+
+Use `dawvc remote track origin shared-mix` to map the active local branch to a
+differently named remote branch before publishing. Plain Push/Pull then use that
+mapping. `pull origin shared-mix` integrates into the current local branch; use
+`switch` separately when you intend to change local branches. Cancellation is
+available on clone/fetch/pull/push, but does not undo every durable effect.
