@@ -59,7 +59,7 @@ public static class YamlRepositoryConfigManager
 
         if (schemaVersion > RepositoryConfig.CurrentSchemaVersion)
         {
-            throw new InvalidOperationException($"Unsupported repository schemaVersion {schemaVersion}. Current supported version is {RepositoryConfig.CurrentSchemaVersion}.");
+            throw new DawVcs.Domain.Repositories.IncompatibleRepositoryException($"Unsupported repository schemaVersion {schemaVersion}. Current supported version is {RepositoryConfig.CurrentSchemaVersion}.");
         }
 
         if (!rawDict.TryGetValue("repositoryId", out var repoIdObj) ||

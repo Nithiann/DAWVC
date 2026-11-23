@@ -43,3 +43,10 @@
   - `blake3` native C acceleration is dual-licensed under CC0 and Apache-2.0.
 - **Single-File Bundling**:
   All assemblies and required native libraries are compressed into the single `dawvc.exe` binary without external runtime obligations.
+
+## Optional external SSH runtime prerequisite
+
+The SSH extension invokes the operating system's OpenSSH client (`ssh`); SSH hosts
+run their own OpenSSH server and the DAWVC `serve` entry point. No SSH NuGet library
+or OpenSSH executable is redistributed by this change. Operators maintain their
+OS OpenSSH updates and license notices. Filesystem-only clients do not need SSH.

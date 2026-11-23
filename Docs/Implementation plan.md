@@ -802,7 +802,12 @@ When requirements change, `DAWVC_MVP_Requirements.md` must be amended prior to c
 
 # 25. Post-MVP Backlog
 
-The following items are recognized but explicitly deferred beyond v0.1:
+The following items were explicitly deferred beyond v0.1. The filesystem
+clone/fetch/pull baseline and Push extension are now implemented on the core/Push
+feature branches; hosted transports remain deferred. See section 26 for current
+Push scope and validation.
+
+Historical backlog:
 
 - Remote object negotiation, synchronization protocol, and central server;
 - `dawvc clone`, `fetch`, `push`, and `pull`;
@@ -821,3 +826,144 @@ The following items are recognized but explicitly deferred beyond v0.1:
 - Automatic update checks and opt-in crash telemetry.
 
 This backlog will be prioritized only after achieving the v0.1 MVP release gate.
+
+# 26. CLI remote completion — WP-PUSH-01
+
+Base: `feat/core-gui-readiness`. Scope: filesystem/file:// and UNC push, shared
+Application API, no GUI or server. Work proceeds in this order:
+
+- [x] PUSH-01: inspect existing transports, CLI and documentation; define requirements.
+- [x] PUSH-02: implement verified object reception and conditional, locked ref publication.
+- [x] PUSH-03: implement full closure planning, fast-forward checks, dry-run, cancellation and progress.
+- [x] PUSH-04: expose `dawvc push` and shared Bootstrap registration.
+- [x] PUSH-05: test create/update/no-op/rejection/corruption/cancellation/concurrency and CLI behavior.
+- [x] PUSH-06: update reference, workflow, limitations and architecture; Release build, full tests and format.
+- [x] PUSH-07a: publish branch `feat/cli-push`, based on `feat/core-gui-readiness`.
+- [ ] PUSH-07b: open PR for manual review; do not approve or merge. Blocked: GitHub GraphQL and REST PR creation both return `Forbidden`.
+
+Acceptance: only missing verified objects transfer; blobs/snapshots precede commit
+publication; refs change only after complete closure validation and expected-tip
+comparison. Reject checked-out destination branches, incompatible repositories,
+non-fast-forward updates and concurrent writers. Dry-run performs no destination
+writes. Failure before publication leaves the remote ref unchanged; cancellation
+after publication may observe a completed push. Unreachable promoted objects may
+remain after failure. No force-push, branch deletion, authentication or new network
+transport. See FR-PSH-001..010 in the requirements amendment and ADR-REM-001.
+
+Implementation note: the push/clone acceptance flow revealed that Clone's source
+configuration lookup created `.dawvc` inside bare remotes. Filesystem handshake
+configuration now avoids that mutation. Clone publishes its local HEAD through
+the same context method/ref lock as other cooperating writers. Existing CI also
+runs for `feat/**` pushes and feature-base PRs so stacked work can be validated.
+
+Validation evidence (23 November 2026, Linux, .NET SDK 10.0.404):
+
+- Full Release suite: 570 passed, 0 failed, 0 skipped, including 25 Push acceptance
+  cases and shared Bootstrap registration coverage.
+- Push → Clone → fsck verifies byte-identical materialization and no `.dawvc`
+  creation in the bare source. Tests cover second-parent ancestry, non-fast-forward
+  rejection, identity/schema, dry-run bytes, staged corruption, missing ancestor
+  blobs, unsafe paths, cancellation, stale tips, active HEAD changes and ref locks.
+- Separate Linux CLI symlink check: exit 8, external target preserved.
+- Windows regression CI remains pending. An actual UNC/SMB share has not been
+  exercised; the current CI workflow does not provision one. Do not interpret
+  successful local tests as network-share certification.
+- Final build/format and publication status are recorded below when completed.
+
+Final local checks: Release build 0 warnings/errors;
+`dotnet format --no-restore --verify-no-changes` passed. PUSH-06 is complete for
+local validation; Windows and actual UNC-share validation remain explicitly
+pending as noted above. PUSH-07b remains open until PR creation is confirmed.
+
+Publication: implementation commit `bb955dc` was pushed to `feat/cli-push`.
+PR creation was attempted through both `gh pr create` and the REST pulls endpoint;
+both were denied with `Forbidden`. Manual creation link (base explicitly pinned):
+https://github.com/Nithiann/DAWVC/compare/feat/core-gui-readiness...feat/cli-push?expand=1
+No approval or merge was performed.
+
+# 27. WP-SSH-01 — Hosting-independent synchronization over SSH
+
+Base: `feat/cli-push`. User-approved direction: `dawvc://` addresses use SSH;
+OpenSSH starts a temporary `dawvc serve` process per connection. No permanent
+DAWVC daemon or dependency on a particular hosting vendor.
+
+- [x] SSH-01: inspect current transports and specify protocol/security boundaries.
+- [x] SSH-02: bounded versioned stdio framing and host repository allowlist.
+- [x] SSH-03: strict `dawvc://` parsing and OpenSSH transport for all sync use cases.
+- [x] SSH-04: transient `serve` command, read/write permissions, streaming and cleanup.
+- [x] SSH-05: protocol, isolation, malformed input, lifecycle and sync acceptance tests.
+- [x] SSH-06: update architecture/security/hosting docs; full Release tests and format.
+- [x] SSH-07a: publish `feat/ssh-transport`, based on `feat/cli-push`.
+- [ ] SSH-07b: create PR for manual review. Blocked: both GitHub GraphQL and REST PR creation return `Forbidden`. Never approve or merge.
+
+Acceptance: existing clone/fetch/pull/push use the same engine through either
+filesystem or SSH. Unknown/changed host keys and interactive/password login fail
+closed. URL repository names map to operator-configured aliases, never arbitrary
+remote filesystem paths. Forced commands select host policy; client input cannot
+change it. Protocol frames, object lengths, request counts, session duration and
+transfer totals are bounded. Disconnect/cancellation releases push sessions.
+Native Windows/OpenSSH and NAS/network validation must be identified separately
+from Linux/local-process protocol tests. See ADR-REM-002 and Remote_Protocol.md.
+
+SSH integration evidence so far: local child-process protocol acceptance exercises
+Push → Clone → Fetch → Pull, byte identity, read-only/unknown alias denial, frame
+version/length limits, corrupt upload, abandoned downloads, EOF lock/session cleanup
+and cancellation even on an input stream that ignores cancellation. A real Linux
+OpenSSH daemon with temporary Ed25519 host/client keys and strict ownership/host
+verification passed all four sync operations; unknown and changed host keys were
+refused with exit 8. No production SSH settings or accounts were modified.
+
+Validation evidence (23 November 2026, Linux, .NET SDK 10.0.404):
+
+- Full core/CLI solution: 612 tests passed, 0 failed, 0 skipped (41 new SSH cases
+  plus a shared incoming-envelope trailing-byte integrity regression).
+- Release build: 0 warnings, 0 errors; existing central NuGet catalog and solution
+  membership unchanged. No new GUI or SSH NuGet dependency.
+- `scripts/test_ssh_loopback.py`: real unprivileged localhost OpenSSH daemon,
+  temporary Ed25519 keys, strict host verification, all four synchronization
+  commands, byte identity and denied unknown/changed keys passed. Temporary
+  resources were removed; no production SSH configuration was changed.
+- Linux CI now runs the full solution, including transient-process protocol tests.
+  The native OpenSSH smoke script is an explicit operator/developer check, not
+  silently assumed to run in every CI job.
+- Windows OpenSSH, vendor NAS deployments and real UNC/SMB stores remain
+  unvalidated here. SSH-06 local validation does not certify those environments.
+
+Final local formatting: `dotnet format --no-restore --verify-no-changes` passed.
+SSH-06 is complete for local checks; external platform validation remains open
+as stated above. SSH-07 publication/PR creation is recorded separately below.
+
+Publication: implementation commit `fd32e4b` was pushed to `feat/ssh-transport`.
+Final review additionally tightened shared incoming verification to refuse trailing
+bytes after an otherwise valid envelope, so filesystem and SSH fetch/clone have
+the same exact-length rule. The full suite then passed at 612 tests.
+
+PR creation was attempted with `gh pr create` and the REST pulls endpoint; both
+returned `Forbidden`. Manual compare/PR link (base pinned to the Push branch):
+https://github.com/Nithiann/DAWVC/compare/feat/cli-push...feat/ssh-transport?expand=1
+No approval or merge was performed.
+
+Final integrity follow-up verification: full Release suite 612/612 passed with no
+skips, explicit Release build 0 warnings/errors, formatting verification passed,
+and the real OpenSSH loopback script passed again with the exact-length check.
+The loopback flow includes a second commit, verifies Fetch leaves the clone
+workspace unchanged, and verifies Pull installs the updated bytes.
+
+### Windows CI follow-up — corrupt-index preservation test
+
+The Windows run at
+https://github.com/Nithiann/DAWVC/actions/runs/45173332329 failed in
+`CorruptIndex_IsPreservedInsteadOfRecreatingAndLosingStagedEntries` while reading
+the raw database after the expected corrupt-index exception. The test kept its
+index alive with a method-scoped `using var`; pooled native handles were still
+owned by that index. Scope the failed read in a `using` block and dispose the index
+before comparing database bytes. Existing disposal tests cover native-handle
+release and isolation from unrelated pools. The corruption/preservation assertion
+remains unchanged; no production behavior, global pool clearing or retry is added.
+The recovery guide now states this offline-inspection lifetime explicitly.
+
+Follow-up validation: all 6 `SqliteStagingIndexTests` passed locally on Linux with
+0 failures/skips; the project and dependencies built successfully with warnings
+treated as errors. `dotnet format --no-restore --verify-no-changes` passed. The
+Windows-specific sharing failure is validated by the subsequent CI run; Linux
+results alone are not claimed as a native Windows reproduction.

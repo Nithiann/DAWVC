@@ -118,3 +118,22 @@ To prevent repository bloat and respect software licenses:
 - Large multi-gigabyte instrument libraries (e.g. Native Instruments Kontakt, Spectrasonics Omnisphere, reFX Nexus) are **not** bundled by default.
 - They are classified as `UserChoice` or `ReferenceOnly`.
 - If Collaborator B does not have a required commercial library installed, `dawvc doctor` will clearly flag it as a missing plugin or content dependency without corrupting or breaking the project file.
+
+## Hosting-independent collaboration over SSH
+
+A host operator configures an alias and per-key/account read/write permissions
+([setup](Self_Hosting_SSH.md)). Contributors can then use:
+
+```powershell
+dawvc clone dawvc://alice@studio-host/projects/song Song
+cd Song
+# Edit, stage and commit as usual
+dawvc push
+dawvc pull
+```
+
+Use independently verified SSH host keys and public-key authentication. PC, NAS
+and server hosts use the same protocol; standard Git hosting is a different
+protocol. A non-bare host's active branch cannot receive Push. Push publishes
+committed history without changing the host workspace; divergence requires
+explicit integration, not force-push.

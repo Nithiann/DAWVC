@@ -39,6 +39,7 @@ public sealed class QuarantineObjectStore : IQuarantineStore
 
     public Task<Stream> CreateIncomingWriteStreamAsync(ContentHash hash, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         ObjectDisposedException.ThrowIf(_disposed, this);
         var filePath = GetIncomingPath(hash);
 
@@ -55,6 +56,7 @@ public sealed class QuarantineObjectStore : IQuarantineStore
 
     public Task PromoteAsync(VerifiedIncomingObject verifiedObject, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(verifiedObject);
 

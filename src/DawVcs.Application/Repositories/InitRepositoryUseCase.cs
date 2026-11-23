@@ -38,10 +38,11 @@ public sealed class InitRepositoryUseCase : IUseCase<InitRequest, InitResult>
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        cancellationToken.ThrowIfCancellationRequested();
         var targetDir = Path.GetFullPath(request.TargetDirectory);
         Directory.CreateDirectory(targetDir);
 
-        var context = _contextFactory(targetDir);
+        using var context = _contextFactory(targetDir);
         var dotDawvc = Path.Combine(targetDir, ".dawvc");
         var configPath = Path.Combine(targetDir, "dawvc.yaml");
 
@@ -50,8 +51,10 @@ public sealed class InitRepositoryUseCase : IUseCase<InitRequest, InitResult>
         {
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var existingConfig = context.LoadConfig();
                 var currentBranch = context.GetCurrentBranch();
+                cancellationToken.ThrowIfCancellationRequested();
                 return Task.FromResult(new InitResult(
                     existingConfig.RepositoryId,
                     existingConfig.ProjectName,
@@ -59,11 +62,17 @@ public sealed class InitRepositoryUseCase : IUseCase<InitRequest, InitResult>
                     currentBranch,
                     WasAlreadyInitialized: true));
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch
             {
                 // Re-initialize if corrupt
             }
         }
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         var projectName = !string.IsNullOrWhiteSpace(request.ProjectName)
             ? request.ProjectName

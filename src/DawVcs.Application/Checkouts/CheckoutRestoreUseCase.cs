@@ -28,19 +28,26 @@ public sealed class CheckoutRestoreUseCase : IUseCase<CheckoutRestoreRequest, Ch
         _checkoutUseCase = new CheckoutUseCase(contextFactory);
     }
 
-    public async Task<CheckoutRestoreResult> ExecuteAsync(CheckoutRestoreRequest request, CancellationToken cancellationToken = default)
+    public Task<CheckoutRestoreResult> ExecuteAsync(CheckoutRestoreRequest request, CancellationToken cancellationToken = default)
+        => ExecuteAsync(request, cancellationToken, null);
+
+    public async Task<CheckoutRestoreResult> ExecuteAsync(CheckoutRestoreRequest request, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         var result = await _checkoutUseCase.ExecuteAsync(new CheckoutRequest(
             request.RepositoryDirectory,
             request.Reference,
-            request.RestoreToDirectory), cancellationToken).ConfigureAwait(false);
+            request.RestoreToDirectory), cancellationToken,
+            progress is null ? null : new NestedOperationProgress(progress)).ConfigureAwait(false);
 
-        return new CheckoutRestoreResult(
+        var restoreResult = new CheckoutRestoreResult(
             result.CommitId,
             result.SnapshotId,
             result.TargetDirectory,
             result.RestoredFiles);
+
+        progress?.Report(new OperationProgress(OperationStage.Completed));
+        return restoreResult;
     }
 }

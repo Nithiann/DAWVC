@@ -1,9 +1,8 @@
 using System.CommandLine;
+using System.CommandLine.Invocation;
 using System.Text.Json;
 
 using DawVcs.Adapters.Abstractions;
-using DawVcs.Adapters.FLStudio;
-using DawVcs.Application.Adapters;
 using DawVcs.Application.Branches;
 using DawVcs.Application.Checkouts;
 using DawVcs.Application.Commits;
@@ -15,12 +14,12 @@ using DawVcs.Application.Remotes;
 using DawVcs.Application.Repositories;
 using DawVcs.Application.Scanning;
 using DawVcs.Application.Staging;
+using DawVcs.Bootstrap;
 using DawVcs.Domain.Remotes;
 using DawVcs.Domain.Repositories;
 using DawVcs.Domain.Storage;
-using DawVcs.Infrastructure.Remotes;
+using DawVcs.Infrastructure.Remotes.Ssh;
 using DawVcs.Infrastructure.Repositories;
-using DawVcs.Infrastructure.Storage;
 
 using Microsoft.Extensions.DependencyInjection;
 
@@ -52,53 +51,30 @@ public static class Program
         }
 
         var services = new ServiceCollection();
-        services.AddSingleton<Func<string, IRepositoryContext>>(sp => dir => new FileSystemRepositoryContext(dir));
-        services.AddSingleton<IDawAdapterRegistry>(sp => new DawAdapterRegistry([new FLStudioAdapter()]));
-        services.AddTransient<InitRepositoryUseCase>();
-        services.AddTransient<CommitUseCase>(sp => new CommitUseCase(
-            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
-            sp.GetRequiredService<IDawAdapterRegistry>()));
-        services.AddTransient<LogUseCase>();
-        services.AddTransient<CheckoutRestoreUseCase>();
-        services.AddTransient<CheckoutUseCase>(sp => new CheckoutUseCase(
-            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
-            sp.GetRequiredService<IDawAdapterRegistry>()));
-        services.AddTransient<BindDependencyUseCase>();
-        services.AddTransient<StatusUseCase>();
-        services.AddTransient<AddUseCase>();
-        services.AddTransient<ScanUseCase>();
-        services.AddTransient<BranchUseCase>();
-        services.AddTransient<SwitchUseCase>(sp => new SwitchUseCase(
-            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
-            sp.GetRequiredService<IDawAdapterRegistry>()));
-        services.AddTransient<DoctorUseCase>(sp => new DoctorUseCase(
-            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
-            sp.GetRequiredService<IDawAdapterRegistry>()));
-        services.AddTransient<FsckUseCase>(sp => new FsckUseCase(
-            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
-            sp.GetRequiredService<IDawAdapterRegistry>()));
-        services.AddTransient<RemoteUseCase>();
-        services.AddSingleton<IRemoteTransportFactory, DefaultRemoteTransportFactory>();
-        services.AddTransient<Func<string, IQuarantineStore>>(_ => dir => new QuarantineObjectStore(dir));
-        services.AddTransient<ObjectGraphWalker>();
-        services.AddTransient<FetchUseCase>();
-        services.AddTransient<AncestryService>();
-        services.AddTransient<PullUseCase>(sp => new PullUseCase(
-            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
-            sp.GetRequiredService<FetchUseCase>(),
-            sp.GetRequiredService<CheckoutUseCase>(),
-            sp.GetRequiredService<AncestryService>(),
-            sp.GetRequiredService<DoctorUseCase>()));
-        services.AddTransient<CloneUseCase>(sp => new CloneUseCase(
-            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
-            sp.GetRequiredService<IRemoteTransportFactory>(),
-            sp.GetRequiredService<FetchUseCase>(),
-            sp.GetRequiredService<CheckoutUseCase>(),
-            sp.GetRequiredService<DoctorUseCase>()));
+        services.AddDawVcs();
 
         using var serviceProvider = services.BuildServiceProvider();
 
         var rootCommand = new RootCommand("DAWVC — Version control and dependency management for DAWs");
+
+        // Protocol-only stdout: this command runs transiently under OpenSSH.
+        var serveCommand = new Command("serve", "Serve allowlisted repositories over an SSH stdio session");
+        var serveConfig = new Option<string?>("--config", "Host-owned policy file (default: ~/.config/dawvc/serve.json)");
+        serveCommand.AddOption(serveConfig);
+        serveCommand.SetHandler(async (InvocationContext invocation) =>
+        {
+            try
+            {
+                var policy = ServeConfiguration.Load(invocation.ParseResult.GetValueForOption(serveConfig) ?? ServeConfiguration.DefaultPath);
+                invocation.ExitCode = await RemoteProtocolServer.RunAsync(Console.OpenStandardInput(), Console.OpenStandardOutput(), policy, invocation.GetCancellationToken());
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or ArgumentException or DawVcs.Domain.Remotes.RemoteException)
+            {
+                Console.Error.WriteLine("DAWVC host policy could not be loaded. Check the host configuration and permissions locally.");
+                invocation.ExitCode = 8;
+            }
+        });
+        rootCommand.AddCommand(serveCommand);
 
         // --- dawvc init ---
         var initCommand = new Command("init", "Initialize a new DAWVC repository");
@@ -1235,6 +1211,44 @@ public static class Program
             }
         }, pullRemoteArg, pullBranchArg, pullForceOption, pullFfOnlyOption, pullDryRunOption, pullDirOption);
 
+        // --- dawvc push ---
+        var pushCommand = new Command("push", "Push a local branch to a filesystem or dawvc:// SSH remote (fast-forward only)");
+        var pushRemoteArg = new Argument<string?>("remote", () => null, "Destination remote (default: upstream or origin)");
+        var pushBranchArg = new Argument<string?>("branch", () => null, "Local and destination branch (default: active branch/upstream)");
+        var pushDryRunOption = new Option<bool>("--dry-run", "Verify and preview without destination writes");
+        var pushDirOption = new Option<string?>("--dir", "Repository directory");
+        pushCommand.AddArgument(pushRemoteArg);
+        pushCommand.AddArgument(pushBranchArg);
+        pushCommand.AddOption(pushDryRunOption);
+        pushCommand.AddOption(pushDirOption);
+        pushCommand.SetHandler(async (InvocationContext invocation) =>
+        {
+            try
+            {
+                var parsed = invocation.ParseResult;
+                var useCase = serviceProvider.GetRequiredService<PushUseCase>();
+                var result = await useCase.ExecuteAsync(new PushRequest(
+                    ResolveRepoDirectory(parsed.GetValueForOption(pushDirOption)),
+                    parsed.GetValueForArgument(pushRemoteArg), parsed.GetValueForArgument(pushBranchArg),
+                    parsed.GetValueForOption(pushDryRunOption)), invocation.GetCancellationToken());
+                var action = result.IsDryRun ? "Would push" : "Pushed";
+                var message = result.UpToDate ? $"Already up to date: {result.RemoteName}/{result.RemoteBranch.Value}."
+                    : $"{action} {result.LocalBranch.Value} to {result.RemoteName}/{result.RemoteBranch.Value}: {result.ObjectsTransferred} object(s), {FormatBytes(result.BytesTransferred)} payload.";
+                AnsiConsole.MarkupLine($"[green]✓[/] {Markup.Escape(PathRedactor.Redact(message))}");
+            }
+            catch (PushNonFastForwardException ex) { invocation.ExitCode = 9; WriteError(ex.Message); }
+            catch (RemoteException ex) { invocation.ExitCode = 8; WriteError(ex.Message); }
+            catch (InvalidEnvelopeException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
+            catch (PathSecurityException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
+            catch (FileNotFoundException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
+            catch (OperationCanceledException) { invocation.ExitCode = 130; WriteError("Push cancelled. If publication already finished, the destination may have advanced; inspect its branch before retrying."); }
+            catch (ArgumentException ex) { invocation.ExitCode = 7; WriteError(ex.Message); }
+            catch (NotSupportedException ex) { invocation.ExitCode = 8; WriteError(ex.Message); }
+            catch (IOException ex) { invocation.ExitCode = 8; WriteError(ex.Message); }
+            catch (UnauthorizedAccessException ex) { invocation.ExitCode = 8; WriteError(ex.Message); }
+            catch (Exception ex) { invocation.ExitCode = 1; WriteError(ex.Message); }
+        });
+
         // --- dawvc clone ---
         var cloneCommand = new Command("clone", "Clone a remote DAWVC repository into a new directory (FR-REM-001..012, FR-PUL-001..012)");
         var cloneUrlArg = new Argument<string>("url", "URL, filesystem path, or network share of the remote repository to clone");
@@ -1313,6 +1327,7 @@ public static class Program
         rootCommand.AddCommand(remoteCommand);
         rootCommand.AddCommand(fetchCommand);
         rootCommand.AddCommand(pullCommand);
+        rootCommand.AddCommand(pushCommand);
 
         // 5. Diagnostics, reproducibility & maintenance
         rootCommand.AddCommand(doctorCommand);

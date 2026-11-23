@@ -124,15 +124,22 @@ public sealed class LooseObjectStore : IObjectStore
         }
 
         var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.Asynchronous);
-        var header = await ObjectEnvelopeReader.ReadHeaderAsync(stream, cancellationToken).ConfigureAwait(false);
-
-        if (header.PayloadHash != hash)
+        try
         {
-            stream.Dispose();
-            throw new PayloadHashMismatchException($"Envelope header hash mismatch! Expected {hash}, but header has {header.PayloadHash}.");
-        }
+            var header = await ObjectEnvelopeReader.ReadHeaderAsync(stream, cancellationToken).ConfigureAwait(false);
 
-        return new PayloadSliceStream(stream, ObjectEnvelopeHeader.HeaderSize, (long)header.PayloadLength);
+            if (header.PayloadHash != hash)
+            {
+                throw new PayloadHashMismatchException($"Envelope header hash mismatch! Expected {hash}, but header has {header.PayloadHash}.");
+            }
+
+            return new PayloadSliceStream(stream, ObjectEnvelopeHeader.HeaderSize, (long)header.PayloadLength);
+        }
+        catch
+        {
+            await stream.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
     }
 
     public async Task<byte[]> ReadObjectPayloadAsync(ContentHash hash, CancellationToken cancellationToken = default)

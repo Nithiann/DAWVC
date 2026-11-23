@@ -715,3 +715,39 @@ The following capabilities are formally deferred to post-MVP releases:
 - Collaboration snapshots and cross-DAW project exchange;
 - Object compression, CDC chunking, and partial checkout;
 - Automated telemetry and crash reporting.
+
+# Post-MVP amendment: filesystem push (23 November 2026)
+
+This extension does not change the historical v0.1 remote exclusion. It completes
+the existing filesystem collaboration baseline, without GUI or hosted services.
+
+| ID | Requirement |
+|---|---|
+| FR-PSH-001 | `push [remote] [branch] [--dry-run] [--dir path]` sends a local branch to the same-named destination; omitted arguments use active branch and its upstream (or origin). An explicit branch selects that local and destination name. |
+| FR-PSH-002 | Validate matching repository identity and supported schema before mutation. |
+| FR-PSH-003 | Create branches or fast-forward only; reject divergence, remote-ahead and unknown ancestry. No force mode. |
+| FR-PSH-004 | Verify the complete reachable commit/snapshot/blob closure, including already-present destination objects; never overwrite an immutable object. |
+| FR-PSH-005 | Receive missing objects into destination quarantine, validate envelopes, BLAKE3, lengths, types and snapshot paths before promotion. |
+| FR-PSH-006 | Publish the destination ref atomically only after closure validation and expected-tip comparison under an exclusive ref-writer lock. Cooperating local branch/HEAD writers use the same lock. |
+| FR-PSH-007 | Refuse updates to the checked-out branch of a non-bare destination, with fail-closed HEAD validation. Never modify either worktree. |
+| FR-PSH-008 | Dry-run reports missing object counts/bytes and intended update without destination writes or local tracking changes. |
+| FR-PSH-009 | Expose cooperative cancellation and typed, presentation-neutral progress/failures. Await cleanup. No rollback promise after atomic ref publication; failed transfers can leave unreachable verified objects. |
+| FR-PSH-010 | CLI returns 9 for non-fast-forward, 8 for remote rejection/concurrency, 3 for integrity/security errors, 7 for invalid push arguments and 130 for cancellation. Successful push reports the published branch; it does not implicitly configure upstream or update local tracking refs. |
+
+Acceptance tests cover creation, fast-forward, deduplication, dry-run, no-op,
+remote-ahead/divergence, active destination, identity/schema mismatch, damaged or
+missing closure objects, interrupted transfers, expected-tip races and CLI exits.
+
+# Post-MVP amendment: self-hosted SSH synchronization (23 November 2026)
+
+| ID | Requirement |
+|---|---|
+| FR-SSH-001 | Accept `dawvc://[user@]host[:port]/repository-alias`, SSH port 22 by default. Reject credentials, query/fragment, malformed escapes, traversal and unsupported schemes. |
+| FR-SSH-002 | Use the installed OpenSSH client, public-key/agent authentication, strict known-host verification and noninteractive operation; disable agent/X11/port forwarding and local commands. |
+| FR-SSH-003 | Start only the constant remote command `dawvc serve`; send aliases and protocol data on stdin, never interpolate URL fields into a remote shell command. |
+| FR-SSH-004 | Host configuration maps aliases to absolute initialized repository paths. Missing aliases deny access; writes require explicit AllowPush. A forced command/config per SSH principal or key supplies authorization. |
+| FR-SSH-005 | A versioned, length-bounded stdio protocol provides config handshake, refs, object reads/existence, and push validation/reception/publication. Transport-independent engine integrity and fast-forward rules remain unchanged. |
+| FR-SSH-006 | Bound frames, payload lengths, total transferred bytes, request count and session lifetime. Reject links/reparse points in served metadata. No client-selected filesystem paths or executable commands. |
+| FR-SSH-007 | Cancellation, EOF, protocol errors and process exit clean up receiving sessions and release locks. A lost reply after publication is ambiguous and requires ref inspection. |
+| FR-SSH-008 | Serve stdout is protocol-only. Errors carry safe typed codes rather than raw host paths/exception messages. Private keys/passwords are never stored in repository configuration or wire frames. |
+| FR-SSH-009 | PC, NAS and server hosting use identical SSH/DAWVC behavior where compatible OpenSSH and DAWVC are installed. Existing GitHub/GitLab Git endpoints are not DAWVC protocol endpoints. |

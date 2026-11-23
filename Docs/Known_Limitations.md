@@ -36,8 +36,8 @@
 
 ## 4. Remote Synchronization & Transports (v0.2 Baseline)
 
-- **Supported Transports:** DAWVC v0.2 supports remote collaboration via the filesystem transport (`FileSystemRemoteTransport`), covering local paths, external drives, and network UNC shares (`\\server\share\repo`). Cloud transports (SSH, HTTPS) are scheduled for subsequent iterations.
-- **Fast-Forward Only Synchronization:** In v0.2, synchronization operations (`dawvc pull`) enforce fast-forward integration (`--ff-only`). If histories diverge (e.g. concurrent commits made on different machines), the pull is rejected with exit code `9` (`NonFastForward`) to prevent automated binary corruption. Three-way structural merging of DAW projects is planned for future releases.
+- **Supported Transports:** DAWVC v0.2 supports remote collaboration via the filesystem transport (`FileSystemRemoteTransport`), covering local paths, external drives, and network UNC shares (`\\server\share\repo`). The SSH extension adds `dawvc://` through OpenSSH; HTTPS and standard Git hosting remain unsupported. See [Self-hosting SSH](Self_Hosting_SSH.md).
+- **Fast-Forward Only Synchronization:** In v0.2, synchronization operations (`dawvc pull` and `dawvc push`) enforce fast-forward integration (`--ff-only`). If histories diverge (e.g. concurrent commits made on different machines), the pull is rejected with exit code `9` (`NonFastForward`) to prevent automated binary corruption. Three-way structural merging of DAW projects is planned for future releases.
 - **Quarantine Ingestion:** All remote payloads pass through incoming staging (`.dawvc/incoming/<sessionId>/`) with envelope inspection, BLAKE3 verification, and strict path traversal validation (`NFR-SEC-001..003`) before promotion to `.dawvc/objects/`.
 
 ---
@@ -63,3 +63,54 @@
 - If a handled error is encountered, temporary file-level backups are restored in reverse order, returning the workspace to its exact pre-checkout state.
 - **Crash Recovery Scope:** Unhandled terminations (e.g. `SIGKILL`, abrupt power outage, or OS panic) mid-publication cannot be rolled back until persistent on-disk transaction manifests (`.dawvc/transactions/<id>/`) are implemented in a future release.
 
+
+## Filesystem Push boundaries (23 November 2026)
+
+- The original filesystem Push baseline supports filesystem/file:// and UNC
+  repositories with matching identity. The SSH extension below adds authenticated
+  network hosting. Neither extension adds `init --bare` or force-push.
+- Non-bare checked-out destination branches are refused. Do not concurrently use
+  destination worktrees while pushing to inactive branches.
+- Push and cooperating local branch/HEAD writers share a destination-wide
+  `ref-write.lock`; the file persists after handles close. Never delete it while
+  writers are active. Older clients and external writers that ignore it are not
+  protected by the conditional-update contract.
+- Symbolic links/junctions in writable metadata paths are refused. Filesystem/SMB
+  exclusive-open and atomic-rename semantics must be reliable. Native Windows/UNC
+  validation is distinct from local Linux validation.
+- Complete reachable closure is read/verified on both sides. Metadata objects are
+  limited to 2 MiB each; traversal is bounded to 50,000 commits and 1,000,000
+  distinct objects. This favors integrity over incremental-read performance.
+- Push leaves local upstream and tracking refs unchanged. No workspace is modified.
+- Cancellation/crashes can leave unreachable verified objects. Quarantine cleanup
+  on disposal is best-effort; cleanup failure or process termination can leave
+  `incoming/push-*` directories. There is no automatic GC/reset command.
+
+The historical handled-rollback guarantee in section 7 is conditional: failed
+compensation is surfaced as `IncompleteRollbackException` with retained backups.
+It is not an unconditional guarantee that every failed mutation leaves the original
+state. See the amended [Recovery Guide](Recovery_Guide.md).
+
+## SSH extension boundaries
+
+`dawvc://` works through an installed OpenSSH client and a compatible DAWVC
+receiver on the selected PC/NAS/server. These external programs are not bundled.
+The host needs SSH running and network reachability; no DAWVC daemon is required.
+An SMB-only NAS or ordinary GitHub/GitLab repository is not a DAWVC SSH endpoint.
+
+Unknown or changed host keys and unavailable public-key authentication fail
+noninteractively. There is no automatic host-key enrollment, password storage,
+DAWVC identity-provider service or unrestricted-path server access. Operator
+forced-command/OS policies are necessary for restricted SSH accounts/keys.
+
+SSH aliases and quotas are specified in Remote_Protocol.md. Objects are capped at
+8 GiB, metadata at 2 MiB, frames at 1 MiB; client calls at five minutes, host sessions
+at ten minutes by default. There is no resumable transfer, quota negotiation,
+compression or tenant-wide connection/disk enforcement. These limits constrain
+large libraries. Unknown schemes are rejected instead of treated as local paths.
+Filesystem Push's no-force, active-worktree, cooperating-writer and recovery
+boundaries apply unchanged. A lost publish reply does not imply rollback.
+
+Platform evidence is recorded in WP-SSH-01 in the implementation plan. Real Windows
+OpenSSH, specific NAS deployments and actual UNC/SMB storage need independent
+validation; a successful Linux loopback test does not establish those guarantees.
