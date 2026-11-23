@@ -1030,3 +1030,9 @@ Branch CI (Windows/Ubuntu):
 Next functional work after review: design explicit divergence/conflict resolution
 for FLP collaboration, preserving both histories without semantic FLP merging.
 This is backlog, not implemented by WP-SYNC-04.
+
+
+Publication: implementation `959e1b8` pushed to `feat/sync-bare-provisioning`.
+Both GraphQL (`gh pr create`) and REST (`POST /repos/Nithiann/DAWVC/pulls`)
+returned Forbidden. PR creation therefore remains a maintainer action through
+the pinned develop comparison above; no approval/merge was performed.
