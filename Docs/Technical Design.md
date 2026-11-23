@@ -1415,3 +1415,33 @@ The OpenSSH child uses argument-list execution and a fixed command. A host start
 or on-disk repository schema is introduced. Operational policy/protocol definitions
 are in [Self-hosting SSH](Self_Hosting_SSH.md), [Remote Protocol](Remote_Protocol.md)
 and [ADR-REM-002](adr/ADR-REM-002-ssh-hosting.md).
+
+# Sync workflow amendment (23 November 2026)
+
+Application uses shared SyncTarget selection before Push/Pull transfer. Pull
+fetches its selected upstream/source into the active local branch; explicit source
+arguments do not select another local destination. RemoteUseCase exposes validated
+upstream configuration through `remote track`; existing remotes.json storage uses
+atomic replacement without a schema change. Clone keeps automatic origin setup.
+CLI sync handlers pass invocation cancellation tokens and return 130 after awaited
+engine completion on cancellation. No wire/security boundary changes. See
+[ADR-REM-003](adr/ADR-REM-003-upstream-workflow.md), FR-SYN-001..007 and WP-SYNC-02.
+Fresh Pull preview is delivered by the WP-SYNC-03 amendment below; bare
+provisioning remains a subsequent WP.
+
+# Fresh read-only sync preview amendment (23 November 2026)
+
+Fetch branches into a bounded in-memory planner before quarantine creation when
+DryRun=true. Missing metadata envelopes are verified; selected tips and parent
+links are copied into FetchPreview. UpdatedRefs is planned rather than applied
+for dry-runs. Pull uses a bounded preview/local ancestry overlay rather than stale
+tracking refs. No blob payload is downloaded or workspace plan materialized.
+
+FileSystemRepositoryContext and LooseObjectStore construction no longer create
+directories. StagingIndex is lazy and disposed only if owned/used. WriteBlob
+creates scratch directories; config/ref writers create their own parents; Init
+explicitly creates objects/refs layout. This enables read-only previews without
+new disk/wire schemas or a separate framework-specific engine.
+
+See [ADR-REM-004](adr/ADR-REM-004-read-only-sync-preview.md), FR-PRV-001..007
+and WP-SYNC-03. This is not fsck, a dirty-workspace forecast or remote reservation.

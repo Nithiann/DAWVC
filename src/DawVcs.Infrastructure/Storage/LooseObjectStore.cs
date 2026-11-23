@@ -23,9 +23,6 @@ public sealed class LooseObjectStore : IObjectStore
         _objectsRoot = Path.Combine(Path.GetFullPath(repositoryRoot), ".dawvc", "objects");
         _tempRoot = Path.Combine(_objectsRoot, ".tmp");
 
-        Directory.CreateDirectory(_objectsRoot);
-        Directory.CreateDirectory(_tempRoot);
-
         _onBeforeAtomicPublish = onBeforeAtomicPublish;
     }
 
@@ -45,6 +42,8 @@ public sealed class LooseObjectStore : IObjectStore
     public async Task<ContentHash> WriteBlobAsync(Stream payloadStream, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(payloadStream);
+        cancellationToken.ThrowIfCancellationRequested();
+        Directory.CreateDirectory(_tempRoot);
 
         var tempFilePath = Path.Combine(_tempRoot, $"blob_{Guid.NewGuid():N}.tmp");
 
@@ -84,6 +83,7 @@ public sealed class LooseObjectStore : IObjectStore
         ReadOnlyMemory<byte> payload,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var hash = Blake3ContentHasher.Hash(payload.Span);
         var targetPath = GetObjectPath(hash);
 

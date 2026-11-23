@@ -132,3 +132,16 @@ extension establishes the following explicit boundaries (FR-SSH-001..009):
 See ADR-REM-002, Remote_Protocol.md and Self_Hosting_SSH.md for the implemented
 contract. Linux protocol/OpenSSH validation is not a full production security
 audit or certification of every NAS/Windows/OpenSSH deployment.
+
+## Read-only preview extension
+
+Preview verifies remote metadata envelopes, object identities/types/lengths,
+BLAKE3, schema/graph references and snapshot path safety before using parent
+links. Payload and aggregate metadata/graph limits prevent unbounded planning.
+It avoids all quarantine creation/pruning, object/ref/config writes and staging
+access; no adapter/native project execution occurs. Context construction is now
+side-effect free and an unused index is not created/disposed. Custom providers
+remain responsible for read-only behavior. This is not a sandbox against arbitrary
+provider code, a full blob/local integrity audit or a concurrency reservation.
+OS access times and SSH audit logs are outside the repository-content guarantee.
+See ADR-REM-004 and FR-PRV-001..007.

@@ -112,6 +112,7 @@ For options, exit codes, and JSON schemas, see the complete **[CLI Command Refer
 | `dawvc branch [name]` | Lists existing branches or creates a new branch pointer. |
 | `dawvc switch <branch>` | Safely switches the workspace to a different branch. |
 | `dawvc checkout <commit>` | Restores a specific snapshot (supports `--restore-to` and `--force`). |
+| `dawvc remote track <remote> <branch>` | Sets the active local branch’s upstream without contacting the host. |
 | `dawvc push [remote] [branch]` | Sends committed history to a filesystem/UNC or dawvc:// SSH remote, fast-forward only; supports `--dry-run`. |
 | `dawvc bind <id> <path>` | Links an external asset to a logical dependency ID. |
 | `dawvc doctor` | Verifies environment health, checking local presence and compatible versions (`installed >= required`) for plugins, samples, and dependencies. |
@@ -219,3 +220,7 @@ no permanent DAWVC daemon is required. Strict host-key verification, public-key
 authentication and host-owned repository policies apply. See
 [SSH hosting](Docs/Self_Hosting_SSH.md) and [Protocol v1](Docs/Remote_Protocol.md).
 This is DAWVC synchronization, not compatibility with GitHub/GitLab Git endpoints.
+
+Fetch/Pull support fresh `--dry-run` metadata previews without updating workspace,
+objects, staging or refs. Fetch also shows planned tracking changes. Blob contents
+and dirty workspace conflicts are not checked; see the CLI reference for limits.

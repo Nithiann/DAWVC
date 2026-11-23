@@ -130,6 +130,7 @@ public static class YamlRepositoryConfigManager
     {
         var path = Path.Combine(directory, ConfigFileName);
         var yaml = ToYaml(config);
+        Directory.CreateDirectory(directory);
         File.WriteAllText(path, yaml);
     }
 

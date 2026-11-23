@@ -118,3 +118,21 @@ known_hosts/configuration and test repositories, then cleans them up. It verifie
 real push/clone/fetch/pull, byte identity and rejection of unknown/changed keys.
 No production SSH configuration or account state is changed. The source checkout
 must have secure ancestor ownership/modes, as required by OpenSSH StrictModes.
+
+## Choosing a different upstream
+
+After `remote add backup dawvc://alice@nas/projects/song`, use
+`remote track backup published` to make the active local branch push to and pull
+from backup/published. Add `--local-branch name` to configure another existing local
+branch. The host is not contacted while storing this local preference. The same
+rules apply to filesystem remotes. Explicit `pull backup published` always updates
+the active local branch; a matching explicit remote retains its upstream mapping.
+
+## Read-only sync previews
+
+`fetch --dry-run` and `pull --dry-run` use read-only host operations to pin current
+advertised tips and verify missing metadata in bounded memory. They do not open a
+push session, initialize repository directories/indexes or change local tracking
+refs. SSH authentication and operator audit logs still occur. No blob payloads
+are downloaded or remote refs reserved; a later real operation validates again.
+Existing host permissions, keys, quotas and protocol version remain unchanged.

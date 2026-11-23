@@ -85,35 +85,27 @@ public sealed class PullUseCase
         cancellationToken.ThrowIfCancellationRequested();
         var nestedProgress = progress is null ? null : new NestedOperationProgress(progress);
 
-        // 1. Fetch remote changes into quarantine & update remote-tracking refs (FR-PUL-001)
-        var fetchRequest = new FetchRequest(request.RepositoryDirectory, request.RemoteName, request.Branch, request.DryRun);
+        progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
+        using var context = _contextFactory(request.RepositoryDirectory);
+        var target = SyncTarget.ForPull(context, request.RemoteName, request.Branch);
+        var targetBranch = target.LocalBranch;
+        var remoteName = target.RemoteName;
+        var finalRemoteBranch = target.RemoteBranch;
+
+        // Resolve upstream before fetching, so Fetch and integration use the same source.
+        var fetchRequest = new FetchRequest(request.RepositoryDirectory, remoteName, finalRemoteBranch.Value, request.DryRun);
         var fetchResult = nestedProgress is null
             ? await _fetchUseCase.ExecuteAsync(fetchRequest, cancellationToken).ConfigureAwait(false)
             : await _fetchUseCase.ExecuteAsync(fetchRequest, cancellationToken, nestedProgress).ConfigureAwait(false);
 
-        progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
-        using var context = _contextFactory(request.RepositoryDirectory);
         progress?.Report(new OperationProgress(OperationStage.LoadingMetadata));
-        var currentBranch = context.GetCurrentBranch();
-
-        var targetBranch = !string.IsNullOrWhiteSpace(request.Branch)
-            ? BranchName.Parse(request.Branch)
-            : currentBranch;
-
-        var remoteName = request.RemoteName;
-        BranchName? remoteBranch = null;
-
-        if (string.IsNullOrWhiteSpace(remoteName))
-        {
-            var (upstreamRemote, upstreamBranch) = context.GetUpstream(targetBranch);
-            remoteName = !string.IsNullOrWhiteSpace(upstreamRemote) ? upstreamRemote : "origin";
-            remoteBranch = upstreamBranch;
-        }
-
-        var finalRemoteBranch = remoteBranch ?? targetBranch;
-
+        if (context.GetCurrentBranch() != targetBranch)
+            throw new RepositoryStateChangedException("Active local branch changed during fetch. Retry Pull from the intended branch.");
         var localTip = context.GetBranchCommit(targetBranch);
-        var remoteTip = context.GetRemoteTrackingCommit(remoteName, finalRemoteBranch);
+        var preview = request.DryRun ? fetchResult.Preview
+            ?? throw new IncompatibleRemoteRepositoryException("Fetch provider did not supply a current preview snapshot.") : null;
+        var remoteTip = preview is null ? context.GetRemoteTrackingCommit(remoteName, finalRemoteBranch)
+            : preview.RemoteRefs.FirstOrDefault(head => FetchPreviewPlanner.ParseBranch(head.Name) == finalRemoteBranch)?.HeadCommit;
 
         if (!remoteTip.HasValue)
         {
@@ -122,11 +114,9 @@ public sealed class PullUseCase
 
         // 2. Classify sync ancestry state (FR-PUL-003..005)
         progress?.Report(new OperationProgress(OperationStage.TraversingHistory));
-        var classification = await _ancestryService.DetermineSyncStateAsync(
-            localTip,
-            remoteTip.Value,
-            context,
-            cancellationToken).ConfigureAwait(false);
+        var classification = preview is null
+            ? await _ancestryService.DetermineSyncStateAsync(localTip, remoteTip.Value, context, cancellationToken).ConfigureAwait(false)
+            : await _ancestryService.DeterminePreviewStateAsync(localTip, remoteTip.Value, context, preview, cancellationToken).ConfigureAwait(false);
 
         switch (classification.State)
         {
@@ -178,7 +168,9 @@ public sealed class PullUseCase
                         Array.Empty<string>(),
                         RecoveryDirectory: null,
                         DoctorSummary: null,
-                        Message: $"Would fast-forward '{targetBranch.Value}' from {localTip?.ToString()[..8] ?? "<none>"} to {remoteTip.Value.ToString()[..8]} ({classification.CommitsBehind} commit(s)).",
+                        Message: localTip.HasValue
+                            ? $"Would fast-forward '{targetBranch.Value}' from {localTip.Value.ToString()[..8]} to {remoteTip.Value.ToString()[..8]} ({classification.CommitsBehind} commit(s))."
+                            : $"Would initialize '{targetBranch.Value}' at {remoteTip.Value.ToString()[..8]}.",
                         IsDryRun: true);
                 }
 

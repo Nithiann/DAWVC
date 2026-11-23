@@ -19,6 +19,10 @@ This registry contains all formal architecture decisions for DAWVC.
 
 | [ADR-REM-002](ADR-REM-002-ssh-hosting.md) | dawvc:// over SSH with transient receiver | Proposed | WP-SSH-01 |
 
+| [ADR-REM-003](ADR-REM-003-upstream-workflow.md) | Shared sync targets and explicit tracking | Proposed | WP-SYNC-02 |
+
+| [ADR-REM-004](ADR-REM-004-read-only-sync-preview.md) | Fresh read-only sync previews | Proposed | WP-SYNC-03 |
+
 ---
 
 ## Workflow for New Decisions
