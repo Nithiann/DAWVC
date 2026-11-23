@@ -9,7 +9,7 @@
     <ProjectReference Include="..\DawVcs.Application\DawVcs.Application.csproj" />
     <ProjectReference Include="..\DawVcs.Infrastructure\DawVcs.Infrastructure.csproj" />
     <ProjectReference Include="..\DawVcs.Adapters.Abstractions\DawVcs.Adapters.Abstractions.csproj" />
-    <ProjectReference Include="..\DawVcs.Adapters.FLStudio\DawVcs.Adapters.FLStudio.csproj" />
+    <ProjectReference Include="..\DawVcs.Bootstrap\DawVcs.Bootstrap.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Spectre.Console" />

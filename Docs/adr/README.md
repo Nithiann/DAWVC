@@ -13,6 +13,8 @@ This registry contains all formal architecture decisions for DAWVC.
 | [ADR-IO-001](ADR-IO-001-windows-atomic-file-replace.md) | Windows atomic file replace & staging primitives | Accepted | WP-01 (Spike D), WP-02, WP-07 |
 | [ADR-009](ADR-009-sqlite-local-index.md) | SQLite + Dapper for Local Workspace Metadata & Staging Index | Accepted | WP-04 |
 
+| [ADR-CORE-001](ADR-CORE-001-shared-engine-composition.md) | Shared engine composition for independent clients | Proposed | CLI/engine integration |
+
 ---
 
 ## Workflow for New Decisions

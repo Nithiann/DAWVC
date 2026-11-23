@@ -24,7 +24,7 @@ public sealed class RemoteUseCase
     public RemoteConfig AddRemote(RemoteAddRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var context = _contextFactory(request.RepositoryDirectory);
+        using var context = _contextFactory(request.RepositoryDirectory);
 
         if (!RemoteName.TryCreate(request.Name, out var remoteName, out var error))
         {
@@ -50,14 +50,32 @@ public sealed class RemoteUseCase
     public bool RemoveRemote(RemoteRemoveRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var context = _contextFactory(request.RepositoryDirectory);
+        using var context = _contextFactory(request.RepositoryDirectory);
         return context.RemoveRemote(request.Name);
     }
 
     public RemoteListResult ListRemotes(RemoteListRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var context = _contextFactory(request.RepositoryDirectory);
+        using var context = _contextFactory(request.RepositoryDirectory);
         return new RemoteListResult(context.GetRemotes());
+    }
+
+    public Task<RemoteConfig> AddRemoteAsync(RemoteAddRequest request, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(AddRemote(request));
+    }
+
+    public Task<bool> RemoveRemoteAsync(RemoteRemoveRequest request, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(RemoveRemote(request));
+    }
+
+    public Task<RemoteListResult> ListRemotesAsync(RemoteListRequest request, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(ListRemotes(request));
     }
 }

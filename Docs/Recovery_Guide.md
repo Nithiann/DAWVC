@@ -98,3 +98,27 @@ dawvc fsck --artifacts
 
 - **Health domain**: Checks internal BLAKE3 hashes of all stored commit objects, snapshots, envelopes, and bundled blobs.
 - **Atomic guarantee**: DAWVC uses atomic file renaming on Windows NTFS. Incomplete object writes remain orphaned in temporary files and never corrupt existing reachable commits or branch pointers.
+
+## Interrupted operations and incomplete rollback
+
+Await cancelled operations until compensation has finished. Cancellation does not
+guarantee an unchanged repository: commit, fetch, pull and clone can leave durable
+effects. Failed forced recovery-copy creation can leave an incomplete copy.
+
+`IncompleteRollbackException` distinguishes failed compensation from cancellation.
+Preserve its `RecoveryPath` before further mutations. A journal directory contains
+original files that could not be restored and survives disposal; a repository-root
+path identifies failed ref/index compensation rather than a complete metadata backup.
+Inspect nested technical causes locally for other retained paths. Preserve the
+workspace and `.dawvc`, then inspect refs and run `doctor`/`fsck` as appropriate.
+Redact machine paths and exception details before sharing diagnostics.
+
+## Corrupt staging index
+
+SQLite initialization errors CORRUPT/NOTADB now throw
+`StagingIndexCorruptException` instead of deleting/rebuilding `index.db`. This
+intentionally changes CLI failure behavior: staged user intent must be preserved.
+Stop operations and preserve `.dawvc/index.db` and any `index.db-wal`/`index.db-shm`
+files before recovery. Use an offline copy for SQLite recovery tooling.
+`doctor`/`fsck` do not reconstruct staged intent. There is no new automatic reset
+command. See [ADR-009](adr/ADR-009-sqlite-local-index.md).

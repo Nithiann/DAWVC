@@ -257,6 +257,10 @@ public static class DependencyResolverPipeline
                             return file;
                         }
                     }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
                     catch
                     {
                         // Best effort skipping unreadable files
@@ -265,12 +269,17 @@ public static class DependencyResolverPipeline
 
                 foreach (var subDir in Directory.EnumerateDirectories(dir))
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     var name = Path.GetFileName(subDir);
                     if (!ignoredDirs.Contains(name))
                     {
                         queue.Enqueue(subDir);
                     }
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch
             {

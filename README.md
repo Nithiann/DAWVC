@@ -204,3 +204,7 @@ pwsh -File ./scripts/package.ps1
 This project is licensed under the **[MIT License](LICENSE)**.
 
 Copyright (c) 2026 DAWVC Contributors.
+
+## Engine integration
+
+The CLI and independent clients can share the framework-independent engine through `DawVcs.Bootstrap`. See [Engine integration](Docs/Engine_Integration.md) for ownership, progress, cancellation, typed failures and paged queries. No desktop framework is required.

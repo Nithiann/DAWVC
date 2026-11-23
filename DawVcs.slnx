@@ -3,6 +3,7 @@
     <Project Path="src/DawVcs.Adapters.Abstractions/DawVcs.Adapters.Abstractions.csproj" />
     <Project Path="src/DawVcs.Adapters.FLStudio/DawVcs.Adapters.FLStudio.csproj" />
     <Project Path="src/DawVcs.Application/DawVcs.Application.csproj" />
+    <Project Path="src/DawVcs.Bootstrap/DawVcs.Bootstrap.csproj" />
     <Project Path="src/DawVcs.Cli/DawVcs.Cli.csproj" />
     <Project Path="src/DawVcs.Domain/DawVcs.Domain.csproj" />
     <Project Path="src/DawVcs.Infrastructure/DawVcs.Infrastructure.csproj" />
@@ -10,6 +11,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/DawVcs.Adapters.FLStudio.Tests/DawVcs.Adapters.FLStudio.Tests.csproj" />
     <Project Path="tests/DawVcs.Application.Tests/DawVcs.Application.Tests.csproj" />
+    <Project Path="tests/DawVcs.Bootstrap.Tests/DawVcs.Bootstrap.Tests.csproj" />
     <Project Path="tests/DawVcs.Domain.Tests/DawVcs.Domain.Tests.csproj" />
     <Project Path="tests/DawVcs.EndToEndTests/DawVcs.EndToEndTests.csproj" />
     <Project Path="tests/DawVcs.Infrastructure.Tests/DawVcs.Infrastructure.Tests.csproj" />

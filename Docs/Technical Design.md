@@ -1361,3 +1361,16 @@ DAWVC establishes a reproducible foundation for audio production:
 Success is measured by one defining capability:
 
 > **"Can two producers reliably reconstruct, version, and collaborate on the same musical project across different workstations and DAWs without local folder structures, missing assets, implicit dependencies, or unsafe format conversions damaging the native project?"**
+
+# Engine integration amendment (23 November 2026)
+
+The implemented CLI composition root is now `DawVcs.Bootstrap.AddDawVcs`.
+Application exposes presentation-neutral progress, cancellation, typed failures,
+repository opening and paged queries for independently maintained clients.
+Desktop architecture described above remains a product direction, not a shipped
+GUI in this core solution. See [Engine integration](Engine_Integration.md) and
+[ADR-CORE-001](adr/ADR-CORE-001-shared-engine-composition.md).
+
+The SQLite index contains staged intent in addition to derived hashes. Automatic
+corrupt-index deletion/rebuilding is superseded by the preservation amendment in
+[ADR-009](adr/ADR-009-sqlite-local-index.md). Persisted schemas are unchanged.

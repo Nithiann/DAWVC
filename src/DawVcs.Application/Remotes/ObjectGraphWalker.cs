@@ -1,3 +1,4 @@
+using DawVcs.Application.Common;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Hashing;
 using DawVcs.Domain.Remotes;
@@ -28,18 +29,28 @@ public sealed class ObjectGraphWalker
         _maxDepth = maxDepth;
     }
 
-    public async Task<GraphWalkResult> WalkClosureAsync(
+    public Task<GraphWalkResult> WalkClosureAsync(
         IRemoteTransport transport,
         IRepositoryContext context,
         IQuarantineStore quarantineStore,
         IEnumerable<CommitId> remoteTips,
         CancellationToken cancellationToken = default)
+        => WalkClosureAsync(transport, context, quarantineStore, remoteTips, cancellationToken, null);
+
+    public async Task<GraphWalkResult> WalkClosureAsync(
+        IRemoteTransport transport,
+        IRepositoryContext context,
+        IQuarantineStore quarantineStore,
+        IEnumerable<CommitId> remoteTips,
+        CancellationToken cancellationToken,
+        IProgress<OperationProgress>? progress)
     {
         ArgumentNullException.ThrowIfNull(transport);
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(quarantineStore);
         ArgumentNullException.ThrowIfNull(remoteTips);
 
+        progress?.Report(new OperationProgress(OperationStage.TraversingHistory));
         var visited = new HashSet<ContentHash>();
         var stagedMetadata = new List<VerifiedIncomingObject>();
         var missingBlobs = new List<MissingBlobInfo>();
@@ -58,6 +69,7 @@ public sealed class ObjectGraphWalker
         while (commitQueue.Count > 0)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            progress?.Report(new OperationProgress(OperationStage.TraversingHistory, stagedMetadata.Count + missingBlobs.Count));
             var commitId = commitQueue.Dequeue();
 
             // FR-FET-002: If commit already exists locally, stop traversal along this branch
@@ -131,7 +143,8 @@ public sealed class ObjectGraphWalker
                         stagedMetadata,
                         missingBlobs,
                         visited,
-                        cancellationToken).ConfigureAwait(false);
+                        cancellationToken,
+                        progress).ConfigureAwait(false);
                 }
             }
         }
@@ -150,8 +163,10 @@ public sealed class ObjectGraphWalker
         List<VerifiedIncomingObject> stagedMetadata,
         List<MissingBlobInfo> missingBlobs,
         HashSet<ContentHash> visited,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IProgress<OperationProgress>? progress)
     {
+        progress?.Report(new OperationProgress(OperationStage.TraversingHistory, stagedMetadata.Count + missingBlobs.Count));
         if (context.ObjectStore.Exists(snapshotId.Value))
         {
             return;
@@ -191,6 +206,7 @@ public sealed class ObjectGraphWalker
         {
             foreach (var entry in snapshotDto.Entries)
             {
+                progress?.Report(new OperationProgress(OperationStage.TraversingHistory, stagedMetadata.Count + missingBlobs.Count));
                 if (ContentHash.TryParse(entry.Hash, out var blobHash))
                 {
                     if (visited.Add(blobHash))

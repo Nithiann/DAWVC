@@ -22,6 +22,7 @@ public sealed class PublicationJournal : IAsyncDisposable
     private readonly List<JournalEntry> _appliedEntries = [];
     private bool _committed;
     private bool _rolledBack;
+    private bool _rollbackFailed;
 
     public PublicationJournal(string targetDir, string workspaceDotDawvcDir)
     {
@@ -130,9 +131,14 @@ public sealed class PublicationJournal : IAsyncDisposable
 
             return modifiedFiles;
         }
+        catch (OperationCanceledException ex)
+        {
+            await RollbackAfterFailureAsync(ex).ConfigureAwait(false);
+            throw;
+        }
         catch (Exception ex)
         {
-            await RollbackAsync().ConfigureAwait(false);
+            await RollbackAfterFailureAsync(ex).ConfigureAwait(false);
             throw new CheckoutStagingException($"Multi-file checkout publication failed midway and was automatically rolled back: {ex.Message}", ex);
         }
     }
@@ -171,6 +177,8 @@ public sealed class PublicationJournal : IAsyncDisposable
 
         _rolledBack = true;
 
+        var failures = new List<Exception>();
+
         // Revert applied actions in reverse chronological order
         for (int i = _appliedEntries.Count - 1; i >= 0; i--)
         {
@@ -188,7 +196,7 @@ public sealed class PublicationJournal : IAsyncDisposable
 
                     case JournalActionKind.Replaced:
                     case JournalActionKind.Deleted:
-                        if (entry.BackupPath != null && File.Exists(entry.BackupPath))
+                        if (entry.BackupPath != null)
                         {
                             var targetDir = Path.GetDirectoryName(entry.TargetPath);
                             if (!string.IsNullOrEmpty(targetDir))
@@ -200,18 +208,37 @@ public sealed class PublicationJournal : IAsyncDisposable
                         break;
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Best-effort rollback
+                failures.Add(ex);
             }
+        }
+
+        if (failures.Count > 0)
+        {
+            _rollbackFailed = true;
+            throw new IncompleteRollbackException(_backupDir, new AggregateException(failures));
         }
 
         await CleanupBackupDirAsync().ConfigureAwait(false);
     }
 
+    private async Task RollbackAfterFailureAsync(Exception originalFailure)
+    {
+        try
+        {
+            await RollbackAsync().ConfigureAwait(false);
+        }
+        catch (IncompleteRollbackException rollbackFailure)
+        {
+            throw new IncompleteRollbackException(rollbackFailure.RecoveryPath,
+                new AggregateException(originalFailure, rollbackFailure));
+        }
+    }
+
     private Task CleanupBackupDirAsync()
     {
-        if (Directory.Exists(_backupDir))
+        if (!_rollbackFailed && Directory.Exists(_backupDir))
         {
             try
             {
