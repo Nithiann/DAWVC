@@ -21,6 +21,8 @@ This registry contains all formal architecture decisions for DAWVC.
 
 | [ADR-REM-003](ADR-REM-003-upstream-workflow.md) | Shared sync targets and explicit tracking | Proposed | WP-SYNC-02 |
 
+| [ADR-REM-004](ADR-REM-004-read-only-sync-preview.md) | Fresh read-only sync previews | Proposed | WP-SYNC-03 |
+
 ---
 
 ## Workflow for New Decisions

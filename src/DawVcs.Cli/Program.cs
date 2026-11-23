@@ -1101,24 +1101,20 @@ public static class Program
 
                 if (result.IsDryRun)
                 {
-                    AnsiConsole.MarkupLine($"[yellow]Dry run:[/] Would fetch {result.ObjectsFetched} object(s) ({FormatBytes(result.BytesFetched)}) from remote [bold]{Markup.Escape(result.RemoteName)}[/].");
+                    AnsiConsole.MarkupLine($"[yellow]Dry run:[/] Would fetch an estimated {result.ObjectsFetched} object(s) ({FormatBytes(result.BytesFetched)}) from remote [bold]{Markup.Escape(result.RemoteName)}[/].");
                 }
                 else
                 {
                     AnsiConsole.MarkupLine($"[green]✓[/] Fetched from [bold]{Markup.Escape(result.RemoteName)}[/]: {result.ObjectsFetched} object(s) ({FormatBytes(result.BytesFetched)}).");
-                    if (result.UpdatedRefs.Count > 0)
-                    {
-                        foreach (var r in result.UpdatedRefs)
-                        {
-                            var oldStr = r.OldCommit?.ToString()[..8] ?? "<new>";
-                            var newStr = r.NewCommit.ToString()[..8];
-                            AnsiConsole.MarkupLine($"  [cyan]{Markup.Escape(result.RemoteName)}/{Markup.Escape(r.Branch.Value)}[/] [dim]{oldStr}..{newStr}[/]");
-                        }
-                    }
-                    else
-                    {
+                    if (result.UpdatedRefs.Count == 0)
                         AnsiConsole.MarkupLine("  [dim]All remote branches already up to date.[/]");
-                    }
+                }
+                foreach (var reference in result.UpdatedRefs)
+                {
+                    var oldTip = reference.OldCommit?.ToString()[..8] ?? "<new>";
+                    var newTip = reference.NewCommit.ToString()[..8];
+                    var action = result.IsDryRun ? "Would update " : "";
+                    AnsiConsole.MarkupLine($"  {action}[cyan]{Markup.Escape(result.RemoteName)}/{Markup.Escape(reference.Branch.Value)}[/] [dim]{oldTip}..{newTip}[/]");
                 }
             }
             catch (RemoteException ex)

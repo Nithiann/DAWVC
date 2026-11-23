@@ -766,3 +766,19 @@ missing closure objects, interrupted transfers, expected-tip races and CLI exits
 
 Pull dry-run freshness is tracked separately in WP-SYNC-03; no new guarantee of
 accurate online preview is introduced by target selection changes.
+
+# Post-MVP amendment: fresh sync previews (23 November 2026)
+
+| ID | Requirement |
+|---|---|
+| FR-PRV-001 | Fetch dry-run returns planned ref updates and counts from current advertised tips, without writing objects, refs, workspace, index, configuration or quarantine; no stale incoming cleanup. |
+| FR-PRV-002 | Pull dry-run uses those pinned tips and verified preview commit parents plus local commits, not cached tracking refs, for up-to-date/ahead/fast-forward/diverged classification. Missing tracking refs must not prevent a valid preview. |
+| FR-PRV-003 | Verify metadata envelope identity/type/length/BLAKE3, schema and snapshot paths. Bound each metadata object to 2 MiB, aggregate received metadata to 64 MiB, distinct inspected objects to 100,000, commits to 50,000 and parent edges to 1,000,000. Fail closed on limit violations. |
+| FR-PRV-004 | Do not download blob payloads during preview. Counts/bytes estimate missing transfer from declared snapshots; do not claim blob integrity/presence or dirty-workspace feasibility. |
+| FR-PRV-005 | Context/object-store construction and disposal used for previews must not initialize directories or staging SQLite. Initialize storage only on writes/explicit initialization. |
+| FR-PRV-006 | Success, corruption, unsupported metadata, cancellation and divergence leave repository bytes and directory layout unchanged. Progress is per invocation; one Completed stage only on success. |
+| FR-PRV-007 | Snapshot results are advisory and pinned to the advertisement observed for that invocation. A later actual Pull fetches/revalidates again; no remote reservation or cross-process transaction. |
+
+FetchResult.UpdatedRefs means planned updates when IsDryRun=true and applied
+updates otherwise. A preview snapshot carries only immutable refs/parent links,
+not writable handles, local paths or retained quarantine.

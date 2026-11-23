@@ -47,8 +47,9 @@ commit cursors/offsets and retain the selected immutable commit ID across pages.
 Snapshot dependencies omit original locators, provenance and machine paths.
 They describe recorded snapshots, not a live dependency scan.
 
-Queries avoid staging/index repair. Context construction may create object-store
-temporary directories; opening is not a strict zero-write filesystem operation.
+Queries avoid staging/index repair. Context/object-store construction is now side-effect free. Staging-index creation
+is lazy and happens only if requested. Object writes initialize scratch storage;
+explicit Init creates its layout. Metadata/viewer/preview reads do not create it.
 Snapshot objects are still fully deserialized internally, so bounded output does
 not provide bounded-memory loading for arbitrarily large snapshots.
 
@@ -101,8 +102,8 @@ is the remote source; its result Branch is always the active local destination.
 A matching explicit remote preserves an upstream mapping.
 
 CLI handlers now use the same per-invocation cancellation contract for clone,
-fetch, pull and push. Fresh Pull dry-run metadata remains a known deferred issue
-(WP-SYNC-03), distinct from this selection fix.
+fetch, pull and push. Fresh Pull dry-run metadata is implemented in WP-SYNC-03 below; it is distinct
+from target selection.
 
 For developer validation, `scripts/test_sync_cancellation.py` sends real SIGINT to
 the Linux CLI while an isolated SSH shim blocks connection setup. It checks exit
@@ -113,3 +114,20 @@ Pull rechecks the active branch after Fetch. `RepositoryStateChangedException`
 (classified as Validation) stops checkout if the branch changed during transfer.
 Fetched metadata may remain. This precondition check is not a cross-process lock
 against all concurrent local mutations.
+
+## Fresh preview contract
+
+FetchResult.UpdatedRefs contains planned updates when IsDryRun=true, actual applied
+updates otherwise. Preview carries copied read-only advertised refs and verified
+commit parent lists, no handles/paths; it remains usable after transport/context
+disposal. Pull dry-run uses that snapshot through DeterminePreviewStateAsync plus
+existing local commit reads, never cached tracking refs. A custom FetchUseCase
+implementation must populate Preview for dry-run; missing snapshots fail closed.
+
+No quarantine factory is invoked or stale sessions pruned during preview. No
+staging property is accessed, so disposal does not clear another index owner's
+SQLite pool. Each metadata object is capped at 2 MiB, aggregate received metadata
+at 64 MiB, inspected object identities at 100,000, commit/ancestry budgets at
+50,000 and remote parent links at 1,000,000. Limit, integrity and cancellation
+failures preserve local content/layout. Blob payloads and workspace dirty-state
+planning are deliberately excluded; see the CLI reference for advisory semantics.

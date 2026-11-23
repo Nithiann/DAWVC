@@ -31,12 +31,20 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
     private readonly string _remotesFilePath;
     private readonly string _objectsPath;
     private readonly LooseObjectStore _objectStore;
-    private readonly SqliteStagingIndex _stagingIndex;
+    private readonly Lazy<SqliteStagingIndex> _stagingIndex;
+    private int _disposed;
     private readonly JsonLocalBindingStore _localBindings;
 
     public string RootPath => _rootPath;
     public IObjectStore ObjectStore => _objectStore;
-    public IStagingIndex StagingIndex => _stagingIndex;
+    public IStagingIndex StagingIndex
+    {
+        get
+        {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+            return _stagingIndex.Value;
+        }
+    }
     public ILocalBindingStore LocalBindings => _localBindings;
 
     public FileSystemRepositoryContext(string rootPath, Action<string>? onBeforeAtomicPublish = null)
@@ -52,7 +60,7 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
         _objectsPath = Path.Combine(_dotDawvcPath, "objects");
 
         _objectStore = new LooseObjectStore(_rootPath, onBeforeAtomicPublish);
-        _stagingIndex = new SqliteStagingIndex(_rootPath);
+        _stagingIndex = new Lazy<SqliteStagingIndex>(() => new SqliteStagingIndex(_rootPath));
         _localBindings = new JsonLocalBindingStore(_dotDawvcPath);
     }
 
@@ -500,7 +508,8 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
 
     public void Dispose()
     {
-        _stagingIndex.Dispose();
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        if (_stagingIndex.IsValueCreated) _stagingIndex.Value.Dispose();
         _localBindings.Dispose();
     }
 }

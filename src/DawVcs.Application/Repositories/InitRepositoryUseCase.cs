@@ -132,6 +132,8 @@ public sealed class InitRepositoryUseCase : IUseCase<InitRequest, InitResult>
             BranchName.Main);
 
         context.SaveConfig(config);
+        Directory.CreateDirectory(Path.Combine(dotDawvc, "objects"));
+        Directory.CreateDirectory(Path.Combine(dotDawvc, "refs", "heads"));
         context.SetCurrentBranch(BranchName.Main);
 
         return Task.FromResult(new InitResult(

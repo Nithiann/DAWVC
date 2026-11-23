@@ -115,7 +115,7 @@ Platform evidence is recorded in WP-SSH-01 in the implementation plan. Real Wind
 OpenSSH, specific NAS deployments and actual UNC/SMB storage need independent
 validation; a successful Linux loopback test does not establish those guarantees.
 
-## Upstream workflow and deferred preview work
+## Upstream workflow and preview scope
 
 `remote track` configures existing local branches (including active unborn HEAD)
 against configured remotes; the remote branch may be created later. It does not
@@ -123,12 +123,24 @@ probe permissions, host availability or repository identity. Those checks happen
 when transferring. Clone's automatic origin/upstream setup remains available.
 No automatic post-Push tracking update or `push --set-upstream` is introduced.
 
-Pull now resolves upstream before Fetch and explicit source branches integrate
-into the active local branch. However, fresh `pull --dry-run` remains incomplete:
-Fetch preview discards incoming metadata before Pull checks cached tracking refs
-and ancestry. New changes can be missed or an absent tracking branch can fail.
-An explicit Fetch can populate that cache, but writes objects/tracking itself.
-Fetch preview can also create temporary quarantine metadata/prune stale incoming
-directories. Fully fresh preview/no-write semantics are WP-SYNC-03. Do not treat
-this WP as a fix for those existing preview limitations. Bare-host provisioning
-remains WP-SYNC-04. Windows native Ctrl+C and NAS/UNC require separate validation.
+Pull resolves upstream before Fetch and explicit source branches integrate into
+the active local branch. The historical stale/missing-cache dry-run limitation
+is resolved by WP-SYNC-03: Fetch/Pull preview uses pinned advertised tips and
+verified in-memory metadata without quarantine writes/pruning, object promotion,
+ref/config/index updates or workspace materialization.
+
+Preview is bounded (2 MiB per metadata object; 64 MiB cumulative received metadata;
+100,000 inspected objects; 50,000 commits; 1,000,000 remote parent edges). It does
+not download/check blob payloads, plan dirty-workspace conflicts, run Doctor/Fsck,
+probe plugins or reserve remote refs. Counts reflect declared missing transfer,
+not proof that a later operation will succeed. A later actual Pull can see a new
+remote tip. Custom context/transport providers must keep read methods side-effect
+free; custom Fetch providers must supply the current Preview snapshot for Pull
+dry-run, which fails closed if it is missing.
+
+Filesystem content/layout/mtimes are preserved by preview, but OS access-time
+updates and host SSH authentication/audit logs are not suppressed. Normal Status
+and mutating operations can still initialize the index/storage. Existing local
+commit boundaries are reused rather than conducting a full repository integrity
+audit. Bare provisioning remains WP-SYNC-04; native Windows Ctrl+C and real NAS/UNC
+validation are independent remaining items.

@@ -58,6 +58,11 @@ public class AncestryService
         return new SyncAncestryClassification(SyncAncestryState.Diverged);
     }
 
+    public virtual Task<SyncAncestryClassification> DeterminePreviewStateAsync(
+        CommitId? localTip, CommitId remoteTip, IRepositoryContext context, FetchPreview preview,
+        CancellationToken cancellationToken = default)
+        => PreviewAncestry.ClassifyAsync(localTip, remoteTip, context, preview, cancellationToken);
+
     public virtual async Task<bool> IsAncestorAsync(
         CommitId candidateAncestor,
         CommitId descendant,

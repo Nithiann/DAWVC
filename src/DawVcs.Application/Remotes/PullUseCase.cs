@@ -102,7 +102,10 @@ public sealed class PullUseCase
         if (context.GetCurrentBranch() != targetBranch)
             throw new RepositoryStateChangedException("Active local branch changed during fetch. Retry Pull from the intended branch.");
         var localTip = context.GetBranchCommit(targetBranch);
-        var remoteTip = context.GetRemoteTrackingCommit(remoteName, finalRemoteBranch);
+        var preview = request.DryRun ? fetchResult.Preview
+            ?? throw new IncompatibleRemoteRepositoryException("Fetch provider did not supply a current preview snapshot.") : null;
+        var remoteTip = preview is null ? context.GetRemoteTrackingCommit(remoteName, finalRemoteBranch)
+            : preview.RemoteRefs.FirstOrDefault(head => FetchPreviewPlanner.ParseBranch(head.Name) == finalRemoteBranch)?.HeadCommit;
 
         if (!remoteTip.HasValue)
         {
@@ -111,11 +114,9 @@ public sealed class PullUseCase
 
         // 2. Classify sync ancestry state (FR-PUL-003..005)
         progress?.Report(new OperationProgress(OperationStage.TraversingHistory));
-        var classification = await _ancestryService.DetermineSyncStateAsync(
-            localTip,
-            remoteTip.Value,
-            context,
-            cancellationToken).ConfigureAwait(false);
+        var classification = preview is null
+            ? await _ancestryService.DetermineSyncStateAsync(localTip, remoteTip.Value, context, cancellationToken).ConfigureAwait(false)
+            : await _ancestryService.DeterminePreviewStateAsync(localTip, remoteTip.Value, context, preview, cancellationToken).ConfigureAwait(false);
 
         switch (classification.State)
         {
@@ -167,7 +168,9 @@ public sealed class PullUseCase
                         Array.Empty<string>(),
                         RecoveryDirectory: null,
                         DoctorSummary: null,
-                        Message: $"Would fast-forward '{targetBranch.Value}' from {localTip?.ToString()[..8] ?? "<none>"} to {remoteTip.Value.ToString()[..8]} ({classification.CommitsBehind} commit(s)).",
+                        Message: localTip.HasValue
+                            ? $"Would fast-forward '{targetBranch.Value}' from {localTip.Value.ToString()[..8]} to {remoteTip.Value.ToString()[..8]} ({classification.CommitsBehind} commit(s))."
+                            : $"Would initialize '{targetBranch.Value}' at {remoteTip.Value.ToString()[..8]}.",
                         IsDryRun: true);
                 }
 

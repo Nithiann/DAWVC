@@ -1034,3 +1034,51 @@ the PR with the explicitly pinned comparison:
 https://github.com/Nithiann/DAWVC/compare/develop...feat/sync-upstream-workflow?expand=1
 The agent does not approve or merge. WP-SYNC-03 and WP-SYNC-04 remain deferred,
 not implicitly delivered by these changes.
+
+# 29. WP-SYNC-03 — Fresh read-only Fetch/Pull previews
+
+Base: `feat/sync-upstream-workflow` at `d7ccf20`.
+Branch: `feat/sync-fresh-preview`. Prior WP implementation/CI passed; manual review
+remains a maintainer action. No approval or merge is performed by the agent.
+
+- [x] PREVIEW-01: inspect stale tracking/quarantine lifetime and context side effects.
+- [x] PREVIEW-02: bounded, verified in-memory metadata planning and pinned remote tips.
+- [x] PREVIEW-03: classify Pull ancestry from preview plus existing local commits.
+- [x] PREVIEW-04: eliminate constructor writes/index initialization on preview reads.
+- [x] PREVIEW-05: test fresh/missing/stale refs, ancestry, corruption, cancellation and unchanged filesystem state over filesystem/SSH.
+- [x] PREVIEW-06: update docs/requirements/ADR; build, full tests, format, smoke checks.
+- [ ] PREVIEW-07: publish stacked PR against the previous branch for manual review.
+
+Acceptance: Fetch/Pull dry-run uses a pinned current remote advertisement, never
+promotes objects or updates workspace/index/config/refs, never creates/prunes
+quarantine, and does not initialize missing repository directories merely by
+opening a context. Metadata is verified and bounded; blob payloads are not
+downloaded, so reported bytes are estimates, not a full integrity/availability or
+dirty-workspace preview. Success/failure/cancellation preserve repository bytes
+and directory layout. Actual Pull rechecks the remote on execution.
+
+No bare provisioning, resumable transfer, force-push or operation-wide workspace
+transaction is part of this WP. WP-SYNC-04 remains next for bare provisioning.
+
+Initial validation: 19 filesystem/transient-SSH preview cases passed with exact
+content/layout/mtime snapshots, covering fresh missing/stale tracking, existing
+cache states, unborn branches, divergence, corruption, cancelled reads and later
+remote movement. Unit checks cover metadata budget/shape validation and immutable
+preview snapshots. Full regression validation and CLI display checks follow.
+An existing Bootstrap test expected eager scratch-directory creation; that
+assertion is updated to the new documented side-effect-free factory contract.
+
+Final local validation (23 November 2026, Linux, SDK 10.0.404):
+
+- Full Release suite: 661 passed, 0 failed, 0 skipped; 33 additional regressions.
+- Release build: 0 warnings/errors; formatting verification passed.
+- Twenty filesystem/transient-SSH/CLI preview acceptance cases cover unchanged
+  repository content/layout/mtimes and fresh ancestry/ref output.
+- Real OpenSSH loopback push/clone/fetch/pull passed with byte identity and strict
+  unknown/changed host-key rejection. All four sync commands return 130 and stop
+  their SSH children on Linux SIGINT.
+- Requirements, CLI/integration/hosting/recovery guidance, limitations, threat
+  review and ADR-REM-004 describe the new preview contract and its limits.
+
+Publication target: stacked PR against `feat/sync-upstream-workflow`; maintainer
+approval/merge remains manual. WP-SYNC-04 remains next, after this WP is reviewed.

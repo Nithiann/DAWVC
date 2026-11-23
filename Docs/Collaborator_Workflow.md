@@ -145,3 +145,12 @@ differently named remote branch before publishing. Plain Push/Pull then use that
 mapping. `pull origin shared-mix` integrates into the current local branch; use
 `switch` separately when you intend to change local branches. Cancellation is
 available on clone/fetch/pull/push, but does not undo every durable effect.
+
+### Preview before integrating
+
+`dawvc pull --dry-run` now reads current remote metadata without updating tracking
+refs or downloading blob bodies. It works with stale/missing tracking caches and
+reports divergence before workspace changes. `fetch origin --dry-run` also lists
+planned ref updates. Neither operation forecasts dirty-workspace conflicts or
+reserves remote refs; verify unsaved work separately and run actual Pull to fetch
+and apply the latest validated state.

@@ -419,13 +419,27 @@ published. Fetch receives the selected remote/branch before ancestry checks.
 CLI clone/fetch/pull/push forward Ctrl+C to the engine and return 130 when cancelled,
 after awaiting cleanup/compensation. Already published durable effects can remain.
 
-**Existing Pull preview limitation:** `pull --dry-run` relies on cached tracking
-metadata after Fetch's preview discards incoming metadata. Fresh remote changes
-can be missed or produce an error until an explicit Fetch has updated local
-objects/tracking. It is not a reliable fresh online preview or complete dirty-tree
-conflict preview. WP-SYNC-03 tracks that separate work.
+**Fresh Fetch/Pull previews (WP-SYNC-03):** dry-run reads the current remote
+advertisement and verifies missing commit/snapshot metadata in bounded memory.
+Pull uses those pinned tips and parent links even if local tracking refs are
+missing or stale. Fetch prints planned tracking updates, including when object
+payloads are already cached. Neither command writes/prunes quarantine, promotes
+objects, initializes SQLite or changes workspace/config/refs.
+
+Counts/bytes are missing-transfer estimates from declared snapshot entries. Blob
+payloads are not downloaded or integrity/availability checked; dirty-workspace
+conflicts and recovery feasibility are not planned. A later real Pull fetches
+again and can observe a newer tip. A preview is advisory, not a ref reservation.
 
 If the active local branch changes while Pull is fetching, it reports a repository
 state error before checkout. Fetched objects/tracking may already exist; select
 the intended local branch and retry. This check is not a lock against all
 concurrent local operations.
+
+Preview limits: each metadata payload 2 MiB, cumulative received metadata 64 MiB,
+100,000 inspected object identities, 50,000 commits per graph/ancestry budget and
+1,000,000 remote parent edges. Exceeding a budget fails without repository writes.
+These limits apply to previews independently of the SSH host's session limits.
+Opening a repository context no longer creates storage directories. Actual writes
+and explicit Init initialize their storage; Status still uses the staging/cache
+index and is not a no-write command. No on-disk schema or wire change is involved.

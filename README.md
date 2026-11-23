@@ -220,3 +220,7 @@ no permanent DAWVC daemon is required. Strict host-key verification, public-key
 authentication and host-owned repository policies apply. See
 [SSH hosting](Docs/Self_Hosting_SSH.md) and [Protocol v1](Docs/Remote_Protocol.md).
 This is DAWVC synchronization, not compatibility with GitHub/GitLab Git endpoints.
+
+Fetch/Pull support fresh `--dry-run` metadata previews without updating workspace,
+objects, staging or refs. Fetch also shows planned tracking changes. Blob contents
+and dirty workspace conflicts are not checked; see the CLI reference for limits.

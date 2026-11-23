@@ -58,10 +58,10 @@ public sealed class FetchUseCaseTests
         progress.Reports.Where(p => p.Stage == OperationStage.TraversingHistory)
             .Should().NotBeEmpty().And.OnlyContain(p => p.Total == null);
         progress.Reports.Should().Contain(p => p.Stage == OperationStage.ReadingRemoteReferences && p.Completed == 1 && p.Total == 1);
-        _quarantineStore.Received(1).PruneStaleDirectories(TimeSpan.FromHours(24));
         if (dryRun)
         {
-            _quarantineStore.Received(1).DiscardSession();
+            _quarantineStore.DidNotReceive().PruneStaleDirectories(Arg.Any<TimeSpan>());
+            _quarantineStore.DidNotReceive().DiscardSession();
             await _quarantineStore.DidNotReceiveWithAnyArgs().PromoteAllAsync(default!, default);
             await _context.DidNotReceiveWithAnyArgs().UpdateRemoteTrackingCommitAsync(default!, default, default, default);
             progress.Reports.Should().NotContain(p => p.Stage == OperationStage.TransferringObjects || p.Stage == OperationStage.UpdatingReferences);
@@ -133,10 +133,11 @@ public sealed class FetchUseCaseTests
             var blobHash = Blake3ContentHasher.Hash(blobPayload);
             var snapshotPayload = CanonicalJsonSerializer.SerializeCanonical(new SnapshotPayloadDto
             {
-                Entries = [new EntryPayloadDto { Hash = blobHash.ToString(), Path = "Song.flp", Size = blobPayload.Length }]
+                SchemaVersion = 1,
+                Entries = [new EntryPayloadDto { Hash = blobHash.ToString(), BlobId = blobHash.ToString(), Path = "Song.flp", Size = blobPayload.Length }]
             });
             var snapshotHash = Blake3ContentHasher.Hash(snapshotPayload);
-            var commitPayload = CanonicalJsonSerializer.SerializeCanonical(new CommitPayloadDto { SnapshotId = snapshotHash.ToString() });
+            var commitPayload = CanonicalJsonSerializer.SerializeCanonical(new CommitPayloadDto { SchemaVersion = 1, SnapshotId = snapshotHash.ToString() });
             var commitHash = Blake3ContentHasher.Hash(commitPayload);
             var commit = CommitId.Parse(commitHash.ToString());
             _transport.ListRefsAsync(Arg.Any<CancellationToken>()).Returns(new List<RemoteRef> { new("refs/heads/main", commit) });
@@ -174,7 +175,8 @@ public sealed class FetchUseCaseTests
                 {
                     progress.Reports.Should().NotContain(p => p.Stage == OperationStage.TransferringObjects);
                     await _transport.DidNotReceive().OpenObjectPayloadStreamAsync(blobHash, Arg.Any<CancellationToken>());
-                    _quarantineStore.Received(1).DiscardSession();
+                    _quarantineStore.DidNotReceive().PruneStaleDirectories(Arg.Any<TimeSpan>());
+                    _quarantineStore.DidNotReceive().DiscardSession();
                 }
                 else
                 {
@@ -285,6 +287,6 @@ public sealed class FetchUseCaseTests
         result.IsDryRun.Should().BeTrue();
         result.ObjectsFetched.Should().Be(0);
         await _context.DidNotReceiveWithAnyArgs().UpdateRemoteTrackingCommitAsync(default!, default, default, default);
-        _quarantineStore.Received(1).DiscardSession();
+        _quarantineStore.DidNotReceive().DiscardSession();
     }
 }
