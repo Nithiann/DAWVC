@@ -1097,3 +1097,9 @@ No approval or merge is performed by the agent.
 
 Branch CI (Windows/Ubuntu):
 [![WP-SYNC-05 CI](https://github.com/Nithiann/DAWVC/actions/workflows/ci.yml/badge.svg?branch=feat%2Fsync-explicit-merge)](https://github.com/Nithiann/DAWVC/actions?query=branch%3Afeat%2Fsync-explicit-merge)
+
+
+Publication: implementation `b65e733` pushed to `feat/sync-explicit-merge`.
+Both `gh pr create` (GraphQL) and REST `POST /repos/Nithiann/DAWVC/pulls`
+returned Forbidden. PR creation remains a maintainer action through the pinned
+stacked comparison above. The branch is reviewable; no approval/merge performed.
