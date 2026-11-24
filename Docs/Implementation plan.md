@@ -1353,7 +1353,7 @@ features to this candidate; it does not approve/merge any prior PR or change dev
   preview/actual Pull tests for both snapshot choices, mapped names, FS and SSH.
 - [x] INT-05a: full Release compilation/suite, CLI acceptance, real SSH and SIGINT.
 - [x] INT-05b: final formatting verification (--verify-no-changes).
-- [ ] INT-05c: Windows/Ubuntu code CI, packaged acceptance and Linux SIGINT.
+- [x] INT-05c: Windows/Ubuntu code CI, packaged acceptance and Linux SIGINT.
 - [x] INT-06: update requirements, ADRs, reference, integration/workflow/limits.
 - [ ] INT-07: publish stacked PR for maintainer review; never approve/merge.
 
@@ -1390,3 +1390,23 @@ Local verification (24 November 2026, Linux, SDK 10.0.404):
 
 No native FL Studio/playback, real two-PC, clean Windows VM, power-cycle or
 NAS/SMB qualification was performed by this local synthetic workflow.
+
+
+Publication: implementation `24377a5` pushed to `feat/sync-workflow-integration`.
+GraphQL (`gh pr create`) and REST (`POST /repos/Nithiann/DAWVC/pulls`) both returned
+Forbidden. INT-07 stays open until PR creation is confirmed; use the pinned stacked
+comparison above for manual creation. No approval or merge was performed.
+
+Code CI run (Windows/Ubuntu):
+https://github.com/Nithiann/DAWVC/actions/runs/45374030077
+
+[![WP-SYNC-09 CI](https://github.com/Nithiann/DAWVC/actions/workflows/ci.yml/badge.svg?branch=feat%2Fsync-workflow-integration)](https://github.com/Nithiann/DAWVC/actions?query=branch%3Afeat%2Fsync-workflow-integration)
+
+
+Code CI result: **Success** for implementation `24377a5`, run `45374030077`.
+Ubuntu and Windows both passed the complete core suite and acceptance guards.
+Ubuntu also passed all four sync SIGINT/SSH-child-cleanup checks and synthetic
+CLI acceptance. Windows passed formatting, security audit, packaging and the
+42-check workflow using the extracted self-contained distribution. The native/
+physical/storage field gates remain pending. This final publication record changes
+documentation only. INT-07 remains the external PR-creation blocker above.
