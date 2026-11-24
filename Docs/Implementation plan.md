@@ -1267,7 +1267,7 @@ Branch: `feat/sync-operation-locking`; stacked PR; maintainer approval/merge onl
   session tests; preserve nested Pull/Clone/Merge/Switch workflows.
 - [x] OPS-06: requirements, ADR, CLI, integration, recovery, hosting and limits.
 - [x] OPS-07a: local Release suite/build/format, 42-check CLI acceptance and real SSH.
-- [ ] OPS-07b: Windows/Ubuntu branch CI, including extracted Windows package.
+- [x] OPS-07b: Windows/Ubuntu code CI, including extracted Windows package.
 - [ ] OPS-08: publish stacked PR; the agent never approves/merges.
 
 Ownership is cooperative and immediate-refusal, not a queued job scheduler or
@@ -1313,3 +1313,22 @@ Local verification (24 November 2026, Linux, SDK 10.0.404):
 The separate upstream/fresh-preview branches noted in section 28 are not implicitly
 included by this stacked branch. Their eventual integration requires its own review
 and regressions before release; this WP does not claim those features were merged.
+
+
+Publication: implementation `2cd4c9d` pushed to `feat/sync-operation-locking`.
+GraphQL (`gh pr create`) and REST (`POST /repos/Nithiann/DAWVC/pulls`) both
+returned Forbidden. OPS-08 remains open; use the pinned stacked comparison above
+for manual PR creation. The agent performed no approval or merge.
+
+Final local formatting verification passed with --verify-no-changes. Code CI:
+https://github.com/Nithiann/DAWVC/actions/runs/45367773070
+
+[![WP-SYNC-08 CI](https://github.com/Nithiann/DAWVC/actions/workflows/ci.yml/badge.svg?branch=feat%2Fsync-operation-locking)](https://github.com/Nithiann/DAWVC/actions?query=branch%3Afeat%2Fsync-operation-locking)
+
+
+Code CI result: **Success** for implementation `2cd4c9d` in run `45367773070`.
+Both Ubuntu and Windows completed all tests and acceptance guards. Windows also
+passed formatting, security audit, packaging and all 42 extracted-package acceptance
+checks. This final publication record changes documentation only; it does not add
+new engine behavior or turn the pending native/storage field gates into completed
+qualification. OPS-08 is the remaining publication blocker described above.
