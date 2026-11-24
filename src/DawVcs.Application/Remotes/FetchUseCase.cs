@@ -1,4 +1,5 @@
 using DawVcs.Application.Common;
+using DawVcs.Application.Operations;
 using DawVcs.Application.Recovery;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Configuration;
@@ -13,7 +14,10 @@ public sealed record FetchRequest(
     string RepositoryDirectory,
     string? RemoteName = null,
     string? Branch = null,
-    bool DryRun = false);
+    bool DryRun = false)
+{
+    internal RepositoryOperation? Operation { get; init; }
+}
 
 public sealed record UpdatedRemoteRef(
     BranchName Branch,
@@ -56,7 +60,9 @@ public class FetchUseCase
     public virtual async Task<FetchResult> ExecuteAsync(
         FetchRequest request, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
     {
-        var result = await ExecuteCoreAsync(request, cancellationToken, progress).ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(request);
+        using var operation = RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation, cancellationToken: cancellationToken);
+        var result = await ExecuteCoreAsync(request with { Operation = operation }, cancellationToken, progress).ConfigureAwait(false);
         progress?.Report(new OperationProgress(OperationStage.Completed));
         return result;
     }

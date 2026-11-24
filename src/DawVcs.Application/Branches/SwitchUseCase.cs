@@ -1,5 +1,6 @@
 using DawVcs.Application.Adapters;
 using DawVcs.Application.Checkouts;
+using DawVcs.Application.Operations;
 using DawVcs.Application.Recovery;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Hashing;
@@ -12,7 +13,10 @@ public sealed record SwitchRequest(
     string BranchName,
     bool CreateBranch = false,
     string? StartPoint = null,
-    bool Force = false);
+    bool Force = false)
+{
+    internal RepositoryOperation? Operation { get; init; }
+}
 
 public sealed record SwitchResult(
     BranchName Branch,
@@ -48,6 +52,7 @@ public sealed class SwitchUseCase
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+        using var operation = RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation, cancellationToken: cancellationToken);
         WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using var context = _contextFactory(request.RepositoryDirectory);
         var currentBranch = context.GetCurrentBranch();
@@ -106,7 +111,8 @@ public sealed class SwitchUseCase
             var checkoutRequest = new CheckoutRequest(
                 request.RepositoryDirectory,
                 targetBranch.Value,
-                Force: request.Force);
+                Force: request.Force)
+            { Operation = operation };
 
             try
             {

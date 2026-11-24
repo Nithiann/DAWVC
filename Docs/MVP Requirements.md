@@ -821,3 +821,18 @@ product runtime dependency, persisted engine schema or wire change is introduced
 This adds local recovery metadata only, not shared object or remote wire schemas.
 SQLite staged intent is preserved logically; cache rows, SQL timestamps, directory
 layout/timestamps, ACLs and file modes are not a byte-identical filesystem backup.
+
+
+# Concurrency amendment: repository operation ownership (24 November 2026)
+
+| ID | Priority | Requirement |
+|---|---|---|
+| FR-OPS-001 | Must | Serialize cooperating local working-repository writers across processes for the entire read/plan/write span, including local network waits and cache/binding updates. |
+| FR-OPS-002 | Must | Allow awaited nested Fetch/Status/Checkout/Doctor under explicit internal ownership; independent callbacks and public operations must not inherit reentrancy. |
+| FR-OPS-003 | Must | Refuse contention immediately with RepositoryBusyException, appended RepositoryBusy category and local CLI exit 11; busy remote receivers retain RemoteError/exit 8. |
+| FR-OPS-004 | Must | Own incoming filesystem/SSH destination writes throughout quarantine/publication/session disposal, with operation-before-recovery-before-ref lock order and no waiting across repositories. |
+| FR-OPS-005 | Must | Coordinate Init, normal Clone and bare provisioning with a canonical-target sibling creation lease before creating/replacing destination contents. |
+| FR-OPS-006 | Must | Release handles on success, validation failure, cancellation and process death; persistent empty coordination files must never be deleted to break ownership. |
+| FR-OPS-007 | Must | Reject linked/reparse-point lock paths and unknown nonempty lock-file contents; preserve repository data on contention. |
+| FR-OPS-008 | Must | Test real child-process contention/crash release, callback isolation, independent copies, creation and incoming push ownership, and nested workflow regressions. |
+| FR-OPS-009 | Must | Document cooperative participation, raw/older clients and external writers/restore exclusions; keep native, physical-power and NAS qualification gates distinct. |

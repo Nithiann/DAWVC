@@ -1,6 +1,7 @@
 using System.Diagnostics;
 
 using DawVcs.Application.Checkouts;
+using DawVcs.Application.Operations;
 using DawVcs.Application.Recovery;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Repositories;
@@ -14,6 +15,13 @@ public static class Program
     public static async Task<int> Main(string[] args)
     {
         var root = args[1];
+        if (args[0] is "hold-operation" or "hold-creation")
+        {
+            using var operation = RepositoryOperation.Enter(root, create: args[0] == "hold-creation", bareCreation: args[0] == "hold-creation");
+            Console.WriteLine("operation-held");
+            await Console.In.ReadLineAsync();
+            return 0;
+        }
         var desired = args[2];
         var hits = 0;
         void Checkpoint(string point)

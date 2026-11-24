@@ -1248,3 +1248,68 @@ Publication: implementation `35aecaf` pushed to `feat/sync-durable-recovery`.
 GraphQL (`gh pr create`) and REST (`POST /repos/Nithiann/DAWVC/pulls`) both
 returned Forbidden. Use the pinned stacked comparison above for manual PR
 creation. REC-07 stays open; the agent performed no approval or merge.
+
+
+# 32. WP-SYNC-08 — Operation-wide cooperative writer ownership
+
+Base: `feat/sync-durable-recovery` at `b0d3608`.
+Branch: `feat/sync-operation-locking`; stacked PR; maintainer approval/merge only.
+
+- [x] OPS-01: audit mutation and nested composition boundaries; choose fail-fast
+  handles with explicit internal capabilities instead of ambient reentrancy.
+- [x] OPS-02: serialize stock local writers, cache/binding updates and explicit
+  recovery; keep ownership across read/plan/write and network waits.
+- [x] OPS-03: incoming filesystem/SSH push session ownership; canonical-target
+  creation sidecar for Init/Clone/bare provisioning; consistent lock order.
+- [x] OPS-04: typed RepositoryBusy category and local CLI exit 11, existing remote
+  Busy/error exit 8, cancellation/disposal/crash release and persistent files.
+- [x] OPS-05: real process contention/kill, callback isolation, creation and push
+  session tests; preserve nested Pull/Clone/Merge/Switch workflows.
+- [x] OPS-06: requirements, ADR, CLI, integration, recovery, hosting and limits.
+- [x] OPS-07a: local Release suite/build/format, 42-check CLI acceptance and real SSH.
+- [ ] OPS-07b: Windows/Ubuntu branch CI, including extracted Windows package.
+- [ ] OPS-08: publish stacked PR; the agent never approves/merges.
+
+Ownership is cooperative and immediate-refusal, not a queued job scheduler or
+filesystem security boundary. Explicit internal capability copies join only the
+awaited nested operation. A second public call, including a progress callback or
+Task.Run, cannot inherit authority. Independent working copies remain independent
+even with the same repository ID. OS handles release on death; lock files persist.
+
+Scope includes stock local mutation, Status/Doctor and incoming push sessions;
+read-only queries/inspection, older clients/raw backend APIs, custom overrides,
+external restore destinations and DAW/editor saves are outside the guarantee.
+Network waits retain local ownership. Self-push into the same physical repository
+is refused; opposing pushes never wait on one another. Creation requires writable
+parent storage; ordinary initialized operations use their metadata lock only.
+
+No wire/shared object/schema/runtime dependency change, new journaling scope,
+lock stealing, automatic cleanup, native GUI or additional DAW. Real FL Studio/
+two-PC, physical-power and actual NAS/SMB permissions/locking/rename qualification
+remain open gates. The next release work is to execute those documented field
+acceptance gates and resolve measured blockers; do not label the product qualified
+from synthetic/process-kill CI alone.
+
+Publication target: `feat/sync-durable-recovery`.
+https://github.com/Nithiann/DAWVC/compare/feat/sync-durable-recovery...feat/sync-operation-locking?expand=1
+
+
+Local verification (24 November 2026, Linux, SDK 10.0.404):
+
+- Full Release suite: 748 passed, 0 failed/skipped (722 baseline + 26 ownership cases).
+- Actual child-process CLI Busy exit 11 preserves non-lock repository bytes;
+  graceful exit and process Kill release handles. Independent copies with matching
+  repository identity remain independent. Cross-process creation sidecar contention
+  covers missing/existing-empty destinations; incoming push sessions own the target.
+- Nested Status and callback Task.Run isolation, terminal Commit callback ownership,
+  cancellation/failure release, stale/mismatched capability rejection, canonical
+  aliases and nonempty unknown coordination contents are covered.
+- Synthetic CLI collaboration: 42 checks passed; all 11 harness guards passed.
+  Real unprivileged OpenSSH Push/Clone/Fetch/Pull, byte identity, explicit divergence
+  resolution, remote bare provisioning and strict host-key refusal passed.
+- Release build has 0 warnings/errors; formatting applied. Final formatting
+  verification and Windows/Ubuntu branch CI are recorded separately below.
+
+The separate upstream/fresh-preview branches noted in section 28 are not implicitly
+included by this stacked branch. Their eventual integration requires its own review
+and regressions before release; this WP does not claim those features were merged.

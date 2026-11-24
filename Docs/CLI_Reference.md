@@ -23,6 +23,7 @@ DAWVC uses deterministic process exit codes across all commands:
 | `8` | `RemoteError` | Remote transport failure, unreachable share/directory, repository ID mismatch, or schema error. |
 | `9` | `NonFastForward` | Push or pull rejected because the requested update is not a fast-forward (including a remote-ahead Push). |
 | `10` | `RecoveryRequired` | Active/unfinished workspace publication or conflicting recovery data; inspect `recover`. |
+| `11` | `RepositoryBusy` | Another cooperating local operation owns the working repository; await it and retry. |
 | `130` | `Cancelled` | Push was cooperatively cancelled; inspect the destination ref after an interrupted process. |
 
 ---
@@ -445,8 +446,8 @@ blobs require Fsck for a full audit. Metadata traversal limits: 50k commits, 1m
 parent edges, 2 MiB/object and 64 MiB cumulative metadata payload.
 
 Merge does not modify source branches/tracking refs. Push/Pull stay fast-forward
-only. After remote movement another Fetch/Merge may be necessary. Never run local
-mutating commands concurrently. Failed/cancelled preparation can leave an
+only. After remote movement another Fetch/Merge may be necessary. Cooperating local writers now fail fast on contention (exit 11); do not
+run older/raw writers or DAW saves concurrently. Failed/cancelled preparation can leave an
 unreachable merge object; cancellation/errors after publication may leave the
 merge committed. Inspect `log` and `status` before retrying. See Recovery Guide.
 
@@ -473,3 +474,17 @@ Read-only queries may still maintain existing filesystem/index caches. Recovery
 ownership/ref locks are persistent files: existence does not mean they are held;
 never delete them while operations may be active. See Recovery Guide for staged
 subsets, orphan data, manual conflicts, power-loss and concurrency boundaries.
+
+
+## Concurrent local operations (WP-SYNC-08)
+
+Stock local writers (including cache-writing Status and binding-writing Doctor)
+return exit **11 / RepositoryBusy** when another cooperating operation owns their
+working repository. Ownership spans Pull/Push network waits and awaited nested
+steps. Await/cancel the first operation before retrying. A busy receiving host is
+reported through the existing remote error/exit **8**. There is no wait/force-lock
+flag; self-push into the same repository is refused. Empty `operation.lock` and
+hashed sibling creation lock files persist normally: never delete live locks.
+Read-only Log/Scan/Fsck/recovery inspection stay outside this serialization.
+Old clients, raw backends, external restore targets and DAW saves still require
+exclusive coordination. See Recovery Guide and ADR-OPS-001.

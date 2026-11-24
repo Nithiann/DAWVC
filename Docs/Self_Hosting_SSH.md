@@ -157,3 +157,9 @@ arbitrary-path recovery command. Bare storage has no workspace transaction. Neve
 remove live ref/ownership locks to bypass refusal. Workspace crash recovery does
 not make whole Push or SSH connection failure transactional; inspect remote tips
 after a lost publish reply as before.
+
+WP-SYNC-08 receivers also own the destination's operation handle for the complete
+incoming push session. A competing upgraded writer/receiver fails fast as a remote
+error (exit 8). Local busy commands use exit 11. Do not remove operation/creation/
+ref/recovery files to break a live owner; OS handles release on process termination.
+Upgrade all writers together and qualify actual NAS/SMB locking on both clients.

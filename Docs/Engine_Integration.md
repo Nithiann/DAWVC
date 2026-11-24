@@ -124,7 +124,7 @@ Progress uses existing typed stages and nested completion suppression. Await
 cancellation; a durable merge is not undone after publication. State-change errors
 classify as Validation. `FastForwardTarget.RequireExpectedState` opts into active
 branch/tip checks immediately before journal application; Merge sets it. Existing
-callers retain their prior behavior. This is no operation-wide concurrency lock.
+callers retain their prior behavior. These state checks complement the operation-wide ownership added in WP-SYNC-08.
 No persisted schema, wire contract, UI or dependency changes. Failed operations
 can leave unreachable objects; full historical snapshot/blob auditing remains Fsck.
 
@@ -145,4 +145,29 @@ operation based; low-level repository/index methods bypass use-case guards and
 must not be used concurrently to mutate a recovering repository. Read the recovery
 guide for committed decisions, partial staging replay, cleanup and power limits.
 No shared object/wire schema or new runtime dependency; a test-only crash host is
-not part of the shipped CLI. The following operation-wide concurrency WP is separate.
+not part of the shipped CLI. WP-SYNC-08 adds operation-wide ownership as described below.
+
+
+## Operation ownership (WP-SYNC-08)
+
+Stock mutation use cases now acquire a fail-fast repository-wide OS handle lease
+before context creation and keep it through local work/resource disposal. Status
+and Doctor participate because they update caches/bindings. Pull/Push retain local
+ownership while awaiting the remote. Await operations and cancellation before
+retrying; RepositoryBusyException maps to appended OperationFailureCategory.
+RepositoryBusy and CLI exit 11. A busy incoming SSH/filesystem push is RemoteError
+(exit 8). No public token/reentrancy API or wire change is introduced.
+
+Known nested calls use internal explicit capability copies; unrelated calls from
+progress handlers/Task.Run receive Busy rather than inheriting ambient authority.
+A slow progress handler can therefore prolong ownership. Do not await a second
+public writer from a handler. Operation, recovery and ref handles always acquire
+in that order; no cross-repository waits. Init/Clone/bare provision also use a
+persistent hashed sibling creation lease (parent write permission required).
+
+Use the stock composition for this guarantee. Raw context/index methods and custom
+overrides/providers must implement their own coordination; old clients, DAW saves
+and external restore targets remain outside it. Read-only queries are not atomic
+workspace snapshots and backend opening can still write housekeeping metadata.
+Do not delete operation/ref/recovery/creation lock files. Empty files persist after
+handles close; process death releases ownership. See ADR-OPS-001 and Recovery Guide.

@@ -1,6 +1,7 @@
 using System.Text;
 
 using DawVcs.Application.Checkouts;
+using DawVcs.Application.Operations;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Hashing;
 using DawVcs.Domain.Repositories;
@@ -36,6 +37,7 @@ public sealed class WorkspaceRecoveryUseCase
     {
         var root = Path.GetFullPath(repositoryDirectory);
         cancellationToken.ThrowIfCancellationRequested();
+        using var operation = RepositoryOperation.Enter(root, cancellationToken: cancellationToken);
         WorkspaceMutationGuard.Repository(root);
         var directories = Directories(root);
         if (directories.Length == 0) return new WorkspaceRecoveryResult(0, 0);

@@ -4,6 +4,7 @@ using DawVcs.Adapters.Abstractions;
 using DawVcs.Application.Adapters;
 using DawVcs.Application.Common;
 using DawVcs.Application.Dependencies;
+using DawVcs.Application.Operations;
 using DawVcs.Application.Recovery;
 using DawVcs.Domain.Dependencies;
 using DawVcs.Domain.Entities;
@@ -11,7 +12,10 @@ using DawVcs.Domain.Repositories;
 
 namespace DawVcs.Application.Diagnostics;
 
-public sealed record DoctorRequest(string RepositoryDirectory);
+public sealed record DoctorRequest(string RepositoryDirectory)
+{
+    internal RepositoryOperation? Operation { get; init; }
+}
 
 /// <summary>
 /// Voert een 3-domeinen integriteitsdiagnose uit: Artifact, Dependency en Environment (FR-DOC-001..010, TD §31).
@@ -38,8 +42,9 @@ public class DoctorUseCase
         ArgumentException.ThrowIfNullOrWhiteSpace(request.RepositoryDirectory);
 
         cancellationToken.ThrowIfCancellationRequested();
-        progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
         DoctorReport report;
+        using var operation = RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation, cancellationToken: cancellationToken);
+        progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
         WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using (var context = _contextFactory(request.RepositoryDirectory))
         {

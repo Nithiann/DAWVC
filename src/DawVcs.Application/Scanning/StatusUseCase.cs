@@ -1,4 +1,5 @@
 using DawVcs.Application.Common;
+using DawVcs.Application.Operations;
 using DawVcs.Domain.Artifacts;
 using DawVcs.Domain.Hashing;
 using DawVcs.Domain.Repositories;
@@ -6,7 +7,10 @@ using DawVcs.Domain.Repositories;
 namespace DawVcs.Application.Scanning;
 
 public sealed record StatusRequest(
-    string RepositoryDirectory);
+    string RepositoryDirectory)
+{
+    internal RepositoryOperation? Operation { get; init; }
+}
 
 public sealed record StatusResult(
     WorkingTreeStatus Status);
@@ -41,6 +45,7 @@ public sealed class StatusUseCase : IUseCase<StatusRequest, StatusResult>
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.RepositoryDirectory);
 
+        using var operation = RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation, cancellationToken: cancellationToken);
         progress?.Report(new OperationProgress(OperationStage.LoadingMetadata));
         cancellationToken.ThrowIfCancellationRequested();
         using var context = _contextFactory(request.RepositoryDirectory);

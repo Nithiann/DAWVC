@@ -19,7 +19,8 @@ public enum OperationFailureCategory
     Timeout,
     Cancellation,
     IncompleteRollback,
-    RecoveryRequired
+    RecoveryRequired,
+    RepositoryBusy
 }
 
 /// <summary>
@@ -33,6 +34,7 @@ public sealed record OperationFailure(OperationFailureCategory Category, Excepti
         ArgumentNullException.ThrowIfNull(exception);
         var category = exception switch
         {
+            RepositoryBusyException => OperationFailureCategory.RepositoryBusy,
             WorkspaceRecoveryRequiredException => OperationFailureCategory.RecoveryRequired,
             IncompleteRollbackException => OperationFailureCategory.IncompleteRollback,
             DirtyWorkspaceException => OperationFailureCategory.DirtyWorkspace,

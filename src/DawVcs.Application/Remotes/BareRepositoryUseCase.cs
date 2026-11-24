@@ -1,5 +1,6 @@
 using DawVcs.Application.Common;
 using DawVcs.Application.Exceptions;
+using DawVcs.Application.Operations;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Configuration;
 using DawVcs.Domain.Remotes;
@@ -47,6 +48,8 @@ public sealed class BareRepositoryUseCase(
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+        using var destination = RepositoryOperation.Enter(target, create: true, bareCreation: true, cancellationToken: cancellationToken);
+        ValidateDestination(target);
         var parent = Path.GetDirectoryName(target)!;
         Directory.CreateDirectory(parent);
         // Same-volume isolated staging: publish the whole bare layout with one directory rename.
@@ -61,6 +64,7 @@ public sealed class BareRepositoryUseCase(
         {
             Directory.CreateDirectory(work);
             progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
+            using (var operation = RepositoryOperation.Enter(work, create: true, cancellationToken: cancellationToken))
             using (var context = contextFactory(work))
             {
                 context.SaveConfig(config);
@@ -70,7 +74,7 @@ public sealed class BareRepositoryUseCase(
                 if (request.CopyHistory)
                 {
                     context.SaveRemote(new RemoteConfig(RemoteName.Origin, source));
-                    var fetched = await fetchUseCase.ExecuteAsync(new FetchRequest(work, "origin"), cancellationToken,
+                    var fetched = await fetchUseCase.ExecuteAsync(new FetchRequest(work, "origin") { Operation = operation }, cancellationToken,
                         progress is null ? null : new NestedOperationProgress(progress)).ConfigureAwait(false);
                     objects = fetched.ObjectsFetched;
                     bytes = fetched.BytesFetched;

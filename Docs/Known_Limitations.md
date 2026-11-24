@@ -150,8 +150,8 @@ incomplete snapshots retain their incomplete flag; choosing a version does not
 make missing external plugins/libraries reproducible.
 
 Expected branch/tip checks catch changes before checkout publication, but there
-is no global workspace lock spanning file/ref/index updates. Do not run local
-mutating commands concurrently. Handled publication failures use existing
+is an operation-wide cooperating writer lease in WP-SYNC-08. Older/raw clients
+and DAW saves must still be kept exclusive. Handled publication failures use existing
 compensation; incomplete rollback can retain recovery data. Hard crashes and
 post-publication dependency-resolution failure/cancellation need inspection.
 An unreachable immutable merge object can remain after failure; no GC is added.
@@ -188,7 +188,7 @@ orphan preparation, terminal cleanup, staging and recovery copies can remain;
 cleanup is not secure erasure. No GC/reset command is introduced.
 
 The ownership lock prevents simultaneous publication/recovery, and existing ref
-locks protect recovery metadata writes. Other already-started writers, older
+locks protect recovery metadata writes. WP-SYNC-08 adds serialization for upgraded stock writers. Older
 clients/raw backend calls and external DAW/file edits are not globally serialized.
 Do not mutate/save concurrently. External restore, Commit, Push and bare storage
 provisioning are not newly crash-journaled. Process-kill tests do not certify true
@@ -200,3 +200,21 @@ protected owner DACL). Non-ACL filesystems or NAS identity/ACL mappings may reje
 preparation before workspace mutation. Journaled workspaces require storage with
 qualified permissions and atomic rename semantics; bare remote storage is a
 separate scope. Restore does not preserve original file ACLs/modes.
+
+
+## Cooperative operation ownership (WP-SYNC-08)
+
+Stock local writers, Status/Doctor and incoming push sessions now share an
+operation-wide OS handle lease; independent processes/callbacks fail fast rather
+than wait. This supersedes earlier statements that stock operations lack a global
+writer lease. Local busy is exit 11; incoming busy is remote exit 8. Network waits
+hold local ownership, and self-push to the same physical repository is refused.
+Creation uses a persistent hashed sibling lock and needs parent write permission.
+
+Older binaries, raw context/index calls, custom overrides/providers, DAW/editor
+saves and external restore destinations remain outside this cooperative protocol.
+External restores require exclusive separate targets. Read-only inspection is not
+an atomic view. No new crash journal for Commit/Push/bare provisioning, automatic
+lock stealing/cleanup, GC, distributed locking service or NAS qualification is
+added. Persistent empty coordination files are normal. Native FL Studio/two-PC,
+physical-power and actual storage permission/locking/rename tests remain open.

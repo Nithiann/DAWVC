@@ -1,3 +1,4 @@
+using DawVcs.Application.Operations;
 using DawVcs.Application.Recovery;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Remotes;
@@ -5,8 +6,14 @@ using DawVcs.Domain.Repositories;
 
 namespace DawVcs.Application.Remotes;
 
-public sealed record RemoteAddRequest(string RepositoryDirectory, string Name, string Url);
-public sealed record RemoteRemoveRequest(string RepositoryDirectory, string Name);
+public sealed record RemoteAddRequest(string RepositoryDirectory, string Name, string Url)
+{
+    internal RepositoryOperation? Operation { get; init; }
+}
+public sealed record RemoteRemoveRequest(string RepositoryDirectory, string Name)
+{
+    internal RepositoryOperation? Operation { get; init; }
+}
 public sealed record RemoteListRequest(string RepositoryDirectory);
 public sealed record RemoteListResult(IReadOnlyList<RemoteConfig> Remotes);
 
@@ -27,6 +34,7 @@ public sealed class RemoteUseCase
     public RemoteConfig AddRemote(RemoteAddRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        using var operation = RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation);
         WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using var context = _contextFactory(request.RepositoryDirectory);
 
@@ -61,6 +69,7 @@ public sealed class RemoteUseCase
     public bool RemoveRemote(RemoteRemoveRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        using var operation = RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation);
         WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using var context = _contextFactory(request.RepositoryDirectory);
         return context.RemoveRemote(request.Name);

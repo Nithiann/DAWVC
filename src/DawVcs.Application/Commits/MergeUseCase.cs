@@ -3,6 +3,7 @@ using System.Text.Json;
 using DawVcs.Application.Checkouts;
 using DawVcs.Application.Common;
 using DawVcs.Application.Exceptions;
+using DawVcs.Application.Operations;
 using DawVcs.Application.Recovery;
 using DawVcs.Application.Scanning;
 using DawVcs.Domain.Artifacts;
@@ -18,7 +19,10 @@ namespace DawVcs.Application.Commits;
 public enum MergeSnapshotChoice { Local, Incoming }
 
 public sealed record MergeRequest(string RepositoryDirectory, string Reference,
-    MergeSnapshotChoice Take, string Message, string? Author = null);
+    MergeSnapshotChoice Take, string Message, string? Author = null)
+{
+    internal RepositoryOperation? Operation { get; init; }
+}
 
 public sealed record MergeResult(CommitId CommitId, CommitId LocalParent, CommitId IncomingParent,
     SnapshotId SnapshotId, BranchName Branch, MergeSnapshotChoice Taken,
@@ -41,6 +45,7 @@ public sealed class MergeUseCase(Func<string, IRepositoryContext> contextFactory
         var author = request.Author ?? Environment.UserName;
         ArgumentException.ThrowIfNullOrWhiteSpace(author);
         cancellationToken.ThrowIfCancellationRequested();
+        using var operation = RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation, cancellationToken: cancellationToken);
         progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
         WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         WorkspaceMutationGuard.Repository(Path.GetFullPath(request.RepositoryDirectory));
@@ -106,7 +111,7 @@ public sealed class MergeUseCase(Func<string, IRepositoryContext> contextFactory
         }
 
         var nestedProgress = progress is null ? null : new NestedOperationProgress(progress);
-        var status = await new StatusUseCase(contextFactory).ExecuteAsync(new StatusRequest(context.RootPath), cancellationToken, nestedProgress).ConfigureAwait(false);
+        var status = await new StatusUseCase(contextFactory).ExecuteAsync(new StatusRequest(context.RootPath) { Operation = operation }, cancellationToken, nestedProgress).ConfigureAwait(false);
         if (status.Status.HasStagedChanges || status.Status.HasWorkingTreeModifications || status.Status.Renamed.Count > 0)
             throw new DirtyWorkspaceException("Merge requires committed tracked files and an empty staging index. Commit or move your changes first.", status.Status);
         EnsureUnchanged();
@@ -123,7 +128,7 @@ public sealed class MergeUseCase(Func<string, IRepositoryContext> contextFactory
         WorkspaceMutationGuard.ObjectWrite(context.RootPath, merged.Id);
         await context.ObjectStore.WriteObjectAsync(ObjectType.Commit, mergedPayload, cancellationToken).ConfigureAwait(false);
         EnsureUnchanged();
-        var applied = await checkout.ExecuteFastForwardAsync(new FastForwardTarget(context.RootPath, branch, local, merged.Id) { RequireExpectedState = true },
+        var applied = await checkout.ExecuteFastForwardAsync(new FastForwardTarget(context.RootPath, branch, local, merged.Id) { RequireExpectedState = true, Operation = operation },
             false, cancellationToken, nestedProgress).ConfigureAwait(false);
         progress?.Report(new OperationProgress(OperationStage.Completed));
         return new MergeResult(merged.Id, local, incoming, chosen, branch, request.Take, applied.RestoredFiles);

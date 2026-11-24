@@ -3,6 +3,7 @@ using DawVcs.Application.Adapters;
 using DawVcs.Application.Common;
 using DawVcs.Application.Dependencies;
 using DawVcs.Application.Exceptions;
+using DawVcs.Application.Operations;
 using DawVcs.Application.Recovery;
 using DawVcs.Domain.Artifacts;
 using DawVcs.Domain.Common;
@@ -20,7 +21,10 @@ public sealed record CommitRequest(
     string Message,
     string? Author = null,
     bool AllowIncomplete = false,
-    bool Consolidate = false);
+    bool Consolidate = false)
+{
+    internal RepositoryOperation? Operation { get; init; }
+}
 
 public sealed record CommitResult(
     CommitId CommitId,
@@ -53,7 +57,9 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
 
     public async Task<CommitResult> ExecuteAsync(CommitRequest request, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
     {
-        var result = await ExecuteCoreAsync(request, cancellationToken, progress).ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(request);
+        using var operation = RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation, cancellationToken: cancellationToken);
+        var result = await ExecuteCoreAsync(request with { Operation = operation }, cancellationToken, progress).ConfigureAwait(false);
         progress?.Report(new OperationProgress(OperationStage.Completed));
         return result;
     }

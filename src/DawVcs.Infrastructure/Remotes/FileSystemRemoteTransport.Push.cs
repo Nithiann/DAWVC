@@ -1,8 +1,11 @@
 using DawVcs.Application.Checkouts;
+using DawVcs.Application.Operations;
+using DawVcs.Application.Recovery;
 using DawVcs.Application.Remotes;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Hashing;
 using DawVcs.Domain.Remotes;
+using DawVcs.Domain.Repositories;
 using DawVcs.Domain.Storage;
 using DawVcs.Infrastructure.FileSystem;
 
@@ -52,15 +55,21 @@ public sealed partial class FileSystemRemoteTransport
     public async Task<IRemotePushSession> BeginPushAsync(BranchName branch, CommitId? expectedTip, CancellationToken cancellationToken = default)
     {
         await ValidatePushAsync(branch, expectedTip, cancellationToken).ConfigureAwait(false);
+        RepositoryOperation operation;
+        try { operation = RepositoryOperation.Enter(_configDir, remoteMetadata: _dotDawvcPath, cancellationToken: cancellationToken); }
+        catch (RepositoryBusyException ex) { throw new RemoteException("Destination has another active operation. Retry later.", ex); }
         FileStream refLock;
         try { refLock = RepositoryRefLock.Acquire(_dotDawvcPath); }
-        catch (IOException ex) { throw new RemoteException("Destination has another active ref writer. Retry later.", ex); }
+        catch (IOException ex) { operation.Dispose(); throw new RemoteException("Destination has another active ref writer. Retry later.", ex); }
+        catch { operation.Dispose(); throw; }
         try
         {
+            WorkspaceRecoveryGuard.ThrowIfPending(_configDir);
             await ValidatePushAsync(branch, expectedTip, cancellationToken).ConfigureAwait(false);
-            return new PushSession(this, branch, expectedTip, refLock);
+            return new PushSession(this, branch, expectedTip, refLock, operation);
         }
-        catch { refLock.Dispose(); throw; }
+        catch (WorkspaceRecoveryRequiredException ex) { refLock.Dispose(); operation.Dispose(); throw new RemoteException(ex.Message, ex); }
+        catch { refLock.Dispose(); operation.Dispose(); throw; }
     }
 
     private string GetPushRefPath(BranchName branch) => Path.Combine(_refsHeadsPath, branch.Value.Replace('/', Path.DirectorySeparatorChar));
@@ -86,17 +95,19 @@ public sealed partial class FileSystemRemoteTransport
         private readonly BranchName _branch;
         private readonly CommitId? _expectedTip;
         private readonly FileStream _refLock;
+        private readonly RepositoryOperation _operation;
         private readonly string _sessionPath;
         private readonly List<VerifiedIncomingObject> _received = [];
         private bool _disposed;
         private bool _published;
 
-        public PushSession(FileSystemRemoteTransport owner, BranchName branch, CommitId? expectedTip, FileStream refLock)
+        public PushSession(FileSystemRemoteTransport owner, BranchName branch, CommitId? expectedTip, FileStream refLock, RepositoryOperation operation)
         {
             _owner = owner;
             _branch = branch;
             _expectedTip = expectedTip;
             _refLock = refLock;
+            _operation = operation;
             _sessionPath = Path.Combine(owner._dotDawvcPath, "incoming", "push-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_sessionPath);
         }
@@ -215,7 +226,7 @@ public sealed partial class FileSystemRemoteTransport
             }
             catch (IOException) { /* Best-effort cleanup must not turn published success into failure. */ }
             catch (UnauthorizedAccessException) { /* Preserve remaining quarantine for manual cleanup. */ }
-            finally { _refLock.Dispose(); }
+            finally { try { _refLock.Dispose(); } finally { _operation.Dispose(); } }
         }
     }
 }

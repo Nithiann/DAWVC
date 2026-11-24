@@ -267,3 +267,31 @@ Flush-to-disk, atomic rename and SQLite synchronous=FULL do not certify director
 ordering, hardware/controller caches or NAS/SMB behavior. Real power-loss and
 storage qualification remain open deployment gates. Operation-wide serialization
 of all local writers is the next independent implementation scope.
+
+
+## Busy repository (WP-SYNC-08)
+
+A cooperating local mutation, cache-writing Status or binding-writing Doctor owns
+`.dawvc/operation.lock` for its full operation. A second writer returns exit 11
+immediately; an incoming filesystem/SSH push to a busy receiver returns remote
+exit 8. Await/cancel the owning operation and await its completion before retrying.
+The lock covers network waits; a stalled remote can keep the local repository busy.
+No automatic waiting, forced takeover, PID expiry or lock-file removal is offered.
+
+The order is operation → workspace publication/recovery → ref writer. Explicit
+`recover --rollback` participates in the operation lock; read-only `recover`
+inspection does not. After a killed process the OS releases its handles: inspect
+pending recovery first, then roll back/finalize it. Busy alone does not imply a
+recovery envelope exists. Empty operation/creation/ref/recovery files persist and
+are not evidence of a live process. Never delete them to bypass a live owner.
+
+Init/Clone/bare provisioning coordinate through a persistent hashed sibling
+`.dawvc-create-<sha256>.lock`. They need parent write permission. Failed normal
+creation can leave an empty `.dawvc/operation.lock` scaffold; Clone accepts that
+scaffold, but does not silently replace other existing destination data.
+
+Only upgraded stock use cases/receivers participate. Older binaries, direct backend
+calls and DAW/editor writes must still be kept exclusive. External restoration
+requires an exclusive separate target and must not write into an active working
+repository. Read-only views can observe changes and are not multi-file snapshots.
+NAS/SMB lock semantics and real power-loss durability still require field testing.

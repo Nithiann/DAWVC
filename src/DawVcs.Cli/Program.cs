@@ -133,6 +133,7 @@ public static class Program
             catch (RemoteException ex) { invocation.ExitCode = 8; WriteError(ex.Message); }
             catch (PathSecurityException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
             catch (ArgumentException ex) { invocation.ExitCode = 7; WriteError(ex.Message); }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
             catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex) { invocation.ExitCode = 1; WriteError(ex.Message); }
         });
@@ -173,6 +174,7 @@ public static class Program
             catch (CheckoutStagingException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
             catch (FileNotFoundException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
             catch (OperationCanceledException) { invocation.ExitCode = 130; WriteError("Merge cancelled. Inspect the current branch before retrying; a completed publication is not undone."); }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
             catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex) { invocation.ExitCode = 1; WriteError(ex.Message); }
         });
@@ -199,6 +201,7 @@ public static class Program
                     if (pending.Count == 0) AnsiConsole.MarkupLine("No pending workspace transactions.");
                 }
             }
+            catch (RepositoryBusyException ex) { invocation.ExitCode = 11; WriteError(ex.Message); }
             catch (WorkspaceRecoveryRequiredException ex) { invocation.ExitCode = 10; WriteError(ex.Message); }
             catch (OperationCanceledException) { invocation.ExitCode = 130; WriteError("Recovery cancelled; retain the transaction and retry after inspecting state."); }
             catch (Exception ex) { invocation.ExitCode = 10; WriteError(ex.Message); }
@@ -243,6 +246,7 @@ public static class Program
                 AnsiConsole.MarkupLine($"[yellow]{Markup.Escape(PathRedactor.Redact(ex.Message))}[/]");
                 Environment.ExitCode = 0;
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
             catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
@@ -284,6 +288,7 @@ public static class Program
                     AnsiConsole.WriteLine();
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
             catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
@@ -357,6 +362,7 @@ public static class Program
             {
                 WriteError(ex.Message, 5);
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
             catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
@@ -399,6 +405,7 @@ public static class Program
                         break;
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
             catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
@@ -474,6 +481,7 @@ public static class Program
                     AnsiConsole.MarkupLine("nothing to commit, working tree clean");
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
             catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
@@ -504,6 +512,7 @@ public static class Program
                     AnsiConsole.MarkupLine($"  [green]+[/] {Markup.Escape(path.Value)}");
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
             catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
@@ -617,6 +626,7 @@ public static class Program
                 }
                 AnsiConsole.WriteLine();
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
             catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
@@ -675,6 +685,7 @@ public static class Program
                     }
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
             catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
@@ -734,6 +745,7 @@ public static class Program
                 WriteError($"Staging conflict (Exit Code 7): {ex.Message}", 7);
                 AnsiConsole.MarkupLine("[yellow]Remediation:[/] Commit or stage your changes, or use [bold]dawvc switch --force <branch>[/] to create a recovery copy.");
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
             catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
@@ -946,6 +958,7 @@ public static class Program
                     Environment.ExitCode = 0;
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
             catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
@@ -1045,6 +1058,7 @@ public static class Program
                     Environment.ExitCode = 0;
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
             catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
@@ -1072,6 +1086,7 @@ public static class Program
                 var remote = useCase.AddRemote(new RemoteAddRequest(repoDir, name, url));
                 AnsiConsole.MarkupLine($"[green]✓[/] Added remote '[yellow]{Markup.Escape(remote.Name.Value)}[/]' -> [cyan]{Markup.Escape(PathRedactor.Redact(remote.Url))}[/]");
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
             catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
@@ -1101,6 +1116,7 @@ public static class Program
                     WriteError($"Remote '{name}' not found.", 1);
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
             catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
@@ -1129,6 +1145,7 @@ public static class Program
                     AnsiConsole.MarkupLine($"[yellow]{Markup.Escape(rem.Name.Value)}[/]\t{Markup.Escape(PathRedactor.Redact(rem.Url))}");
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
             catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
@@ -1210,6 +1227,7 @@ public static class Program
             {
                 WriteError($"Security violation in remote snapshot (Exit Code 3): {ex.Message}", 3);
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
             catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
@@ -1313,6 +1331,7 @@ public static class Program
             {
                 WriteError($"Security violation in remote snapshot (Exit Code 3): {ex.Message}", 3);
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
             catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
@@ -1355,6 +1374,7 @@ public static class Program
             catch (NotSupportedException ex) { invocation.ExitCode = 8; WriteError(ex.Message); }
             catch (IOException ex) { invocation.ExitCode = 8; WriteError(ex.Message); }
             catch (UnauthorizedAccessException ex) { invocation.ExitCode = 8; WriteError(ex.Message); }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
             catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex) { invocation.ExitCode = 1; WriteError(ex.Message); }
         });
@@ -1417,6 +1437,7 @@ public static class Program
             }
             catch (OperationCanceledException) { invocation.ExitCode = 130; WriteError("Clone cancelled; inspect the destination before retrying."); }
             catch (ArgumentException ex) { invocation.ExitCode = 7; WriteError(ex.Message); }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
             catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex) { invocation.ExitCode = 1; WriteError(ex.Message); }
         });

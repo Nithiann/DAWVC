@@ -257,3 +257,11 @@ finalizes a Committed publication. Pending envelopes block new cooperating
 mutations. Unexpected edits/corrupt backups are preserved for inspection, without
 force overwrite. See [Recovery Guide](Docs/Recovery_Guide.md) for ownership,
 staging replay, private backups, cleanup and power-loss qualification boundaries.
+
+WP-SYNC-08 adds cooperative operation-wide writer ownership across CLI processes
+and incoming SSH/filesystem push sessions. Busy local operations return exit 11;
+busy receivers return remote exit 8. Await the owning operation; never delete live
+lock files. Status/Doctor participate, and Pull/Push retain local ownership during
+network waits. Older/raw clients, DAW saves and external restores still require
+exclusive coordination. See [Recovery Guide](Docs/Recovery_Guide.md) and
+[ADR-OPS-001](Docs/adr/ADR-OPS-001-repository-operation-locking.md).

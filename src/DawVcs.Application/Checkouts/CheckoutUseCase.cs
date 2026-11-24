@@ -2,6 +2,7 @@ using DawVcs.Application.Adapters;
 using DawVcs.Application.Common;
 using DawVcs.Application.Dependencies;
 using DawVcs.Application.Exceptions;
+using DawVcs.Application.Operations;
 using DawVcs.Application.Recovery;
 using DawVcs.Application.Repositories;
 using DawVcs.Application.Scanning;
@@ -19,7 +20,10 @@ public sealed record CheckoutRequest(
     string RepositoryDirectory,
     string Reference,
     string? RestoreToDirectory = null,
-    bool Force = false);
+    bool Force = false)
+{
+    internal RepositoryOperation? Operation { get; init; }
+}
 
 public sealed record FastForwardTarget(
     string RepositoryDirectory,
@@ -27,6 +31,7 @@ public sealed record FastForwardTarget(
     CommitId? OldCommitId,
     CommitId NewCommitId)
 {
+    internal RepositoryOperation? Operation { get; init; }
     public bool RequireExpectedState { get; init; }
 }
 
@@ -64,7 +69,11 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
 
     public virtual async Task<CheckoutResult> ExecuteAsync(CheckoutRequest request, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
     {
-        var result = await ExecuteCoreAsync(request, cancellationToken, progress).ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(request);
+        // External restoration has no source workspace mutation; its independent target remains outside this lock scope.
+        using var operation = string.IsNullOrWhiteSpace(request.RestoreToDirectory)
+            ? RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation, cancellationToken: cancellationToken) : null;
+        var result = await ExecuteCoreAsync(request with { Operation = operation }, cancellationToken, progress).ConfigureAwait(false);
         progress?.Report(new OperationProgress(OperationStage.Completed));
         return result;
     }
@@ -173,7 +182,7 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
             }
 
             var statusUseCase = new StatusUseCase(_contextFactory);
-            var statusResult = await statusUseCase.ExecuteAsync(new StatusRequest(repoRoot), cancellationToken,
+            var statusResult = await statusUseCase.ExecuteAsync(new StatusRequest(repoRoot) { Operation = request.Operation }, cancellationToken,
                 progress is null ? null : new NestedOperationProgress(progress)).ConfigureAwait(false);
             var status = statusResult.Status;
 
@@ -433,7 +442,9 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
         CancellationToken cancellationToken,
         IProgress<OperationProgress>? progress)
     {
-        var result = await ExecuteFastForwardCoreAsync(target, force, cancellationToken, progress).ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(target);
+        using var operation = RepositoryOperation.Enter(target.RepositoryDirectory, target.Operation, cancellationToken: cancellationToken);
+        var result = await ExecuteFastForwardCoreAsync(target with { Operation = operation }, force, cancellationToken, progress).ConfigureAwait(false);
         progress?.Report(new OperationProgress(OperationStage.Completed));
         return result;
     }
@@ -494,7 +505,7 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
         }
 
         var statusUseCase = new StatusUseCase(_contextFactory);
-        var statusResult = await statusUseCase.ExecuteAsync(new StatusRequest(repoRoot), cancellationToken,
+        var statusResult = await statusUseCase.ExecuteAsync(new StatusRequest(repoRoot) { Operation = target.Operation }, cancellationToken,
             progress is null ? null : new NestedOperationProgress(progress)).ConfigureAwait(false);
         var status = statusResult.Status;
 

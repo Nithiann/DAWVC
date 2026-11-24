@@ -105,3 +105,11 @@ snapshot ID. Object traversal/closure validation and fast-forward checks already
 follow all parents; no hello, ref, object, publication operation or wire version
 changes. Fetch precedes local Merge; publication remains ordinary Push. Receivers
 need the existing compatible DAWVC protocol, not a native FLP merge service.
+
+WP-SYNC-08: receiving push sessions acquire the same destination operation lease
+as upgraded local writers before the ref lock, retaining both through session
+disposal. Busy destinations fail through the existing remote error, not a new
+wire frame/code. This applies to bare `operation.lock` and non-bare
+`.dawvc/operation.lock`. A prior handshake is not authorization to bypass a later
+pending recovery/ownership check. Hosts/older clients/raw backends and storage
+qualification remain cooperative deployment responsibilities.

@@ -15,6 +15,7 @@ This registry contains all formal architecture decisions for DAWVC.
 | [ADR-CORE-001](ADR-CORE-001-shared-engine-composition.md) | Shared engine composition for independent clients | Proposed | CLI/engine integration |
 | [ADR-REM-001](ADR-REM-001-filesystem-push.md) | Verified filesystem push | Proposed | WP-PUSH-01 |
 | [ADR-REM-002](ADR-REM-002-ssh-hosting.md) | dawvc:// over SSH with transient receiver | Proposed | WP-SSH-01 |
+| [ADR-OPS-001](ADR-OPS-001-repository-operation-locking.md) | Operation-wide cooperative writer ownership | Proposed | WP-SYNC-08 |
 | [ADR-REC-001](ADR-REC-001-durable-workspace-recovery.md) | Durable workspace publication recovery | Proposed | WP-SYNC-07 |
 | [ADR-REL-001](ADR-REL-001-scoped-acceptance-evidence.md) | Scoped packaged-CLI acceptance evidence | Proposed | WP-SYNC-06 |
 | [ADR-REM-006](ADR-REM-006-explicit-snapshot-merge.md) | Explicit whole-snapshot divergence resolution | Proposed | WP-SYNC-05 |
