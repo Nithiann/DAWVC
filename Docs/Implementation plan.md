@@ -1242,3 +1242,9 @@ Branch CI (Windows/Ubuntu, recovery process-kill and packaged acceptance):
 Next independent implementation: operation-wide local mutation serialization.
 Physical power-cycle/controller/NAS qualification and native FL Studio/two-PC
 field acceptance remain open deployment gates, not implied by process-kill CI.
+
+
+Publication: implementation `35aecaf` pushed to `feat/sync-durable-recovery`.
+GraphQL (`gh pr create`) and REST (`POST /repos/Nithiann/DAWVC/pulls`) both
+returned Forbidden. Use the pinned stacked comparison above for manual PR
+creation. REC-07 stays open; the agent performed no approval or merge.
