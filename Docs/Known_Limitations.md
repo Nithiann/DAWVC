@@ -162,3 +162,12 @@ Checks repeat after the publication progress callback; trusted local writers
 must still avoid concurrent path replacement. Snapshot container shape and
 aggregate hash must match their entries. The new merge object must itself fit
 the metadata/graph limits (including its two parent edges).
+
+
+## Preview acceptance and deployment qualification
+
+See [Preview acceptance](Preview_Acceptance.md) for automated packaged-CLI evidence
+and the separate real Windows/FL Studio/two-PC/OpenSSH/NAS checklist. Synthetic
+single-host success does not certify native playback or deployment-specific
+locking/rename behavior. Those release gates remain pending until measured on
+actual supported setups; no GUI or additional DAW support is implied.

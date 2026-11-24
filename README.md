@@ -239,3 +239,11 @@ After `dawvc fetch origin`, choose one complete committed project snapshot with
 `--take incoming`. A two-parent commit preserves both histories; normal Push/Pull
 can then resume. This does not combine FLP contents or mix assets automatically.
 Commit your tracked/staged changes first. See [collaboration workflow](Docs/Collaborator_Workflow.md).
+
+
+## Preview acceptance evidence
+
+CI exercises the extracted Windows release executable with a synthetic collaboration
+workflow and uploads a scoped JSON result. Linux DLL checks are recorded separately.
+See [Preview acceptance](Docs/Preview_Acceptance.md) for the runner, mounted-share
+option and pending real Windows/FL Studio/two-PC/SSH/NAS qualification procedures.

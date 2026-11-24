@@ -1103,3 +1103,68 @@ Publication: implementation `b65e733` pushed to `feat/sync-explicit-merge`.
 Both `gh pr create` (GraphQL) and REST `POST /repos/Nithiann/DAWVC/pulls`
 returned Forbidden. PR creation remains a maintainer action through the pinned
 stacked comparison above. The branch is reviewable; no approval/merge performed.
+
+
+# 30. WP-SYNC-06 — Preview acceptance automation and deployment evidence
+
+Base: `feat/sync-explicit-merge` at `c4bc045`.
+Branch: `feat/sync-preview-acceptance`; stacked PR, manual approval/merge.
+Scope: CLI/engine, Windows x64 preview, FL Studio only; no GUI or new product feature.
+
+- [x] ACCEPT-01: inspect packaging/CI and distinguish synthetic/core evidence from
+  native FL Studio, clean-VM, two-PC and deployment-specific acceptance.
+- [x] ACCEPT-02: add isolated CLI acceptance runner with explicit artifact/hash/
+  version/scope JSON evidence; no private project/log/key upload.
+- [x] ACCEPT-03: verify/extract Windows ZIP and exercise its actual self-contained
+  executable in CI; keep Linux DLL smoke evidence separate.
+- [x] ACCEPT-04: add checksum/extraction/refusal/timeout/report guard tests.
+- [x] ACCEPT-05: provide native Windows/FL Studio/two-PC/SSH/NAS procedures, evidence
+  template and explicit pending release gates.
+- [x] ACCEPT-06: run local harness/guards, full regression/build and formatting checks;
+  branch CI results are separate evidence linked below.
+- [ ] ACCEPT-07: publish stacked PR; never approve or merge.
+
+The automated lifecycle stages a generated PCM recording beside a synthetic
+opaque FLP, then covers bare provisioning, first Push, Clone, independent commits,
+non-fast-forward refusal, dirty Merge preservation, explicit snapshot choice,
+both parent restores, resumed Push/Pull, Fsck and Bare Clone. Two folders on one
+host are explicitly not two physical machines. Optional existing remote-parent
+creates only its own temporary child, enabling mounted-share checks without
+replacing an existing repository. Product runtime dependencies do not change;
+Python 3.11+ is a QA/CI requirement only. No persisted engine/wire schema changes.
+
+Native/deployment gate status (all pending until executed with actual setups):
+WIN-PACK clean-VM, FLP-LOCAL, FLP-2PC, FLP-DIVERGE, SSH-WIN, STORAGE-SMB and
+RECOVERY field evidence. See Preview_Acceptance.md. Linux/CI cannot substitute
+for licensed FL Studio playback or actual two-machine/NAS/Windows SSH evidence.
+Persistent hard-crash recovery remains a separate implementation WP.
+
+
+Local validation (24 November 2026, Linux, SDK 10.0.404):
+
+- All 687 existing Release tests passed; no failures/skips. Build: 0 warnings/
+  errors; formatting verification passed. Product engine/CLI code is unchanged.
+- Eleven Python guard/failure tests passed: checksum mismatch/ambiguity, unsafe
+  paths and Windows aliases/devices, symlink members, entry budget, valid ZIP/BOM,
+  expected/unexpected exits, timeout, repository-parent refusal and private-path
+  suppression in failed evidence.
+- Final synthetic source-DLL acceptance: 42 checks passed, including restoring
+  the unchosen local parent from a fresh remote Clone after publishing the merge.
+- The explicit filesystem-parent variant is checked separately, with cleanup of
+  its generated remote child. This is local filesystem evidence, not NAS/SMB or
+  two-client qualification.
+- CI now verifies/extracts and exercises the actual Windows release ZIP; Windows
+  packaged results and Linux DLL results upload only their scoped JSON evidence.
+  Branch CI is separate from local checks and does not close the native gates.
+
+Publication target: stacked PR against `feat/sync-explicit-merge`. The agent
+never approves/merges. If GitHub API restrictions persist, use the pinned compare:
+https://github.com/Nithiann/DAWVC/compare/feat/sync-explicit-merge...feat/sync-preview-acceptance?expand=1
+ACCEPT-07 remains open until PR creation is confirmed.
+
+Branch CI (Windows/Ubuntu, including acceptance evidence):
+[![WP-SYNC-06 CI](https://github.com/Nithiann/DAWVC/actions/workflows/ci.yml/badge.svg?branch=feat%2Fsync-preview-acceptance)](https://github.com/Nithiann/DAWVC/actions?query=branch%3Afeat%2Fsync-preview-acceptance)
+
+Native/deployment gates remain pending as listed above; follow the concrete
+Preview_Acceptance.md procedure on actual machines. Persistent hard-crash recovery
+is the next independent engine implementation scope, not delivered in this WP.

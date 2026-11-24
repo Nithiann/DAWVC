@@ -786,3 +786,18 @@ update, force replacement, GUI, merge or additional DAW adapter is introduced.
 
 This amendment supersedes the historical blanket deferral of merging for this
 explicit snapshot-choice workflow only. Semantic/per-file merges remain deferred.
+
+
+# Preview qualification amendment: scoped acceptance evidence (24 November 2026)
+
+| ID | Priority | Requirement |
+|---|---|---|
+| NFR-ACC-001 | Must | Exercise the verified, extracted Windows distribution through CLI collaboration, independently of in-process/DLL tests. |
+| NFR-ACC-002 | Must | Record candidate version/hash, platform/time, fixture/transport/workstation scope and per-check outcomes in versioned QA evidence. |
+| NFR-ACC-003 | Must | Unexpected exits, timeouts and content/ref mismatches fail the runner/CI; expected protection refusals are explicitly tested. |
+| NFR-ACC-004 | Must | Use disposable synthetic projects and own temporary remote storage; do not upload musical contents, keys, private paths or native scan logs as CI evidence. |
+| NFR-ACC-005 | Must | Validate archive integrity, safe paths/aliases/member types and extraction budgets before execution; checksums do not establish publisher identity. |
+| NFR-ACC-006 | Must | Keep real Windows/FL Studio playback, clean-VM, two-machine, SSH and NAS/SMB qualification gates pending until executed on the actual setups. Synthetic single-host tests do not satisfy those gates. |
+
+These requirements govern QA tooling/evidence only; no GUI, additional DAW,
+product runtime dependency, persisted engine schema or wire change is introduced.

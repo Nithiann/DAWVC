@@ -189,3 +189,12 @@ Merge refuses staged or modified/missing tracked work and untracked collisions.
 It does not fetch automatically, install plugins or configure FL Studio search
 paths. Do not run simultaneous local mutating commands. If the remote advances
 before Push, fetch and reassess; no force-push or history rewriting is needed.
+
+
+## Preview acceptance and deployment qualification
+
+See [Preview acceptance](Preview_Acceptance.md) for automated packaged-CLI evidence
+and the separate real Windows/FL Studio/two-PC/OpenSSH/NAS checklist. Synthetic
+single-host success does not certify native playback or deployment-specific
+locking/rename behavior. Those release gates remain pending until measured on
+actual supported setups; no GUI or additional DAW support is implied.

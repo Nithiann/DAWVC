@@ -97,3 +97,12 @@ a permanent DAWVC background process. OpenSSH is an external OS prerequisite,
 not a bundled NuGet dependency. Configure trusted host keys and public-key/agent
 authentication before use. See [Self-hosting SSH](Self_Hosting_SSH.md) for
 operator configuration, OS permissions, forced commands and platform limitations.
+
+
+## Preview acceptance and deployment qualification
+
+See [Preview acceptance](Preview_Acceptance.md) for automated packaged-CLI evidence
+and the separate real Windows/FL Studio/two-PC/OpenSSH/NAS checklist. Synthetic
+single-host success does not certify native playback or deployment-specific
+locking/rename behavior. Those release gates remain pending until measured on
+actual supported setups; no GUI or additional DAW support is implied.
