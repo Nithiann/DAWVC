@@ -1168,3 +1168,9 @@ Branch CI (Windows/Ubuntu, including acceptance evidence):
 Native/deployment gates remain pending as listed above; follow the concrete
 Preview_Acceptance.md procedure on actual machines. Persistent hard-crash recovery
 is the next independent engine implementation scope, not delivered in this WP.
+
+
+Publication: implementation `f936e2d` pushed to `feat/sync-preview-acceptance`.
+GraphQL (`gh pr create`) and REST (`POST /repos/Nithiann/DAWVC/pulls`) both
+returned Forbidden. The pinned stacked comparison above is the manual PR route;
+ACCEPT-07 remains open. No approval/merge performed.
