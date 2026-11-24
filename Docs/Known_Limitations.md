@@ -218,3 +218,27 @@ an atomic view. No new crash journal for Commit/Push/bare provisioning, automati
 lock stealing/cleanup, GC, distributed locking service or NAS qualification is
 added. Persistent empty coordination files are normal. Native FL Studio/two-PC,
 physical-power and actual storage permission/locking/rename tests remain open.
+
+
+## Integrated sync candidate (WP-SYNC-09)
+
+The previously separate upstream/fresh-preview implementations are now ported onto
+the recovery/ownership stack in `feat/sync-workflow-integration`, pending review.
+This is a feature candidate, not a claim of merges into develop or native release
+qualification. Push/Pull share upstream defaults; `remote track` configures them
+offline and respects Busy/recovery refusal. Explicit remote/branch overrides are
+documented in CLI Reference.
+
+Fetch/Pull previews use current advertised tips and bounded verified missing
+metadata, not stale tracking. Counts are estimates without blob downloads, dirty
+workspace conflict planning or native-DAW validation. Cached local objects are not
+fully re-audited by the preview; use Fsck for that. Previews take no writer lease,
+create no coordination/index/quarantine/storage and do not reserve refs or provide
+an atomic view during concurrent writers. Actual execution re-fetches and retains
+writer ownership and durable workspace recovery. Pending local/remote recovery
+still refuses sync previews. Push preview also avoids local lock/index creation.
+
+Stock context construction is side-effect free; the staging index is initialized
+only on access and unused indexes/pools are not disposed/cleared by other contexts.
+Linux sync SIGINT and SSH child cleanup are automated; native Windows console
+Ctrl+C, physical power loss, real FL Studio/two-PC and NAS/SMB remain field gates.

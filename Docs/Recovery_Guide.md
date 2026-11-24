@@ -295,3 +295,23 @@ calls and DAW/editor writes must still be kept exclusive. External restoration
 requires an exclusive separate target and must not write into an active working
 repository. Read-only views can observe changes and are not multi-file snapshots.
 NAS/SMB lock semantics and real power-loss durability still require field testing.
+
+
+## Integrated target selection and preview (WP-SYNC-09)
+
+`remote track` is a guarded writer: Busy exit 11 and pending local recovery exit 10
+preserve existing upstream settings. It never connects to the host. A real Pull
+uses the selected remote source to update the active local branch under the full
+operation lease; a killed mapped Pull recovers that branch/workspace, while already
+fetched objects/tracking remain. Never assume rollback also undid the Fetch phase.
+
+Fetch/Pull/Push dry-runs take no writer lease and create no local lock/index/
+storage/quarantine. Fetch/Pull pin fresh remote tips and verify bounded missing
+metadata without downloading blob bodies. Previews are not dirty-file checks or
+reservations and do not authorize bypassing recovery; pending local recovery
+still refuses sync preview. Actual execution fetches and revalidates again.
+
+Clone/Fetch/Pull/Push forward cancellation and return 130 after awaited cleanup.
+Linux SIGINT child cleanup is automated; Windows console Ctrl+C remains a native
+qualification item. Inspect actual refs, status and pending recovery after an
+interruption, especially after publication. Never delete a live coordination file.

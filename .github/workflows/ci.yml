@@ -97,6 +97,9 @@ jobs:
       - name: Test acceptance harness guards
         run: python -m unittest discover -s scripts -p "test_preview_acceptance_guards.py"
 
+      - name: Verify sync SIGINT and SSH child cleanup
+        run: python scripts/test_sync_cancellation.py
+
       - name: Exercise synthetic CLI collaboration workflow
         run: python scripts/test_preview_acceptance.py --dll src/DawVcs.Cli/bin/Release/net10.0/dawvc.dll --dotnet "$(command -v dotnet)" --report artifacts/preview-acceptance-linux.json
 

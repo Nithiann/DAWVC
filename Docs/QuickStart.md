@@ -283,3 +283,20 @@ restore either to a separate folder for review. This chooses FLP and assets
 as a set, without combining tracks or automatically rewriting FL Studio files.
 Do not run local mutating commands concurrently. A newer remote commit may
 require another fetch/review/merge before Push succeeds.
+
+
+### Map a different remote branch and inspect fresh incoming history
+
+```powershell
+dawvc remote track origin published
+dawvc fetch origin published --dry-run
+dawvc pull --dry-run
+dawvc pull
+```
+
+This maps the active local branch to origin/published; Pull updates that active
+branch without switching to a local branch named published. Track is offline and
+the remote branch may be created by a future Push. Explicit matching remote names
+retain the mapping. Dry-run uses current remote tips without local files/index/
+lock/quarantine writes; it estimates transfers, not native playback or unsaved-file
+conflicts. A real Pull fetches again. See CLI Reference for overrides and limits.

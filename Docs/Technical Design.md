@@ -1453,3 +1453,18 @@ object formats and remote protocol remain unchanged. SQLite staging synchronous
 mode changes from NORMAL to FULL for durability; no database schema migration.
 Process termination, handled compensation and actual power/storage qualification
 are distinct guarantees. Global local-writer serialization remains a separate WP.
+
+## WP-SYNC-09: integrated synchronization workflow
+
+SyncTarget resolves local/remote branches once before transfer; Pull integrates
+into the active local branch. Track persists validated upstreams atomically under
+operation/pending guards. Fetch dry-run uses FetchPreviewPlanner before any
+quarantine/index creation; Pull uses the immutable advertisement/parent overlay
+plus local commits for ancestry. Metadata limits and DTO contracts are documented
+in ADR-REM-004/007. Both merge parents participate in traversal.
+
+Dry-runs skip writer ownership to preserve filesystem layout; real operations
+retain explicit nested capabilities and durable checkout publication. Backend
+constructors are side-effect free, index creation is lazy, and only an accessed
+index is disposed/cleared. Previews remain advisory across concurrent changes;
+actual execution re-fetches. No shared object or wire schema is changed.

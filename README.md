@@ -265,3 +265,9 @@ lock files. Status/Doctor participate, and Pull/Push retain local ownership duri
 network waits. Older/raw clients, DAW saves and external restores still require
 exclusive coordination. See [Recovery Guide](Docs/Recovery_Guide.md) and
 [ADR-OPS-001](Docs/adr/ADR-OPS-001-repository-operation-locking.md).
+
+The WP-SYNC-09 candidate integrates offline `remote track`, shared Push/Pull upstream
+defaults, fresh read-only Fetch/Pull previews and cancellation onto the recovery/
+locking stack. Dry-runs create no local lock/index/quarantine; real operations keep
+writer ownership. See [CLI Reference](Docs/CLI_Reference.md) and the current
+[implementation plan](Docs/Implementation%20plan.md) for review/qualification status.

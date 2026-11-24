@@ -29,7 +29,10 @@ public sealed record FetchResult(
     IReadOnlyList<UpdatedRemoteRef> UpdatedRefs,
     int ObjectsFetched,
     long BytesFetched,
-    bool IsDryRun);
+    bool IsDryRun)
+{
+    public FetchPreview? Preview { get; init; }
+}
 
 /// <summary>
 /// Fetches commits, snapshots, and blobs from a remote repository into quarantine,
@@ -61,7 +64,8 @@ public class FetchUseCase
         FetchRequest request, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
     {
         ArgumentNullException.ThrowIfNull(request);
-        using var operation = RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation, cancellationToken: cancellationToken);
+        using var operation = request.DryRun ? null
+            : RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation, cancellationToken: cancellationToken);
         var result = await ExecuteCoreAsync(request with { Operation = operation }, cancellationToken, progress).ConfigureAwait(false);
         progress?.Report(new OperationProgress(OperationStage.Completed));
         return result;
@@ -124,6 +128,8 @@ public class FetchUseCase
         }
 
         progress?.Report(new OperationProgress(OperationStage.TraversingHistory));
+        if (request.DryRun)
+            return await FetchPreviewPlanner.PlanAsync(remoteNameStr, targetRefs, transport, context, cancellationToken, progress).ConfigureAwait(false);
         using var quarantineStore = _quarantineStoreFactory(request.RepositoryDirectory);
         quarantineStore.PruneStaleDirectories(TimeSpan.FromHours(24));
 
@@ -136,18 +142,6 @@ public class FetchUseCase
             remoteTips,
             cancellationToken,
             progress).ConfigureAwait(false);
-
-        // 4. Handle Dry Run
-        if (request.DryRun)
-        {
-            quarantineStore.DiscardSession();
-            return new FetchResult(
-                remoteNameStr,
-                Array.Empty<UpdatedRemoteRef>(),
-                walkResult.TotalObjectsToFetch,
-                walkResult.TotalBytesToFetch,
-                IsDryRun: true);
-        }
 
         // 5. Stream and verify missing blobs into quarantine, promoting them immediately for resume capability
         var verifiedBlobs = new List<VerifiedIncomingObject>();

@@ -836,3 +836,46 @@ layout/timestamps, ACLs and file modes are not a byte-identical filesystem backu
 | FR-OPS-007 | Must | Reject linked/reparse-point lock paths and unknown nonempty lock-file contents; preserve repository data on contention. |
 | FR-OPS-008 | Must | Test real child-process contention/crash release, callback isolation, independent copies, creation and incoming push ownership, and nested workflow regressions. |
 | FR-OPS-009 | Must | Document cooperative participation, raw/older clients and external writers/restore exclusions; keep native, physical-power and NAS qualification gates distinct. |
+
+
+# Post-MVP amendment: sync target selection (23 November 2026)
+
+| ID | Requirement |
+|---|---|
+| FR-SYN-001 | Push/Pull resolve the configured upstream remote/branch before transfer; fallback is origin and local branch name. |
+| FR-SYN-002 | Explicit matching remote preserves upstream branch mapping; another remote defaults to the local branch name. Explicit Push branch selects that local and destination branch; explicit Pull branch selects the remote source into the active local branch. |
+| FR-SYN-003 | `remote track <remote> <remote-branch> [--local-branch name]` validates names, configured remote and an existing local branch (active unborn allowed), then persists upstream without contacting the host. Unknown remote branches are allowed for first publish. |
+| FR-SYN-004 | Tracking updates preserve other remote/upstream settings and use atomic file replacement; no persisted schema change. |
+| FR-SYN-005 | Pull fetches only its selected remote/source branch before ancestry/materialization; it does not move another local branch or switch HEAD because a remote branch argument was supplied. |
+| FR-SYN-006 | CLI clone/fetch/pull/push forward Ctrl+C cancellation tokens, await engine completion/compensation, and report cancellation with exit 130. Cancellation still does not imply rollback of all durable effects. |
+| FR-SYN-007 | If the active local branch changes during Fetch, Pull stops before checkout with a typed repository-state error. Already fetched objects/tracking may remain. This expected-state check complements WP-SYNC-08 cooperating writer ownership. |
+
+Target selection and fresh-preview requirements are integrated together by
+WP-SYNC-09 on the recovery/ownership stack; their original WPs remain historical.
+
+# Post-MVP amendment: fresh sync previews (23 November 2026)
+
+| ID | Requirement |
+|---|---|
+| FR-PRV-001 | Fetch dry-run returns planned ref updates and counts from current advertised tips, without writing objects, refs, workspace, index, configuration or quarantine; no stale incoming cleanup. |
+| FR-PRV-002 | Pull dry-run uses those pinned tips and verified preview commit parents plus local commits, not cached tracking refs, for up-to-date/ahead/fast-forward/diverged classification. Missing tracking refs must not prevent a valid preview. |
+| FR-PRV-003 | Verify metadata envelope identity/type/length/BLAKE3, schema and snapshot paths. Bound each metadata object to 2 MiB, aggregate received metadata to 64 MiB, distinct inspected objects to 100,000, commits to 50,000 and parent edges to 1,000,000. Fail closed on limit violations. |
+| FR-PRV-004 | Do not download blob payloads during preview. Counts/bytes estimate missing transfer from declared snapshots; do not claim blob integrity/presence or dirty-workspace feasibility. |
+| FR-PRV-005 | Context/object-store construction and disposal used for previews must not initialize directories or staging SQLite. Initialize storage only on writes/explicit initialization. |
+| FR-PRV-006 | Success, corruption, unsupported metadata, cancellation and divergence leave repository bytes and directory layout unchanged. Progress is per invocation; one Completed stage only on success. |
+| FR-PRV-007 | Snapshot results are advisory and pinned to the advertisement observed for that invocation. A later actual Pull fetches/revalidates again; no remote reservation or cross-process transaction. |
+
+FetchResult.UpdatedRefs means planned updates when IsDryRun=true and applied
+updates otherwise. A preview snapshot carries only immutable refs/parent links,
+not writable handles, local paths or retained quarantine.
+
+
+# Integration amendment: coherent sync workflow (24 November 2026)
+
+| ID | Priority | Requirement |
+|---|---|---|
+| FR-INT-001 | Must | Port upstream and fresh-preview workflows onto durable recovery and operation ownership without losing bare provisioning, both-parent merge history, typed errors or existing CLI flags. |
+| FR-INT-002 | Must | Track upstream mutations honor operation ownership and pending recovery before opening a mutable context; preserve settings on refusal. |
+| FR-INT-003 | Must | Fetch/Pull/Push dry-runs create no operation lock, index, object directories or quarantine; execution retains writer ownership and nested capability forwarding. |
+| FR-INT-004 | Must | Test mapped Pull preview/execution through a merge's second parent for both snapshot choices over filesystem and SSH; preserve the other local branch and preview bytes/layout. |
+| FR-INT-005 | Must | Publish integration as a separate reviewable WP, document source commits and native/storage/Ctrl+C qualification limits, and never imply maintainer approval/merge. |

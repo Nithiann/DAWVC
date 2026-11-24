@@ -203,3 +203,14 @@ with inheritable full control for the current user. Restoration copies stay
 inside that private envelope before rename, rather than exposing old musical
 bytes in public workspace temporary files. These controls do not exclude OS
 administrators/privileged backup tools or certify a NAS ACL implementation.
+
+### WP-SYNC-09: preview/upstream integration
+
+Track validates names and configured/local branch identity, updates settings
+atomically offline and honors operation/recovery guards. Fresh previews verify
+missing metadata envelopes, identities/types/schema and paths with fixed graph/
+byte budgets; they do not create quarantine or clear unused SQLite pools. Preview
+blob availability/integrity and dirty work remain unverified. Do not treat a
+preview as a reserved or atomic view during other writers. Existing host-key,
+allowlist, push policy and protocol limits remain; credentials/paths are not added
+to the preview DTO. Custom providers retain the read-only contract obligation.

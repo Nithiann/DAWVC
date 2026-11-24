@@ -160,3 +160,13 @@ No native/deployment gate is automatically marked passed by the acceptance runne
 WP-SYNC-07 adds process-kill-tested persistent workspace recovery; actual power-
 cycle/storage qualification remains open. Semantic FLP merging and GUI work remain
 separate scopes.
+
+WP-SYNC-09 integrates the upstream/fresh-preview branches into the recovery/locking
+candidate. Include a differently named local branch mapped by `remote track` in
+native collaboration tests; confirm preview and actual Pull agree on a stable
+host, and actual Pull updates the active branch through either merge parent.
+Preview writes no local coordination/index files and is not an atomic view or
+reservation during other writers. Track honors Busy/pending recovery; a recovered
+Pull can retain its already-fetched tracking refs. Ubuntu CI additionally exercises
+SIGINT/child cleanup for all four sync commands. This is not Windows console Ctrl+C
+or native FL Studio/two-PC qualification. All unexecuted field gates stay pending.

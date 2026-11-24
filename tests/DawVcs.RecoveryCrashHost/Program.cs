@@ -3,9 +3,12 @@ using System.Diagnostics;
 using DawVcs.Application.Checkouts;
 using DawVcs.Application.Operations;
 using DawVcs.Application.Recovery;
+using DawVcs.Application.Remotes;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Repositories;
+using DawVcs.Infrastructure.Remotes;
 using DawVcs.Infrastructure.Repositories;
+using DawVcs.Infrastructure.Storage;
 
 namespace DawVcs.RecoveryCrashHost;
 
@@ -43,7 +46,12 @@ public static class Program
         else
         {
             var checkout = new CheckoutUseCase(Context, null, Checkpoint);
-            if (args[0] == "switch") await checkout.ExecuteAsync(new CheckoutRequest(root, "incoming", Force: true));
+            if (args[0] == "pull")
+            {
+                var fetch = new FetchUseCase(Context, new DefaultRemoteTransportFactory(), path => new QuarantineObjectStore(path));
+                await new PullUseCase(Context, fetch, checkout).ExecuteAsync(new PullRequest(root));
+            }
+            else if (args[0] == "switch") await checkout.ExecuteAsync(new CheckoutRequest(root, "incoming", Force: true));
             else
             {
                 using var context = Context(root);

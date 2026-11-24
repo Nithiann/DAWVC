@@ -1332,3 +1332,61 @@ passed formatting, security audit, packaging and all 42 extracted-package accept
 checks. This final publication record changes documentation only; it does not add
 new engine behavior or turn the pending native/storage field gates into completed
 qualification. OPS-08 is the remaining publication blocker described above.
+
+
+# 33. WP-SYNC-09 — Integrate upstream/preview with the recovery/ownership stack
+
+Base: `feat/sync-operation-locking` at `dd154bc`.
+Branch: `feat/sync-workflow-integration`; stacked PR against that base branch.
+
+The separate WP-SYNC-02/03 sources (`d7ccf20`, `be589ac`) are ported here. Earlier
+statements in sections 28/32 describe their historical bases. This WP adds those
+features to this candidate; it does not approve/merge any prior PR or change develop.
+
+- [x] INT-01: audit branch ancestry, missing upstream/preview functionality and
+  ownership/recovery/lazy-storage compatibility before native field qualification.
+- [x] INT-02: port target resolution, offline remote track and cancellation;
+  retain Bare Clone flags and all typed Busy/recovery/corruption handling.
+- [x] INT-03: port bounded fresh metadata previews and side-effect-free contexts;
+  dry-runs skip writer-lock creation, actual nested workflows retain ownership.
+- [x] INT-04: track mutation Busy/recovery guards; cross-feature second-parent
+  preview/actual Pull tests for both snapshot choices, mapped names, FS and SSH.
+- [x] INT-05a: full Release compilation/suite, CLI acceptance, real SSH and SIGINT.
+- [x] INT-05b: final formatting verification (--verify-no-changes).
+- [ ] INT-05c: Windows/Ubuntu code CI, packaged acceptance and Linux SIGINT.
+- [x] INT-06: update requirements, ADRs, reference, integration/workflow/limits.
+- [ ] INT-07: publish stacked PR for maintainer review; never approve/merge.
+
+Read-only dry-runs take no writer lease; they do not reserve remote/local state or
+promise an atomic multi-file view during concurrent writers. They create no lock,
+index, objects, incoming quarantine or scratch directories. Pending local recovery
+still refuses sync previews. Normal operations retain operation-wide ownership,
+explicit nested rights and durable workspace publication. Track is a writer and
+uses the same operation/pending guards. No schema/wire/product dependency changes.
+
+Validation is recorded below after execution. Native Windows/FL Studio/two-PC,
+Windows console Ctrl+C, physical-power and actual NAS/SMB qualification remain
+pending external field gates; synthetic/child-process success does not certify them.
+
+Publication comparison:
+https://github.com/Nithiann/DAWVC/compare/feat/sync-operation-locking...feat/sync-workflow-integration?expand=1
+
+
+Local verification (24 November 2026, Linux, SDK 10.0.404):
+
+- Release compilation succeeded with warnings treated as errors; full suite:
+  **805 passed, 0 failed/skipped** (748 baseline, 49 ported cases, 8 integration cases).
+- New cases cover Track Busy/pending preservation, Push preview without lock/index,
+  mapped Pull through a merge's second parent for both snapshot choices over FS/
+  transient SSH, and a killed real mapped Pull followed by explicit recovery.
+  Recovery restores the correct active branch/workspace while retaining completed
+  Fetch tracking updates. Existing Bare Clone, Merge, ownership and recovery suites pass.
+- All 11 acceptance harness guards and all 42 synthetic CLI checks passed.
+- Real unprivileged OpenSSH Push/Clone/Fetch/Pull, byte identity, divergence Merge,
+  bare provisioning and unknown/changed host-key refusal passed.
+- All four sync commands returned 130 on Linux SIGINT and their SSH children exited.
+  The same script is now an Ubuntu CI step. Windows native Ctrl+C is still pending.
+- Formatting applied; final verification and branch CI status are recorded below.
+
+No native FL Studio/playback, real two-PC, clean Windows VM, power-cycle or
+NAS/SMB qualification was performed by this local synthetic workflow.

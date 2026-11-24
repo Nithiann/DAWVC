@@ -15,6 +15,8 @@ public sealed record RemoteRemoveRequest(string RepositoryDirectory, string Name
     internal RepositoryOperation? Operation { get; init; }
 }
 public sealed record RemoteListRequest(string RepositoryDirectory);
+public sealed record TrackRemoteRequest(string RepositoryDirectory, string RemoteName, string RemoteBranch, string? LocalBranch = null);
+public sealed record TrackRemoteResult(BranchName LocalBranch, string RemoteName, BranchName RemoteBranch);
 public sealed record RemoteListResult(IReadOnlyList<RemoteConfig> Remotes);
 
 /// <summary>
@@ -80,6 +82,24 @@ public sealed class RemoteUseCase
         ArgumentNullException.ThrowIfNull(request);
         using var context = _contextFactory(request.RepositoryDirectory);
         return new RemoteListResult(context.GetRemotes());
+    }
+
+    public TrackRemoteResult TrackRemote(TrackRemoteRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
+        using var operation = RepositoryOperation.Enter(request.RepositoryDirectory, cancellationToken: cancellationToken);
+        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
+        var name = RemoteName.Parse(request.RemoteName);
+        var remoteBranch = BranchName.Parse(request.RemoteBranch);
+        using var context = _contextFactory(request.RepositoryDirectory);
+        var local = request.LocalBranch is null ? context.GetCurrentBranch() : BranchName.Parse(request.LocalBranch);
+        if (local != context.GetCurrentBranch() && !context.GetBranchCommit(local).HasValue)
+            throw new ArgumentException("Local branch does not exist.", nameof(request));
+        var remote = context.GetRemote(name.Value) ?? throw new ArgumentException("Remote is not configured.", nameof(request));
+        cancellationToken.ThrowIfCancellationRequested();
+        context.SetUpstream(local, remote.Name.Value, remoteBranch);
+        return new TrackRemoteResult(local, remote.Name.Value, remoteBranch);
     }
 
     public Task<RemoteConfig> AddRemoteAsync(RemoteAddRequest request, CancellationToken cancellationToken = default)

@@ -39,7 +39,7 @@ public sealed class PullUseCaseTests
             null);
 
         _fetchUseCase.ExecuteAsync(Arg.Any<FetchRequest>(), Arg.Any<CancellationToken>())
-            .Returns(new FetchResult("origin", Array.Empty<UpdatedRemoteRef>(), 0, 0, false));
+            .Returns(call => FetchResultFor(call.Arg<FetchRequest>().DryRun));
 
         _checkoutUseCase = Substitute.For<CheckoutUseCase>(
             (Func<string, IRepositoryContext>)(_ => _context),
@@ -49,6 +49,9 @@ public sealed class PullUseCaseTests
         _context.GetUpstream(_main).Returns(("origin", _main));
         _context.GetBranchCommit(_main).Returns(_localCommit);
         _context.GetRemoteTrackingCommit("origin", _main).Returns(_remoteCommit);
+
+        _ancestryService.DeterminePreviewStateAsync(_localCommit, _remoteCommit, _context, Arg.Any<FetchPreview>(), Arg.Any<CancellationToken>())
+            .Returns(call => _ancestryService.DetermineSyncStateAsync(_localCommit, _remoteCommit, _context, call.Arg<CancellationToken>()));
 
         _useCase = new PullUseCase(
             _ => _context,
@@ -88,6 +91,20 @@ public sealed class PullUseCaseTests
         }
         await _fetchUseCase.Received(1).ExecuteAsync(
             Arg.Is<FetchRequest>(r => r.DryRun == dryRun), Arg.Any<CancellationToken>(), Arg.Any<IProgress<OperationProgress>>());
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_HeadChangedDuringFetch_StopsBeforeCheckout()
+    {
+        _fetchUseCase.ExecuteAsync(Arg.Any<FetchRequest>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                _context.GetCurrentBranch().Returns(new BranchName("other"));
+                return new FetchResult("origin", [], 0, 0, false);
+            });
+        var act = () => _useCase.ExecuteAsync(new PullRequest("C:\\repo"));
+        await act.Should().ThrowAsync<RepositoryStateChangedException>();
+        await _checkoutUseCase.DidNotReceiveWithAnyArgs().ExecuteFastForwardAsync(default!, default, default);
     }
 
     [Fact]
@@ -159,6 +176,11 @@ public sealed class PullUseCaseTests
         progress.Reports.Count(p => p.Stage == OperationStage.Completed).Should().Be(1);
     }
 
+    private FetchResult FetchResultFor(bool dryRun) => new("origin", [], 0, 0, dryRun)
+    {
+        Preview = dryRun ? new FetchPreview([new RemoteRef("main", _remoteCommit)], new Dictionary<CommitId, IReadOnlyList<CommitId>>()) : null
+    };
+
     private void ConfigureChildProgress()
     {
         _fetchUseCase.ExecuteAsync(Arg.Any<FetchRequest>(), Arg.Any<CancellationToken>(), Arg.Any<IProgress<OperationProgress>>())
@@ -167,7 +189,7 @@ public sealed class PullUseCaseTests
                 var child = call.Arg<IProgress<OperationProgress>>();
                 child.Report(new OperationProgress(OperationStage.TransferringObjects, 0, 0));
                 child.Report(new OperationProgress(OperationStage.Completed));
-                return new FetchResult("origin", Array.Empty<UpdatedRemoteRef>(), 0, 0, call.Arg<FetchRequest>().DryRun);
+                return FetchResultFor(call.Arg<FetchRequest>().DryRun);
             });
         _checkoutUseCase.ExecuteFastForwardAsync(Arg.Any<FastForwardTarget>(), Arg.Any<bool>(), Arg.Any<CancellationToken>(), Arg.Any<IProgress<OperationProgress>>())
             .Returns(call =>

@@ -132,7 +132,7 @@ public sealed class ServiceCollectionExtensionsTests
             first.RootPath.Should().Be(Path.GetFullPath(root));
             first.StagingIndex.Should().NotBeSameAs(second.StagingIndex);
             first.LocalBindings.Should().NotBeSameAs(second.LocalBindings);
-            Directory.Exists(Path.Combine(root, ".dawvc", "objects", ".tmp")).Should().BeTrue();
+            Directory.Exists(Path.Combine(root, ".dawvc", "objects", ".tmp")).Should().BeFalse();
             File.Exists(Path.Combine(root, ".dawvc", "index.db")).Should().BeFalse();
             File.Exists(Path.Combine(root, "dawvc.yaml")).Should().BeFalse();
         }

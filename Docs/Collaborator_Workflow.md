@@ -198,3 +198,29 @@ and the separate real Windows/FL Studio/two-PC/OpenSSH/NAS checklist. Synthetic
 single-host success does not certify native playback or deployment-specific
 locking/rename behavior. Those release gates remain pending until measured on
 actual supported setups; no GUI or additional DAW support is implied.
+
+
+## Choose a persistent sync target (WP-SYNC-09)
+
+After adding a remote, configure the active local branch once:
+
+```powershell
+dawvc remote track backup published
+dawvc fetch backup published --dry-run
+dawvc pull --dry-run
+dawvc push
+dawvc pull
+```
+
+The configured upstream is backup/published even when the active local branch has
+another name. `push backup`/`pull backup` keep that mapping. An explicit Pull branch
+is a remote source into the active branch, not a local branch switch. Track works
+offline and allows a future remote branch; `--local-branch mix` configures another
+existing local branch without switching it.
+
+Fresh previews do not modify repository files/layout or prune incoming sessions.
+They estimate transfers from bounded metadata and do not plan unsaved work or
+verify remote blob availability. Actual execution fetches again and may see a new
+tip. Keep previews advisory during other writers. Track/real operations respect
+operation ownership and pending recovery; await Busy owners and inspect recovery.
+Ctrl+C is forwarded for all sync commands; durable effects can remain after exit 130.

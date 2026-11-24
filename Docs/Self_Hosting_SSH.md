@@ -163,3 +163,11 @@ incoming push session. A competing upgraded writer/receiver fails fast as a remo
 error (exit 8). Local busy commands use exit 11. Do not remove operation/creation/
 ref/recovery files to break a live owner; OS handles release on process termination.
 Upgrade all writers together and qualify actual NAS/SMB locking on both clients.
+
+WP-SYNC-09 integrates offline `remote track` upstream settings and fresh Fetch/Pull
+previews with the same SSH transport. Preview reads current refs plus bounded
+missing commit/snapshot metadata in memory; it neither downloads blob bodies nor
+publishes anything. The host can still log authentication/requests, and its refs
+can change before actual execution. No new wire, daemon or authorization policy.
+All four sync commands forward cancellation; Linux SIGINT verifies child exit.
+Windows console signals and actual deployment/storage behavior need native tests.

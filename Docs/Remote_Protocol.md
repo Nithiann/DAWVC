@@ -113,3 +113,9 @@ wire frame/code. This applies to bare `operation.lock` and non-bare
 `.dawvc/operation.lock`. A prior handshake is not authorization to bypass a later
 pending recovery/ownership check. Hosts/older clients/raw backends and storage
 qualification remain cooperative deployment responsibilities.
+
+WP-SYNC-09 fresh previews reuse handshake/refs/object reads with no new wire
+operation. Missing commit/snapshot metadata is verified in bounded memory and
+parent links are pinned for ancestry; preview blob bodies are not downloaded.
+Upstream settings are client-local and `remote track` makes no host request.
+Actual Pull re-reads the host before publication. No ref reservation is provided.

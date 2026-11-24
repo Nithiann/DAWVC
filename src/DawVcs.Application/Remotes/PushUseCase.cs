@@ -26,17 +26,17 @@ public sealed class PushUseCase(Func<string, IRepositoryContext> contexts, IRemo
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
-        using var operation = RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation, cancellationToken: cancellationToken);
+        using var operation = request.DryRun ? null
+            : RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation, cancellationToken: cancellationToken);
         progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
         WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using var context = contexts(request.RepositoryDirectory);
         var config = context.LoadConfig();
-        var localBranch = request.Branch is null ? context.GetCurrentBranch() : BranchName.Parse(request.Branch);
+        var target = SyncTarget.ForPush(context, request.RemoteName, request.Branch);
+        var localBranch = target.LocalBranch;
+        var remoteName = target.RemoteName;
+        var remoteBranch = target.RemoteBranch;
         var tip = context.GetBranchCommit(localBranch) ?? throw new ArgumentException("Local branch does not exist or has no commits.", nameof(request));
-        var upstream = context.GetUpstream(localBranch);
-        var remoteName = request.RemoteName ?? upstream.Remote ?? "origin";
-        var remoteBranch = request.Branch is null && request.RemoteName is null
-            ? upstream.RemoteBranch ?? localBranch : localBranch;
         var remote = context.GetRemote(remoteName) ?? throw new RemoteException($"No remote named '{remoteName}' is configured.");
         progress?.Report(new OperationProgress(OperationStage.ConnectingRemote));
         using var transport = transports.CreateTransport(remote.Url);

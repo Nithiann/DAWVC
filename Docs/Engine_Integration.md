@@ -47,8 +47,8 @@ commit cursors/offsets and retain the selected immutable commit ID across pages.
 Snapshot dependencies omit original locators, provenance and machine paths.
 They describe recorded snapshots, not a live dependency scan.
 
-Queries avoid staging/index repair. Context construction may create object-store
-temporary directories; opening is not a strict zero-write filesystem operation.
+Queries avoid staging/index repair. Stock filesystem context/object-store construction is now side-effect free
+(WP-SYNC-09); actual writes initialize their storage and the staging index is lazy.
 Snapshot objects are still fully deserialized internally, so bounded output does
 not provide bounded-memory loading for arbitrarily large snapshots.
 
@@ -168,6 +168,30 @@ persistent hashed sibling creation lease (parent write permission required).
 Use the stock composition for this guarantee. Raw context/index methods and custom
 overrides/providers must implement their own coordination; old clients, DAW saves
 and external restore targets remain outside it. Read-only queries are not atomic
-workspace snapshots and backend opening can still write housekeeping metadata.
+workspace snapshots and custom backend opening may write housekeeping metadata.
 Do not delete operation/ref/recovery/creation lock files. Empty files persist after
 handles close; process death releases ownership. See ADR-OPS-001 and Recovery Guide.
+
+
+## Integrated sync targets and previews (WP-SYNC-09)
+
+`RemoteUseCase.TrackRemote(TrackRemoteRequest)` validates/saves an upstream offline;
+track mutations share the Busy/recovery guard contract. Push/Pull resolve one
+SyncTarget before transfer. Pull always integrates into the active local branch;
+explicit matching remote names retain upstream mapping. Existing public request
+constructors and bare/merge/recovery entry points are retained.
+
+FetchResult.Preview is an immutable pinned advertisement/verified parent overlay.
+Pull dry-run requires this from custom Fetch providers instead of falling back to
+stale tracking. Metadata is bounded, verified and kept in memory; blobs are not
+fetched by Fetch/Pull preview. Dry-run creates no writer lease or storage/index/
+quarantine. Previews are advisory read operations, not atomic views during other
+writers; pending recovery still refuses them. Real Fetch/Pull/Push retain ownership
+across network waits and nested Status/Checkout/Doctor, and publication still uses
+the durable envelope. Both merge parents participate in preview and execution.
+
+Stock context construction no longer creates directories or opens an index.
+Disposal only disposes/clears an index pool actually owned by that context. Using
+StagingIndex after context disposal throws. Custom providers must maintain the
+same read-only/lifetime contract; contexts remain caller-owned and not shared
+across concurrent operations. No new on-disk/object/wire schema or runtime package.

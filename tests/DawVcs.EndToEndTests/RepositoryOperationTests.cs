@@ -59,6 +59,7 @@ public sealed class RepositoryOperationTests : IDisposable
     [InlineData("remote")]
     [InlineData("init")]
     [InlineData("bind")]
+    [InlineData("track")]
     public async Task BusyPublicEntry_RefusesBeforeContextOrMetadataWrites(string command)
     {
         using var owner = RepositoryOperation.Enter(Root);
@@ -85,6 +86,7 @@ public sealed class RepositoryOperationTests : IDisposable
                 case "branch": await new BranchUseCase(Unexpected).CreateAsync(new BranchCreateRequest(Root, "other")); break;
                 case "init": await new InitRepositoryUseCase(Unexpected).ExecuteAsync(new InitRequest(Root)); break;
                 case "bind": await new BindDependencyUseCase(Unexpected).ExecuteAsync(new BindDependencyRequest(Root, "sample", "sample.wav")); break;
+                case "track": new RemoteUseCase(Unexpected).TrackRemote(new TrackRemoteRequest(Root, "backup", "published")); break;
                 case "remote": new RemoteUseCase(Unexpected).AddRemote(new RemoteAddRequest(Root, "origin", _parent)); break;
             }
         }

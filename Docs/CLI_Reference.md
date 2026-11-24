@@ -24,7 +24,7 @@ DAWVC uses deterministic process exit codes across all commands:
 | `9` | `NonFastForward` | Push or pull rejected because the requested update is not a fast-forward (including a remote-ahead Push). |
 | `10` | `RecoveryRequired` | Active/unfinished workspace publication or conflicting recovery data; inspect `recover`. |
 | `11` | `RepositoryBusy` | Another cooperating local operation owns the working repository; await it and retry. |
-| `130` | `Cancelled` | Push was cooperatively cancelled; inspect the destination ref after an interrupted process. |
+| `130` | `Cancelled` | Synchronization was cooperatively cancelled; inspect repository state before retrying. |
 
 ---
 
@@ -358,8 +358,9 @@ dawvc push [<remote>] [<branch>] [--dry-run] [--dir <path>]
 Pushes a committed local branch to an initialized remote with the same repository
 ID. Supports local paths, external drives, `file://` URLs, UNC shares and `dawvc://` over SSH. Without
 arguments it uses the active branch's upstream remote/branch, falling back to
-`origin` and the active branch name. An explicit remote uses the active branch
-name; an explicit branch selects that local branch and the same destination name.
+`origin` and the active branch name. An explicit matching upstream remote preserves the mapped branch; a different
+remote defaults to the active branch name. An explicit branch selects that local
+branch and the same destination name.
 No refspec syntax, force-push or branch deletion is supported.
 
 `--dry-run` verifies the complete closure and reports missing object count/payload
@@ -488,3 +489,46 @@ hashed sibling creation lock files persist normally: never delete live locks.
 Read-only Log/Scan/Fsck/recovery inspection stay outside this serialization.
 Old clients, raw backends, external restore targets and DAW saves still require
 exclusive coordination. See Recovery Guide and ADR-OPS-001.
+
+
+## Upstream configuration and fresh previews (WP-SYNC-09)
+
+```powershell
+dawvc remote add backup dawvc://alice@nas/projects/song
+dawvc remote track backup published [--local-branch mix] [--dir <repository>]
+dawvc push
+dawvc pull --dry-run
+dawvc pull
+```
+
+Run `remote track` without the bracketed optional arguments to map the active
+branch. This validates configured remote/local branch names and saves settings
+offline; future remote branches are allowed. It preserves HEAD, repository ID and
+other upstreams. The active unborn local branch is allowed. Invalid settings use
+exit 7; Busy uses 11, pending workspace recovery 10, cancellation 130.
+
+Push/Pull use that mapped remote and branch by default. An explicit matching remote
+preserves the mapping; another remote defaults to the local branch name. Explicit
+Push branch selects the local/destination branch; explicit Pull branch selects a
+remote source into the active local branch. Pull never switches HEAD or updates
+another local branch because a remote branch name was supplied.
+
+Fetch/Pull dry-run pins the current remote advertisement and reads missing verified
+commit/snapshot metadata in bounded memory. Pull classifies fresh ancestry even
+with missing/stale tracking refs. Fetch prints planned ref updates even if all
+payloads are already cached. No object/ref/index/config/workspace/quarantine or
+coordination-file writes occur; stale incoming sessions are not pruned. Push
+preview also avoids local writer-lock/index creation and still verifies its full
+reachable closure. All real mutating operations retain operation-wide ownership.
+
+Fetch/Pull counts are missing-transfer estimates, not blob integrity/availability,
+dirty-workspace conflict or recovery-feasibility guarantees. Limits: 2 MiB per
+metadata object, 64 MiB received metadata, 100k object identities, 50k commits and
+1m remote parent edges. Over-budget previews refuse without repository writes.
+Read-only previews take no writer lease and are not atomic views across concurrent
+local changes; actual execution fetches/revalidates again. Pending local recovery
+still refuses sync previews (exit 10); a pending host remains a remote error.
+
+Clone/Fetch/Pull/Push forward Ctrl+C and await cancellation/cleanup (exit 130).
+Effects already published can remain. Linux SIGINT/child cleanup is automated;
+Windows native console Ctrl+C remains a field acceptance gate.
