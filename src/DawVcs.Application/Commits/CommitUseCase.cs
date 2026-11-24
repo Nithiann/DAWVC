@@ -3,6 +3,7 @@ using DawVcs.Application.Adapters;
 using DawVcs.Application.Common;
 using DawVcs.Application.Dependencies;
 using DawVcs.Application.Exceptions;
+using DawVcs.Application.Recovery;
 using DawVcs.Domain.Artifacts;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Dependencies;
@@ -63,6 +64,7 @@ public sealed class CommitUseCase : IUseCase<CommitRequest, CommitResult>
         cancellationToken.ThrowIfCancellationRequested();
         progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
 
+        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using var context = _contextFactory(request.RepositoryDirectory);
         progress?.Report(new OperationProgress(OperationStage.LoadingMetadata));
         var config = context.LoadConfig();

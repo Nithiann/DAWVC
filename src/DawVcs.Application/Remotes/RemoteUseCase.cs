@@ -1,3 +1,4 @@
+using DawVcs.Application.Recovery;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Remotes;
 using DawVcs.Domain.Repositories;
@@ -26,6 +27,7 @@ public sealed class RemoteUseCase
     public RemoteConfig AddRemote(RemoteAddRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using var context = _contextFactory(request.RepositoryDirectory);
 
         if (!RemoteName.TryCreate(request.Name, out var remoteName, out var error))
@@ -59,6 +61,7 @@ public sealed class RemoteUseCase
     public bool RemoveRemote(RemoteRemoveRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using var context = _contextFactory(request.RepositoryDirectory);
         return context.RemoveRemote(request.Name);
     }

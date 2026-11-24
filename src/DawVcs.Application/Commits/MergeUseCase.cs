@@ -3,6 +3,7 @@ using System.Text.Json;
 using DawVcs.Application.Checkouts;
 using DawVcs.Application.Common;
 using DawVcs.Application.Exceptions;
+using DawVcs.Application.Recovery;
 using DawVcs.Application.Scanning;
 using DawVcs.Domain.Artifacts;
 using DawVcs.Domain.Common;
@@ -41,6 +42,7 @@ public sealed class MergeUseCase(Func<string, IRepositoryContext> contextFactory
         ArgumentException.ThrowIfNullOrWhiteSpace(author);
         cancellationToken.ThrowIfCancellationRequested();
         progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
+        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         WorkspaceMutationGuard.Repository(Path.GetFullPath(request.RepositoryDirectory));
         using var context = contextFactory(request.RepositoryDirectory);
         WorkspaceMutationGuard.Repository(context.RootPath);

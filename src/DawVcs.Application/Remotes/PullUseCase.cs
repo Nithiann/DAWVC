@@ -1,6 +1,7 @@
 using DawVcs.Application.Checkouts;
 using DawVcs.Application.Common;
 using DawVcs.Application.Diagnostics;
+using DawVcs.Application.Recovery;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Dependencies;
 using DawVcs.Domain.Remotes;
@@ -92,6 +93,7 @@ public sealed class PullUseCase
             : await _fetchUseCase.ExecuteAsync(fetchRequest, cancellationToken, nestedProgress).ConfigureAwait(false);
 
         progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
+        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using var context = _contextFactory(request.RepositoryDirectory);
         progress?.Report(new OperationProgress(OperationStage.LoadingMetadata));
         var currentBranch = context.GetCurrentBranch();

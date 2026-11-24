@@ -1,4 +1,5 @@
 using DawVcs.Application.Common;
+using DawVcs.Application.Recovery;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Configuration;
 using DawVcs.Domain.Hashing;
@@ -22,6 +23,7 @@ public sealed class PushUseCase(Func<string, IRepositoryContext> contexts, IRemo
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
         progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
+        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using var context = contexts(request.RepositoryDirectory);
         var config = context.LoadConfig();
         var localBranch = request.Branch is null ? context.GetCurrentBranch() : BranchName.Parse(request.Branch);

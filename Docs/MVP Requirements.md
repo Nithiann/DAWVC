@@ -801,3 +801,23 @@ explicit snapshot-choice workflow only. Semantic/per-file merges remain deferred
 
 These requirements govern QA tooling/evidence only; no GUI, additional DAW,
 product runtime dependency, persisted engine schema or wire change is introduced.
+
+
+# Durability amendment: workspace recovery (24 November 2026)
+
+| ID | Priority | Requirement |
+|---|---|---|
+| FR-REC-001 | Must | Prepare flushed private backups and a versioned recovery manifest before in-place checkout/switch/fast-forward publication changes any workspace file. |
+| FR-REC-002 | Must | Capture before/after file hashes, repository identity, HEAD/affected branch tips and logical staged entries; do not depend on an in-memory action list after restart. |
+| FR-REC-003 | Must | Persist a Committed decision after file/ref/index success and before backup cleanup; restart distinguishes rollback of Prepared from verification/finalization of Committed. |
+| FR-REC-004 | Must | Provide read-only `recover` inspection and explicit `recover --rollback`; no automatic or force overwrite mode. |
+| FR-REC-005 | Must | Validate every affected target/backup/ref/index before restoration; unexpected edits, corrupt/foreign/unknown manifests, links/unsafe paths and ambiguous multiple transactions retain evidence and refuse. |
+| FR-REC-006 | Must | Recovery is restartable across file, ref and partial staging restoration. Atomic flushed per-file replacement and expected staging subsets preserve retryability. |
+| FR-REC-007 | Must | Own publication/recovery exclusively with a persistent handle lock; new cooperating mutations and remote handshakes refuse pending envelopes. Never infer active ownership from lock-file existence. |
+| FR-REC-008 | Must | Terminal envelopes move out of the active namespace before recursive cleanup; interrupted cleanup cannot create a half-deleted active recovery manifest. |
+| FR-REC-009 | Must | Bound local manifests to schema 1, 16 MiB, 10k affected files and 10k staged entries; use validated relative paths/derived backup names and BLAKE3 identities. |
+| FR-REC-010 | Must | Test actual process kill at publication/metadata/decision/recovery points. Document incomplete compensation, orphan/private data, power-cycle/storage qualification, non-journaled operations and operation-wide concurrency limits. |
+
+This adds local recovery metadata only, not shared object or remote wire schemas.
+SQLite staged intent is preserved logically; cache rows, SQL timestamps, directory
+layout/timestamps, ACLs and file modes are not a byte-identical filesystem backup.

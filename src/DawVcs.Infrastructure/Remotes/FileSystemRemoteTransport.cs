@@ -63,6 +63,7 @@ public sealed partial class FileSystemRemoteTransport : IRemoteTransport, IRemot
         {
             GuardWritablePath(_configDir);
             GuardWritablePath(Path.Combine(_configDir, YamlRepositoryConfigManager.ConfigFileName));
+            DawVcs.Application.Recovery.WorkspaceRecoveryGuard.ThrowIfPending(_configDir);
             var config = YamlRepositoryConfigManager.ReadFromDirectory(_configDir);
             return Task.FromResult(new RemoteHandshake(config.SchemaVersion, config.RepositoryId, "0.2.0") { Configuration = config });
         }

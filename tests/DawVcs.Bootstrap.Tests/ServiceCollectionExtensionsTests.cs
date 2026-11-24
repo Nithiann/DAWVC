@@ -33,6 +33,7 @@ public sealed class ServiceCollectionExtensionsTests
         typeof(CommitUseCase),
         typeof(LogUseCase),
         typeof(MergeUseCase),
+        typeof(DawVcs.Application.Recovery.WorkspaceRecoveryUseCase),
         typeof(CheckoutRestoreUseCase),
         typeof(CheckoutUseCase),
         typeof(BindDependencyUseCase),

@@ -2,6 +2,7 @@ using DawVcs.Application.Adapters;
 using DawVcs.Application.Common;
 using DawVcs.Application.Dependencies;
 using DawVcs.Application.Exceptions;
+using DawVcs.Application.Recovery;
 using DawVcs.Application.Repositories;
 using DawVcs.Application.Scanning;
 using DawVcs.Domain.Artifacts;
@@ -47,6 +48,10 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
 {
     private readonly Func<string, IRepositoryContext> _contextFactory;
     private readonly IDawAdapterRegistry? _adapterRegistry;
+    private readonly Action<string>? _recoveryCheckpoint;
+
+    internal CheckoutUseCase(Func<string, IRepositoryContext> contextFactory, IDawAdapterRegistry? adapterRegistry, Action<string> checkpoint)
+        : this(contextFactory, adapterRegistry) => _recoveryCheckpoint = checkpoint;
 
     public CheckoutUseCase(Func<string, IRepositoryContext> contextFactory, IDawAdapterRegistry? adapterRegistry = null)
     {
@@ -72,6 +77,7 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
 
         cancellationToken.ThrowIfCancellationRequested();
         progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
+        if (string.IsNullOrWhiteSpace(request.RestoreToDirectory)) WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using var context = _contextFactory(request.RepositoryDirectory);
         var repoRoot = !string.IsNullOrWhiteSpace(context.RootPath)
             ? Path.GetFullPath(context.RootPath)
@@ -134,6 +140,18 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
             progress?.Report(new OperationProgress(OperationStage.PlanningCheckout));
             // --restore-to: herstel naar aparte directory; active workspace blijft onaangeraakt (AC-009)
             targetDir = Path.GetFullPath(request.RestoreToDirectory!);
+            if (WorkspaceRecoveryGuard.HasPending(repoRoot))
+            {
+                WorkspaceTransaction.GuardDirectory(targetDir);
+                static bool Contains(string parent, string child)
+                {
+                    var relative = Path.GetRelativePath(parent, child);
+                    return !Path.IsPathRooted(relative) && relative != ".." && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal);
+                }
+                if (Contains(repoRoot, targetDir) || Contains(targetDir, repoRoot))
+                    throw new WorkspaceRecoveryRequiredException("Restore for inspection must use a directory outside the pending workspace and its ancestry.");
+            }
+            for (var parent = targetDir; parent is not null; parent = Path.GetDirectoryName(parent)) WorkspaceRecoveryGuard.ThrowIfPending(parent);
             Directory.CreateDirectory(targetDir);
             plan = new CheckoutPlan(entries.Select(e => new CheckoutAction(e.Path, CheckoutActionKind.Create, TargetHash: e.Hash)).ToList(), []);
         }
@@ -228,33 +246,39 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
 
             progress?.Report(new OperationProgress(OperationStage.PublishingFiles));
 
-            // 8. Installatie van de geverifieerde candidate met rollback journal (FR-CHK-006, ADR-IO-001)
-            await using var journal = new PublicationJournal(targetDir, Path.Combine(repoRoot, ".dawvc"));
-            restoredFiles = (await journal.ApplyAsync(stagingDir, plan, cancellationToken).ConfigureAwait(false)).ToList();
-
+            // Save intent/backups before publication; external restore remains a separate non-durable operation.
             var previousBranch = !isExternalRestore ? context.GetCurrentBranch() : (BranchName?)null;
             var previousStagedEntries = !isExternalRestore
                 ? await context.StagingIndex.GetStagedEntriesAsync(cancellationToken).ConfigureAwait(false)
                 : null;
-
+            await using var durable = isExternalRestore ? null : await WorkspaceTransaction.PrepareAsync(context, stagingDir, plan,
+                new BranchName(request.Reference), null, null, null, previousStagedEntries ?? [], _recoveryCheckpoint, cancellationToken).ConfigureAwait(false);
+            await using var journal = new PublicationJournal(targetDir, Path.Combine(repoRoot, ".dawvc"), () => _recoveryCheckpoint?.Invoke("file-applied"));
+            var metadataStarted = false;
             try
             {
+                restoredFiles = (await journal.ApplyAsync(stagingDir, plan, cancellationToken).ConfigureAwait(false)).ToList();
                 // 9. Werk HEAD en staging index bij (alleen bij in-place checkout)
                 if (!isExternalRestore)
                 {
+                    metadataStarted = true;
                     var branch = new BranchName(request.Reference);
                     context.SetCurrentBranch(branch);
+                    _recoveryCheckpoint?.Invoke("refs-updated");
 
                     // Reset staging index naar schone HEAD toestand
                     await context.StagingIndex.ClearStagedEntriesAsync(cancellationToken).ConfigureAwait(false);
                 }
 
+                _recoveryCheckpoint?.Invoke("index-cleared");
+                durable?.Commit();
                 await journal.CommitAsync().ConfigureAwait(false);
             }
             catch (Exception originalFailure)
             {
                 var rollbackFailures = new List<Exception>();
-                if (!isExternalRestore)
+                if (originalFailure is IncompleteRollbackException) rollbackFailures.Add(originalFailure);
+                if (!isExternalRestore && metadataStarted)
                 {
                     try
                     {
@@ -270,7 +294,7 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
 
                     try
                     {
-                        if (previousStagedEntries != null)
+                        if (metadataStarted && previousStagedEntries != null)
                         {
                             await context.StagingIndex.ClearStagedEntriesAsync(CancellationToken.None).ConfigureAwait(false);
                             foreach (var entry in previousStagedEntries)
@@ -293,9 +317,10 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
                 {
                     rollbackFailures.Add(rollbackFailure);
                 }
+                if (rollbackFailures.Count == 0) durable?.RollbackConfirmed();
                 if (rollbackFailures.Count > 0)
                 {
-                    rollbackFailures.Insert(0, originalFailure);
+                    if (!rollbackFailures.Contains(originalFailure)) rollbackFailures.Insert(0, originalFailure);
                     throw new IncompleteRollbackException(context.RootPath, new AggregateException(rollbackFailures));
                 }
                 throw;
@@ -424,6 +449,7 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
 
         cancellationToken.ThrowIfCancellationRequested();
         progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
+        WorkspaceRecoveryGuard.ThrowIfPending(target.RepositoryDirectory);
         using var context = _contextFactory(target.RepositoryDirectory);
         var repoRoot = !string.IsNullOrWhiteSpace(context.RootPath)
             ? context.RootPath
@@ -550,30 +576,37 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
                     WorkspaceMutationGuard.Artifacts(repoRoot, oldSnapshot.Project.Root.GetEntries().Select(e => e.Path.Value));
             }
 
-            // 6. PublicationJournal & branch advance (atomic publication)
-            await using var journal = new PublicationJournal(repoRoot, Path.Combine(repoRoot, ".dawvc"));
-            restoredFiles = (await journal.ApplyAsync(stagingDir, plan, cancellationToken).ConfigureAwait(false)).ToList();
-
-            var previousBranchCommit = target.OldCommitId;
+            var previousBranchCommit = context.GetBranchCommit(target.Branch);
             var previousStagedEntries = await context.StagingIndex.GetStagedEntriesAsync(cancellationToken).ConfigureAwait(false);
-
+            await using var durable = await WorkspaceTransaction.PrepareAsync(context, stagingDir, plan,
+                context.GetCurrentBranch(), target.Branch, previousBranchCommit, target.NewCommitId,
+                previousStagedEntries ?? [], _recoveryCheckpoint, cancellationToken).ConfigureAwait(false);
+            await using var journal = new PublicationJournal(repoRoot, Path.Combine(repoRoot, ".dawvc"), () => _recoveryCheckpoint?.Invoke("file-applied"));
+            var metadataStarted = false;
             try
             {
+                restoredFiles = (await journal.ApplyAsync(stagingDir, plan, cancellationToken).ConfigureAwait(false)).ToList();
                 // Advance branch tip and reset staging index
+                metadataStarted = true;
                 await context.UpdateBranchCommitAsync(target.Branch, target.NewCommitId, cancellationToken).ConfigureAwait(false);
+                _recoveryCheckpoint?.Invoke("refs-updated");
                 await context.StagingIndex.ClearStagedEntriesAsync(cancellationToken).ConfigureAwait(false);
 
+                _recoveryCheckpoint?.Invoke("index-cleared");
+                durable?.Commit();
                 await journal.CommitAsync().ConfigureAwait(false);
             }
             catch (Exception originalFailure)
             {
                 var rollbackFailures = new List<Exception>();
+                if (originalFailure is IncompleteRollbackException) rollbackFailures.Add(originalFailure);
                 try
                 {
-                    if (previousBranchCommit.HasValue)
+                    if (metadataStarted && previousBranchCommit.HasValue)
                     {
                         await context.UpdateBranchCommitAsync(target.Branch, previousBranchCommit.Value, CancellationToken.None).ConfigureAwait(false);
                     }
+                    else if (metadataStarted) WorkspaceTransaction.RemoveUnbornReference(repoRoot, target.Branch);
                 }
                 catch (Exception rollbackFailure)
                 {
@@ -582,7 +615,7 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
 
                 try
                 {
-                    if (previousStagedEntries != null)
+                    if (metadataStarted && previousStagedEntries != null)
                     {
                         await context.StagingIndex.ClearStagedEntriesAsync(CancellationToken.None).ConfigureAwait(false);
                         foreach (var entry in previousStagedEntries)
@@ -604,9 +637,10 @@ public class CheckoutUseCase : IUseCase<CheckoutRequest, CheckoutResult>
                 {
                     rollbackFailures.Add(rollbackFailure);
                 }
+                if (rollbackFailures.Count == 0) durable?.RollbackConfirmed();
                 if (rollbackFailures.Count > 0)
                 {
-                    rollbackFailures.Insert(0, originalFailure);
+                    if (!rollbackFailures.Contains(originalFailure)) rollbackFailures.Insert(0, originalFailure);
                     throw new IncompleteRollbackException(context.RootPath, new AggregateException(rollbackFailures));
                 }
                 throw;

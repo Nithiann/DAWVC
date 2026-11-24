@@ -7,6 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="../DawVcs.RecoveryCrashHost/DawVcs.RecoveryCrashHost.csproj" />
     <ProjectReference Include="..\..\src\DawVcs.Cli\DawVcs.Cli.csproj" />
     <ProjectReference Include="..\..\src\DawVcs.Domain\DawVcs.Domain.csproj" />
     <ProjectReference Include="..\..\src\DawVcs.Infrastructure\DawVcs.Infrastructure.csproj" />

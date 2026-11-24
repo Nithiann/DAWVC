@@ -1,4 +1,5 @@
 using DawVcs.Application.Common;
+using DawVcs.Application.Recovery;
 using DawVcs.Domain.Artifacts;
 using DawVcs.Domain.Hashing;
 using DawVcs.Domain.Repositories;
@@ -41,6 +42,7 @@ public sealed class AddUseCase : IUseCase<AddRequest, AddResult>
         ArgumentException.ThrowIfNullOrWhiteSpace(request.RepositoryDirectory);
 
         cancellationToken.ThrowIfCancellationRequested();
+        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using var context = _contextFactory(request.RepositoryDirectory);
         var repoRoot = Path.GetFullPath(context.RootPath);
         var config = context.LoadConfig();

@@ -146,3 +146,14 @@ known_hosts/configuration and test repositories, then cleans them up. It verifie
 real push/clone/fetch/pull, byte identity and rejection of unknown/changed keys.
 No production SSH configuration or account state is changed. The source checkout
 must have secure ancestor ownership/modes, as required by OpenSSH StrictModes.
+
+
+## Host workspace recovery
+
+A new handshake against an ordinary host working repository with pending workspace
+publication refuses synchronization until its operator inspects/replays recovery
+locally. Use `dawvc recover` and the Recovery Guide on that host, not a remote
+arbitrary-path recovery command. Bare storage has no workspace transaction. Never
+remove live ref/ownership locks to bypass refusal. Workspace crash recovery does
+not make whole Push or SSH connection failure transactional; inspect remote tips
+after a lost publish reply as before.

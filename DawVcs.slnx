@@ -9,6 +9,7 @@
     <Project Path="src/DawVcs.Infrastructure/DawVcs.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/DawVcs.RecoveryCrashHost/DawVcs.RecoveryCrashHost.csproj" />
     <Project Path="tests/DawVcs.Adapters.FLStudio.Tests/DawVcs.Adapters.FLStudio.Tests.csproj" />
     <Project Path="tests/DawVcs.Application.Tests/DawVcs.Application.Tests.csproj" />
     <Project Path="tests/DawVcs.Bootstrap.Tests/DawVcs.Bootstrap.Tests.csproj" />

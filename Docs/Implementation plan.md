@@ -1174,3 +1174,71 @@ Publication: implementation `f936e2d` pushed to `feat/sync-preview-acceptance`.
 GraphQL (`gh pr create`) and REST (`POST /repos/Nithiann/DAWVC/pulls`) both
 returned Forbidden. The pinned stacked comparison above is the manual PR route;
 ACCEPT-07 remains open. No approval/merge performed.
+
+
+# 31. WP-SYNC-07 — Durable workspace publication recovery
+
+Base: `feat/sync-preview-acceptance` at `906eed6`.
+Branch: `feat/sync-durable-recovery`; stacked PR; manual approval/merge only.
+
+- [x] REC-01: inspect publication journal, HEAD/ref/index boundaries and pending state.
+- [x] REC-02: define durable prepared/committed decision, bounded validated manifests,
+  complete backup preparation, non-destructive preflight and repeatable recovery.
+- [x] REC-03: implement in-place checkout/switch/fast-forward Pull/Merge recovery;
+  explicit inspect/rollback CLI and shared API; typed pending guards.
+- [x] REC-04: actual killed-process tests before/during publication, after ref/index
+  updates, after commit decision and during recovery; conflicts/corruption/ownership.
+- [x] REC-05: update requirements, ADR, CLI, integration, recovery/security/limitations.
+- [x] REC-06: Release build/full tests/format, synthetic acceptance, real SSH smoke, CI.
+- [ ] REC-07: publish stacked PR; agent never approves/merges.
+
+Scope: before workspace mutation, flush backups and a versioned manifest containing
+before/after hashes, prior/final HEAD/ref and logical staged entries; atomically
+publish its prepared directory under .dawvc/transactions. A committed marker is
+written before recovery backups are discarded. Prepared recovery rolls back;
+committed recovery validates final state and cleans metadata without reverting.
+No automatic force overwrite: unexpected file/ref/staging edits, malformed
+metadata, missing/corrupt backups or unknown versions retain recovery evidence.
+
+Publication/recovery ownership and existing ref locks prevent recovering a live
+publisher. This is not the following WP's global operation lock for all local
+writers. Process-kill resilience is tested separately from real power-cycle and
+storage-controller/NAS directory-rename durability qualification. External restore,
+bare provisioning, Commit, Push and native FLP writing are not newly journaled by
+this workspace-publication WP. Pending workspace journals block cooperating
+history/workspace/staging/sync mutation entry points and new remote handshakes;
+read-only inspection and external snapshot restoration remain available.
+
+
+Local verification (24 November 2026, Linux, SDK 10.0.404):
+
+- Full Release suite: 722 passed, 0 failed, 0 skipped; 34 new recovery acceptance
+  cases plus one Bootstrap registration case over the 687-test baseline.
+- Actual child-process Kill covers unpublished backup preparation, ready manifest,
+  partial multi-file publication, HEAD/ref update, cleared index, durable commit,
+  cleanup handoff, partial recovery files/refs/staging, and metadata-only publication.
+- Conflicts on either side, corrupt/unsupported metadata, bad backups, ownership,
+  unborn refs, unexpected edits/refs/index, multiple transactions, reserved paths,
+  read-only external inspection and force-Clone destination protection are checked.
+- Backup envelopes use owner-only permissions; Unix modes are checked locally and
+  Windows protected owner DACL assertions execute on Windows CI.
+- Existing 42-check synthetic CLI workflow and all 11 acceptance-tool guards pass.
+  Real unprivileged OpenSSH Push/Clone/Fetch/Pull, divergence resolution, bare
+  provisioning, byte identity and strict unknown/changed host-key rejection pass.
+- Release build: 0 warnings/errors; formatting verification passed. Branch CI is
+  separate from these local results and is linked below.
+- Test crash host is not shipped. No new NuGet/product runtime dependency, GUI,
+  native FLP writer, shared object schema or remote wire change. Private recovery
+  metadata is local schema 1; SQLite staging changes to synchronous=FULL.
+
+Publication target: stacked PR against `feat/sync-preview-acceptance`.
+REC-07 stays open until PR creation is confirmed; maintainer approval/merge only.
+If the existing GitHub API restriction persists, use this pinned comparison:
+https://github.com/Nithiann/DAWVC/compare/feat/sync-preview-acceptance...feat/sync-durable-recovery?expand=1
+
+Branch CI (Windows/Ubuntu, recovery process-kill and packaged acceptance):
+[![WP-SYNC-07 CI](https://github.com/Nithiann/DAWVC/actions/workflows/ci.yml/badge.svg?branch=feat%2Fsync-durable-recovery)](https://github.com/Nithiann/DAWVC/actions?query=branch%3Afeat%2Fsync-durable-recovery)
+
+Next independent implementation: operation-wide local mutation serialization.
+Physical power-cycle/controller/NAS qualification and native FL Studio/two-PC
+field acceptance remain open deployment gates, not implied by process-kill CI.

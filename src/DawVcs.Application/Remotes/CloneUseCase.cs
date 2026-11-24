@@ -1,6 +1,7 @@
 using DawVcs.Application.Checkouts;
 using DawVcs.Application.Common;
 using DawVcs.Application.Diagnostics;
+using DawVcs.Application.Recovery;
 using DawVcs.Domain.Artifacts;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Configuration;
@@ -94,6 +95,7 @@ public sealed class CloneUseCase
             ? Path.GetFullPath(request.TargetDirectory)
             : DeriveTargetDirectory(remoteUrl, remoteConfig.ProjectName);
 
+        WorkspaceRecoveryGuard.ThrowIfPending(targetDir);
         if (request.Bare)
         {
             var bare = await new BareRepositoryUseCase(_contextFactory, _transportFactory, _fetchUseCase)

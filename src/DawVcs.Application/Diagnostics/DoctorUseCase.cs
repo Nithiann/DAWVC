@@ -4,6 +4,7 @@ using DawVcs.Adapters.Abstractions;
 using DawVcs.Application.Adapters;
 using DawVcs.Application.Common;
 using DawVcs.Application.Dependencies;
+using DawVcs.Application.Recovery;
 using DawVcs.Domain.Dependencies;
 using DawVcs.Domain.Entities;
 using DawVcs.Domain.Repositories;
@@ -39,6 +40,7 @@ public class DoctorUseCase
         cancellationToken.ThrowIfCancellationRequested();
         progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
         DoctorReport report;
+        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using (var context = _contextFactory(request.RepositoryDirectory))
         {
             report = await ExecuteCoreAsync(context, cancellationToken, progress).ConfigureAwait(false);

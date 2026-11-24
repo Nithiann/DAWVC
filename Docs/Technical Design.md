@@ -1440,3 +1440,16 @@ snapshots/blobs, then reuse staged checkout publication with dirty/collision
 guards and opt-in expected branch/tip checking. Source/tracking refs are retained;
 Push/Pull continue enforcing fast-forward ancestry. No semantic/native FLP writer,
 per-file merge, force, persistent merge state or global transaction is introduced.
+
+
+# Durable workspace recovery amendment — WP-SYNC-07
+
+ADR-REC-001 adds private schema-1 write-ahead recovery envelopes, atomically moved
+from transaction-preparation to active transactions before publication. Flushed
+before/after identities, backups, HEAD/ref metadata and staged intent support
+explicit restartable rollback; a durable Committed decision precedes cleanup.
+Terminal directory rename precedes recursive deletion. Existing immutable/shared
+object formats and remote protocol remain unchanged. SQLite staging synchronous
+mode changes from NORMAL to FULL for durability; no database schema migration.
+Process termination, handled compensation and actual power/storage qualification
+are distinct guarantees. Global local-writer serialization remains a separate WP.

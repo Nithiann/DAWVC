@@ -1,4 +1,5 @@
 using DawVcs.Application.Common;
+using DawVcs.Application.Recovery;
 using DawVcs.Domain.Artifacts;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Configuration;
@@ -40,6 +41,7 @@ public sealed class InitRepositoryUseCase : IUseCase<InitRequest, InitResult>
 
         cancellationToken.ThrowIfCancellationRequested();
         var targetDir = Path.GetFullPath(request.TargetDirectory);
+        WorkspaceRecoveryGuard.ThrowIfPending(targetDir);
         Directory.CreateDirectory(targetDir);
 
         using var context = _contextFactory(targetDir);

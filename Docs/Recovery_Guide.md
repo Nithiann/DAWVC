@@ -90,7 +90,9 @@ Simply copy the desired `.flp` or `.wav` back to your project directory, or open
 
 ## 5. Repository Corruption Recovery (`dawvc fsck`)
 
-If a system crash or power outage occurs during a disk write, verify the integrity of the repository:
+After a system crash or power outage, inspect `dawvc recover` first and follow the
+durable workspace procedure below. Repository graph verification is a separate
+check and does not replace recovery:
 
 ```powershell
 dawvc fsck --artifacts
@@ -194,3 +196,74 @@ IDs are printed by log; inspect/restore either old project in a separate directo
 are ordinary files for review; the active branch is unaffected. Do not use Git's
 `HEAD^` syntax: it is not implemented. Keep source refs or note full IDs when
 reviewing alternate versions, and commit subsequent manual edits normally.
+
+
+## Durable workspace recovery (WP-SYNC-07)
+
+In-place Checkout/Switch and the fast-forward publication used by Pull, explicit
+Merge and initial Clone checkout now save persistent recovery data. After a killed
+process, stop/await all operations and do not save/edit the same project in a DAW.
+Inspect first:
+
+```powershell
+dawvc recover --dir D:\Music\Song
+# Only after inspection and after the owning operation has stopped:
+dawvc recover --rollback --dir D:\Music\Song
+```
+
+Inspection reports transaction ID, Prepared/Committed state and saved file/staging
+counts without opening the index. Prepared restores original file bytes, HEAD/
+affected branch and staged intent, including dirty pre-publication files protected
+by force checkout. Committed verifies the published files/ref/empty index and
+cleans recovery metadata; it never silently reverts the completed version. Neither
+mode fetches, writes FLP internals or offers force/discard. Exit 10 means pending,
+conflicting or unreadable recovery state and requires inspection. A live ownership
+lock refuses recovery: await the operation; do not delete its lock files.
+
+Backups and the manifest are under `.dawvc/transactions/<id>`. Keep them private:
+backups contain actual project/audio bytes, and manifests contain relative names
+and staged object IDs. They are not shared objects or diagnostic upload material.
+Unknown versions, foreign repository IDs, invalid paths, bad backups, unexpected
+file/ref/index edits and multiple active envelopes are refused before recovery
+writes. Preserve all evidence. A later edit detected during recovery can stop it
+after some other files were restored; the envelope remains for retry. No lock
+against arbitrary concurrent filesystem/DAW writers is claimed.
+
+If recovery conflicts, first copy your unexpected new work to a separate safe
+location. Inspect the manifest/backups and known parent snapshots. External
+`checkout <full-id> --restore-to <separate-directory>` remains available for review;
+while pending it must be outside the source workspace and its ancestry, and cannot
+write into another pending workspace. Bring only deliberately reviewed affected
+paths/refs back to an expected state before retrying. Do not delete a transaction,
+edit its hashes/state, erase objects or run force-like repairs to bypass checks.
+For unknown metadata, missing backups or changed refs, manual expert inspection is
+required; automatic recovery cannot safely guess your intended version.
+
+A stopped recovery can be run again. Files restore via flushed temporary copies
+and atomic rename; refs accept only expected old/new tips; a partial original
+staging subset is recognized and rebuilt. A corrupt SQLite index is not erased or
+recreated to make recovery pass. Existing handled journal compensation failures
+still surface IncompleteRollbackException and retain recovery data.
+
+Terminal envelopes first move to `.dawvc/transaction-cleanup/<id>`, then deletion
+is best-effort. Crashes/permissions can leave terminal data there. Unpublished
+preparation can remain under `.dawvc/transaction-preparation/<id>` without user
+file changes. Legacy `.journal_backup_*`, `.staging_checkout_*` and interrupted
+private incomplete restore copies may remain. Only after confirming ownership/inactivity and
+successful state inspection may an operator archive/remove identified leftovers.
+Do not feed terminal/preparation directories back into active recovery or merge
+copies into live storage. No secure erasure or automatic GC is provided.
+
+Recovery preserves contents and logical staged entries, not filesystem/SQL bytes,
+cache hints, timestamps, permissions or ACLs. A created Switch branch can remain
+following a crash; both histories are retained. A rolled-back initial Clone can
+remain initialized with fetched objects/tracking settings: use normal Pull to
+finish materializing it after inspection. No atomic whole-Clone/Commit/Push/bare
+provisioning transaction is introduced. Post-commit dependency/binding errors may
+still leave a completed publication; inspect log/status before retrying.
+
+Actual process-kill tests are separate from physical power-cycle evidence.
+Flush-to-disk, atomic rename and SQLite synchronous=FULL do not certify directory
+ordering, hardware/controller caches or NAS/SMB behavior. Real power-loss and
+storage qualification remain open deployment gates. Operation-wide serialization
+of all local writers is the next independent implementation scope.

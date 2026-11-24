@@ -127,3 +127,22 @@ branch/tip checks immediately before journal application; Merge sets it. Existin
 callers retain their prior behavior. This is no operation-wide concurrency lock.
 No persisted schema, wire contract, UI or dependency changes. Failed operations
 can leave unreachable objects; full historical snapshot/blob auditing remains Fsck.
+
+
+## Workspace recovery integration (WP-SYNC-07)
+
+Resolve WorkspaceRecoveryUseCase for explicit RollbackAsync; static InspectAsync
+reads manifest summaries without opening a context/index. Results expose counts,
+IDs and states. WorkspaceRecoveryRequiredException maps to the appended
+OperationFailureCategory.RecoveryRequired; CLI exit 10. Clients must not infer
+that a process failure undid publication, nor retry mutations before inspecting
+pending recovery. No forced conflict overwrite or auto-recovery is exposed.
+
+Checkout's working-repository publication writes a local durable envelope and
+retains existing handled rollback. Recovery preserves logical staged entries
+(path/blob/hash/size/role), not SQLite/cache bytes. Ownership remains caller/local
+operation based; low-level repository/index methods bypass use-case guards and
+must not be used concurrently to mutate a recovering repository. Read the recovery
+guide for committed decisions, partial staging replay, cleanup and power limits.
+No shared object/wire schema or new runtime dependency; a test-only crash host is
+not part of the shipped CLI. The following operation-wide concurrency WP is separate.

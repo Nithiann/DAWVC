@@ -176,3 +176,30 @@ Checks repeat after the publication progress callback; trusted local writers
 must still avoid concurrent path replacement. Snapshot container shape and
 aggregate hash must match their entries. The new merge object must itself fit
 the metadata/graph limits (including its two parent edges).
+
+
+## Durable recovery review — WP-SYNC-07
+
+Recovery data is local/private: actual musical bytes and relative manifest names
+must not enter shared objects, arbitrary-path server operations or CI uploads.
+Read-only inspection exposes counts/IDs, not backup contents. Explicit rollback
+validates repository/schema, bounded JSON/list sizes, canonical paths/reserved
+metadata roots, link ancestry, derived backup names and BLAKE3 before/after proofs.
+All initial targets and backups are preflighted; copies and targets are rechecked
+before atomic replacement. Unknown edits, bad manifests/backups and multiple
+transactions preserve evidence and refuse; no force or automatic repair.
+
+Exclusive ownership prevents recovering a live publisher; existing ref-write
+ownership prevents cooperating ref writers during replay. Older clients, raw
+backend APIs, malicious same-user path replacement and already-started writers
+are outside global serialization. Do not run/save concurrently. Terminal envelopes
+leave the active namespace before deletion, so interrupted cleanup is not mistaken
+for a damaged active manifest. Private orphan data/locks require ownership-aware
+operator handling; secure erasure is not claimed. Power-cycle/controller/NAS
+qualification is separate from actual process-kill regression evidence.
+
+Recovery envelopes are owner-only directories: Unix 0700, Windows protected DACL
+with inheritable full control for the current user. Restoration copies stay
+inside that private envelope before rename, rather than exposing old musical
+bytes in public workspace temporary files. These controls do not exclude OS
+administrators/privileged backup tools or certify a NAS ACL implementation.

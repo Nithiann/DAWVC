@@ -1,4 +1,5 @@
 using DawVcs.Application.Exceptions;
+using DawVcs.Domain.Artifacts;
 using DawVcs.Domain.Common;
 
 namespace DawVcs.Application.Checkouts;
@@ -25,6 +26,8 @@ internal static class WorkspaceMutationGuard
         foreach (var path in paths)
         {
             PathSecurityGuard.ValidatePath(path);
+            if (!ArtifactPath.TryCreate(path, out var canonical, out _) || canonical.Value != path || path.Split('/').Any(part => part.EndsWith('.')))
+                throw new PathSecurityException(path, "Workspace paths must be canonical and portable.");
             var first = path.Replace('\\', '/').Split('/')[0];
             if (first.Equals(".dawvc", StringComparison.OrdinalIgnoreCase) || first.Equals(".git", StringComparison.OrdinalIgnoreCase)
                 || first.Equals("dawvc.yaml", StringComparison.OrdinalIgnoreCase))

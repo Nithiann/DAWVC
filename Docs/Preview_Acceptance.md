@@ -105,7 +105,7 @@ storage. Record a result for each applicable row; unexecuted rows stay **pending
 | FLP-DIVERGE | Two PCs independently editing arrangements and/or explicitly bundled recordings | Rejected Push; Fetch; deliberate local/incoming selection; both parents independently restored/opened; subsequent Push/Pull works |
 | SSH-WIN | Actual Windows OpenSSH client/host and explicit allowed alias | Same lifecycle; public-key auth; unknown/changed host-key refusal; denied push policy refusal; no password/keys exported |
 | STORAGE-SMB | Actual intended UNC/NAS server and two clients | Vendor/OS/SMB version and relevant locking/rename configuration; lifecycle; concurrent publication rejected without tip loss; outage/retry inspection |
-| RECOVERY | Disposable project copies | Dirty tracked/staged/untracked-collision protection; cancellation and recovery inspection; no claim of hard-crash rollback without persistent journal |
+| RECOVERY | Disposable project copies | Dirty tracked/staged/untracked-collision protection; cancellation, killed-publication recovery and conflict refusal; physical power-cycle/storage qualification remains separate |
 
 ### Two-PC procedure
 
@@ -156,5 +156,7 @@ Result: passed / failed / pending
 Known limits / private evidence location:
 ```
 
-No native/deployment gate is automatically marked passed by this branch. Persistent
-hard-crash recovery, semantic FLP merging and GUI work remain separate scopes.
+No native/deployment gate is automatically marked passed by the acceptance runner.
+WP-SYNC-07 adds process-kill-tested persistent workspace recovery; actual power-
+cycle/storage qualification remains open. Semantic FLP merging and GUI work remain
+separate scopes.

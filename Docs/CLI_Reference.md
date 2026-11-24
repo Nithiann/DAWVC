@@ -22,6 +22,7 @@ DAWVC uses deterministic process exit codes across all commands:
 | `7` | `InvalidArguments` | CLI syntax error or mutually incompatible flags passed. |
 | `8` | `RemoteError` | Remote transport failure, unreachable share/directory, repository ID mismatch, or schema error. |
 | `9` | `NonFastForward` | Push or pull rejected because the requested update is not a fast-forward (including a remote-ahead Push). |
+| `10` | `RecoveryRequired` | Active/unfinished workspace publication or conflicting recovery data; inspect `recover`. |
 | `130` | `Cancelled` | Push was cooperatively cancelled; inspect the destination ref after an interrupted process. |
 
 ---
@@ -448,3 +449,27 @@ only. After remote movement another Fetch/Merge may be necessary. Never run loca
 mutating commands concurrently. Failed/cancelled preparation can leave an
 unreachable merge object; cancellation/errors after publication may leave the
 merge committed. Inspect `log` and `status` before retrying. See Recovery Guide.
+
+
+## `dawvc recover` — durable workspace publication recovery
+
+```powershell
+dawvc recover [--dir <repository>]
+dawvc recover --rollback [--dir <repository>]
+```
+
+Default inspection is read-only and reports transaction ID/state and saved file/
+staged-entry counts. Explicit rollback restores Prepared state; a Committed
+transaction instead verifies final state and finalizes metadata. No force, discard,
+implicit on-open repair or arbitrary transaction-path option is provided. Multiple
+transactions, unknown schemas, bad backups or unexpected edits fail closed.
+
+New cooperating Commit/Add/Branch/Switch/Checkout/Merge/Fetch/Pull/Push, bindings/
+Doctor, remote-config mutations and Init refuse pending workspace envelopes with
+exit 10. New filesystem/SSH handshakes refuse pending hosts as a remote failure
+(exit 8). Status/Log/Fsck and external snapshot inspection remain available; a
+healthy Fsck does not mean an interrupted workspace publication is resolved.
+Read-only queries may still maintain existing filesystem/index caches. Recovery
+ownership/ref locks are persistent files: existence does not mean they are held;
+never delete them while operations may be active. See Recovery Guide for staged
+subsets, orphan data, manual conflicts, power-loss and concurrency boundaries.

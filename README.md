@@ -247,3 +247,13 @@ CI exercises the extracted Windows release executable with a synthetic collabora
 workflow and uploads a scoped JSON result. Linux DLL checks are recorded separately.
 See [Preview acceptance](Docs/Preview_Acceptance.md) for the runner, mounted-share
 option and pending real Windows/FL Studio/two-PC/SSH/NAS qualification procedures.
+
+
+## Interrupted workspace publication
+
+`dawvc recover` inspects persistent publication recovery data;
+`dawvc recover --rollback` explicitly restores a Prepared workspace or verifies/
+finalizes a Committed publication. Pending envelopes block new cooperating
+mutations. Unexpected edits/corrupt backups are preserved for inspection, without
+force overwrite. See [Recovery Guide](Docs/Recovery_Guide.md) for ownership,
+staging replay, private backups, cleanup and power-loss qualification boundaries.

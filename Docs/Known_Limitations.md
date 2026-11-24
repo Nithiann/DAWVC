@@ -61,7 +61,7 @@
 
 - In v0.1, the `PublicationJournal` provides automatic, in-memory rollback of file operations when an exception occurs during staging, candidate installation, reference updates, or index clearing.
 - If a handled error is encountered, temporary file-level backups are restored in reverse order, returning the workspace to its exact pre-checkout state.
-- **Crash Recovery Scope:** Unhandled terminations (e.g. `SIGKILL`, abrupt power outage, or OS panic) mid-publication cannot be rolled back until persistent on-disk transaction manifests (`.dawvc/transactions/<id>/`) are implemented in a future release.
+- **Crash Recovery Scope:** WP-SYNC-07 adds explicit persistent recovery for interrupted in-place workspace publication. Physical power-cut/controller/NAS guarantees still require deployment qualification; see the current boundaries below and Recovery Guide.
 
 
 ## Filesystem Push boundaries (23 November 2026)
@@ -171,3 +171,32 @@ and the separate real Windows/FL Studio/two-PC/OpenSSH/NAS checklist. Synthetic
 single-host success does not certify native playback or deployment-specific
 locking/rename behavior. Those release gates remain pending until measured on
 actual supported setups; no GUI or additional DAW support is implied.
+
+
+## Durable workspace recovery boundaries (WP-SYNC-07)
+
+Persistent local manifests/backups now cover in-place Checkout/Switch and shared
+fast-forward publication (Pull, explicit Merge, initial Clone checkout). Prepared
+recovery restores pre-publication bytes/HEAD/ref/staged intent; Committed recovery
+verifies and finalizes the completed version. Unexpected edits/corruption retain
+recovery data and refuse; there is no forced overwrite or implicit repair.
+
+Backup capacity is additional to candidate and legacy handled-journal storage.
+Metadata is limited to schema 1, 16 MiB, 10k files and 10k staged entries. Recovery
+is logical/content-based, not a complete filesystem/database-image backup. Private
+orphan preparation, terminal cleanup, staging and recovery copies can remain;
+cleanup is not secure erasure. No GC/reset command is introduced.
+
+The ownership lock prevents simultaneous publication/recovery, and existing ref
+locks protect recovery metadata writes. Other already-started writers, older
+clients/raw backend calls and external DAW/file edits are not globally serialized.
+Do not mutate/save concurrently. External restore, Commit, Push and bare storage
+provisioning are not newly crash-journaled. Process-kill tests do not certify true
+power loss, directory-rename ordering or specific NAS/SMB behavior. Those native
+field gates remain open; see Preview_Acceptance.md and Recovery_Guide.md.
+
+Recovery backup directories require owner-only permissions (Unix 0700 or a Windows
+protected owner DACL). Non-ACL filesystems or NAS identity/ACL mappings may reject
+preparation before workspace mutation. Journaled workspaces require storage with
+qualified permissions and atomic rename semantics; bare remote storage is a
+separate scope. Restore does not preserve original file ACLs/modes.

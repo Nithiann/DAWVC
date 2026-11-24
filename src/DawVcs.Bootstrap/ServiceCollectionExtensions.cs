@@ -40,6 +40,7 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<IDawAdapterRegistry>()));
         services.AddTransient<LogUseCase>();
         services.AddTransient<MergeUseCase>();
+        services.AddTransient<DawVcs.Application.Recovery.WorkspaceRecoveryUseCase>();
         services.AddTransient<CheckoutRestoreUseCase>();
         services.AddTransient<CheckoutUseCase>(sp => new CheckoutUseCase(
             sp.GetRequiredService<Func<string, IRepositoryContext>>(),

@@ -1,4 +1,5 @@
 using DawVcs.Application.Common;
+using DawVcs.Application.Recovery;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Configuration;
 using DawVcs.Domain.Hashing;
@@ -67,6 +68,7 @@ public class FetchUseCase
         cancellationToken.ThrowIfCancellationRequested();
         progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
 
+        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using var context = _contextFactory(request.RepositoryDirectory);
         progress?.Report(new OperationProgress(OperationStage.LoadingMetadata));
         var localConfig = context.LoadConfig();

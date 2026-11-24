@@ -1,5 +1,6 @@
 using DawVcs.Application.Adapters;
 using DawVcs.Application.Checkouts;
+using DawVcs.Application.Recovery;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Hashing;
 using DawVcs.Domain.Repositories;
@@ -47,6 +48,7 @@ public sealed class SwitchUseCase
         }
 
         cancellationToken.ThrowIfCancellationRequested();
+        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using var context = _contextFactory(request.RepositoryDirectory);
         var currentBranch = context.GetCurrentBranch();
 
@@ -112,7 +114,7 @@ public sealed class SwitchUseCase
             }
             catch
             {
-                if (createdNew)
+                if (createdNew && !WorkspaceRecoveryGuard.HasPending(context.RootPath))
                 {
                     try
                     {
