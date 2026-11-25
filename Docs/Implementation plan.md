@@ -1481,6 +1481,41 @@ maintainer to apply this repair and complete their own review/merge; the agent
 has updated only the separate repair branch. MERGE-FIX-06 remains blocked by
 GitHub API Forbidden, not by code validation.
 
+# 35. Maintenance — Windows post-kill lock readiness (25 November 2026)
+
+Continuation on `feat/sync-develop-merge-fix`, base `d0f8b0f`.
+The supplied failing Windows log identifies
+`RepositoryOperationTests.CrossProcessCreationLease_CoordinatesBareAndWorkingTargets(existingEmpty: false)`:
+sharing violation while acquiring the creation sidecar immediately after
+Kill/WaitForExitAsync. All listed PushAcTests passed; their intentional error
+messages were not the failing test. Later CI success does not resolve this race.
+
+- [x] LOCK-TEST-01: identify the actual failing assertion and native sharing error.
+- [x] LOCK-TEST-02: bound test-only post-exit readiness polling to five seconds on
+  Windows for native sharing/lock violations (32/33), preserving immediate Busy
+  assertions while the holder is alive and rejecting registry-only Busy/errors.
+- [x] LOCK-TEST-03: apply the same post-exit readiness boundary to the sibling
+  child-holder Add test; retain real process Kill and exact preservation checks.
+- [x] LOCK-TEST-04: upload per-project TRX artifacts on both CI platforms even
+  after test failure, so the actual failing test/stack remains available.
+- [x] LOCK-TEST-05a: local focused ownership cases and full Release suite (805 passed).
+- [x] LOCK-TEST-05b: local final formatting verification (--verify-no-changes).
+- [ ] LOCK-TEST-05c: Windows/Ubuntu CI; five focused Windows repetitions
+  (20 cases) exercise the previously intermittent boundary.
+- [ ] LOCK-TEST-06: publish updates to the existing repair branch; never approve/merge.
+
+No product locking/timeout/wait behavior changes. Stock operations still fail
+immediately on contention; no forced takeover, lock deletion or swallowed runtime
+failure. The bounded polling belongs only to test synchronization after confirmed
+process exit; cancellation and persistent failures still fail the test. This does
+not qualify NAS or physical power loss. Verification is recorded after execution.
+
+CI artifacts `test-results-windows` / `test-results-linux` retain per-project TRX
+files for 14 days, including the five Windows ownership repetitions. They are
+uploaded with always() even if test execution fails; absent reports after an
+earlier build failure are ignored. Synthetic CI test results contain no music
+fixtures from operators.
+
 # Appendix A. Historical upstream/preview records from develop PR #18
 
 These retained records describe the original WP-SYNC-02/03 branches. Their old

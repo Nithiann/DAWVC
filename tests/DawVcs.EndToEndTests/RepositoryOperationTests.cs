@@ -140,7 +140,8 @@ public sealed class RepositoryOperationTests : IDisposable
             if (kill) holder.Kill(true);
             else { await holder.StandardInput.WriteLineAsync(); await holder.StandardInput.FlushAsync(timeout.Token); }
             await holder.WaitForExitAsync(timeout.Token);
-            await new AddUseCase(Context).ExecuteAsync(new AddRequest(Root, ["sample.wav"]));
+            await AfterProcessExitAsync(holder,
+                () => new AddUseCase(Context).ExecuteAsync(new AddRequest(Root, ["sample.wav"])), timeout.Token);
             File.Exists(Path.Combine(Root, ".dawvc", "operation.lock")).Should().BeTrue();
         }
         finally { if (!holder.HasExited) { holder.Kill(true); await holder.WaitForExitAsync(CancellationToken.None); } }
@@ -185,7 +186,8 @@ public sealed class RepositoryOperationTests : IDisposable
             else Directory.Exists(target).Should().BeFalse();
             holder.Kill(true);
             await holder.WaitForExitAsync(timeout.Token);
-            using var released = RepositoryOperation.Enter(target, create: true);
+            using var released = await AfterProcessExitAsync(holder,
+                () => Task.FromResult(RepositoryOperation.Enter(target, create: true)), timeout.Token);
             RepositoryOperation.OnlyCreationScaffold(target).Should().BeTrue();
         }
         finally { if (!holder.HasExited) { holder.Kill(true); await holder.WaitForExitAsync(CancellationToken.None); } }
@@ -244,6 +246,25 @@ public sealed class RepositoryOperationTests : IDisposable
         using var owner = RepositoryOperation.Enter(Root);
         var alias = () => RepositoryOperation.Enter(Path.Combine(Root, "..", "song", "."));
         alias.Should().Throw<RepositoryBusyException>();
+    }
+
+    private static async Task<T> AfterProcessExitAsync<T>(Process holder, Func<Task<T>> action, CancellationToken cancellationToken)
+    {
+        holder.HasExited.Should().BeTrue("readiness polling is only allowed after the owning process has exited");
+        var elapsed = Stopwatch.StartNew();
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try { return await action(); }
+            catch (RepositoryBusyException error) when (OperatingSystem.IsWindows()
+                && error.InnerException is IOException io && (io.HResult & 0xffff) is 32 or 33
+                && elapsed.Elapsed < TimeSpan.FromSeconds(5))
+            {
+                // A signaled Windows process exit does not guarantee immediate file reopenability.
+                // Retry only native sharing/lock violations, never in-process ownership or other failures.
+                await Task.Delay(25, cancellationToken);
+            }
+        }
     }
 
     private Dictionary<string, string> Snapshot() => Directory.GetFiles(Root, "*", SearchOption.AllDirectories)

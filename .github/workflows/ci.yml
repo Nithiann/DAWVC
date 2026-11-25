@@ -42,6 +42,23 @@ jobs:
       - name: Run all tests
         run: dotnet test --no-build -c Release --verbosity normal --logger "trx;LogFileName=test_results.trx"
 
+      - name: Repeat Windows post-exit ownership checks
+        shell: pwsh
+        run: |
+          foreach ($iteration in 1..5) {
+            dotnet test tests/DawVcs.EndToEndTests/DawVcs.EndToEndTests.csproj --no-build -c Release --filter "FullyQualifiedName~CrossProcessCreationLease_CoordinatesBareAndWorkingTargets|FullyQualifiedName~ChildProcessHolder_RefusesCliThenReleasesOnExitOrKill" --logger "trx;LogFileName=ownership-$iteration.trx"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: Upload Windows test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-windows
+          path: tests/**/TestResults/*.trx
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Setup Python for release acceptance
         uses: actions/setup-python@v6
         with:
@@ -88,6 +105,15 @@ jobs:
 
       - name: Run all tests including transient SSH protocol tests
         run: dotnet test --no-build -c Release --logger "trx;LogFileName=test_results.trx"
+
+      - name: Upload Linux test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-linux
+          path: tests/**/TestResults/*.trx
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Setup Python for CLI acceptance
         uses: actions/setup-python@v6
