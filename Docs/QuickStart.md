@@ -300,3 +300,36 @@ the remote branch may be created by a future Push. Explicit matching remote name
 retain the mapping. Dry-run uses current remote tips without local files/index/
 lock/quarantine writes; it estimates transfers, not native playback or unsaved-file
 conflicts. A real Pull fetches again. See CLI Reference for overrides and limits.
+### Tracking a different host or remote branch
+
+Clone sets origin/upstream automatically. To use another configured host or
+publish the current local branch under another remote branch name:
+
+```powershell
+dawvc remote add backup dawvc://alice@nas/projects/song
+dawvc remote track backup published
+dawvc push
+dawvc pull
+```
+
+The default commands now use backup/published. An explicit `pull backup published`
+always integrates into your active local branch. To track another existing local
+branch, add `--local-branch <name>`. Tracking settings are local and do not connect
+to the host or create commits. Press Ctrl+C to cancel any sync command; await its
+completion and inspect state before retrying. See CLI_Reference.md for the
+existing fresh-Pull-preview limitation.
+
+### Preview current remote changes without applying them
+
+```powershell
+dawvc fetch origin --dry-run
+dawvc pull --dry-run
+```
+
+Fetch shows estimated missing transfer and planned tracking updates. Pull checks
+current advertised history even when your tracking refs are missing/stale; it
+reports fast-forward, already-current or local-ahead state and rejects divergence.
+Neither preview updates workspace, objects, staging, settings or refs, creates
+quarantine or deletes old incoming sessions. Blob contents and unsaved workspace
+conflicts are not checked. The later real Pull fetches again; inspect the CLI
+reference for limits and advisory semantics.

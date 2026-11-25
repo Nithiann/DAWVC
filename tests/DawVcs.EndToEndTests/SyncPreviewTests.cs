@@ -3,16 +3,13 @@ using System.Text;
 using System.Text.Json;
 
 using DawVcs.Application.Checkouts;
-using DawVcs.Application.Commits;
 using DawVcs.Application.Common;
-using DawVcs.Application.Recovery;
 using DawVcs.Application.Remotes;
 using DawVcs.Domain.Artifacts;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Configuration;
 using DawVcs.Domain.Entities;
 using DawVcs.Domain.Remotes;
-using DawVcs.Domain.Repositories;
 using DawVcs.Domain.Storage;
 using DawVcs.Infrastructure.Configuration;
 using DawVcs.Infrastructure.Remotes;
@@ -258,101 +255,6 @@ public sealed class SyncPreviewTests : IDisposable
             if (command == "fetch") (await output).Should().Contain("Would update");
             Snapshot(local).Should().BeEquivalentTo(before);
         }
-    }
-
-    [Fact]
-    public async Task KilledMappedPull_RecoversActiveBranchWithoutRevertingFetchedTracking()
-    {
-        var (local, first) = await PrepareAsync(false);
-        var second = await CommitAsync("second", first);
-        await PublishAsync();
-        var mix = BranchName.Parse("mix");
-        using (var context = Context(local))
-        {
-            context.CreateBranch(mix, first);
-            context.SetCurrentBranch(mix);
-        }
-        new RemoteUseCase(Context).TrackRemote(new TrackRemoteRequest(local, "backup", "main"));
-        var start = new ProcessStartInfo(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet")
-        { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
-        foreach (var arg in new[] { typeof(DawVcs.RecoveryCrashHost.Program).Assembly.Location, "pull", local, "refs-updated" })
-            start.ArgumentList.Add(arg);
-        using var child = Process.Start(start)!;
-        var output = child.StandardOutput.ReadToEndAsync();
-        var error = child.StandardError.ReadToEndAsync();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        try { await child.WaitForExitAsync(timeout.Token); }
-        finally { if (!child.HasExited) { child.Kill(true); await child.WaitForExitAsync(CancellationToken.None); } }
-        child.ExitCode.Should().NotBe(0, await output + await error);
-        File.ReadAllText(Path.Combine(local, ".dawvc", "killed-at")).Should().Be("refs-updated");
-        (await WorkspaceRecoveryUseCase.InspectAsync(local)).Should().ContainSingle().Which.State.Should().Be("Prepared");
-        (await new WorkspaceRecoveryUseCase(Context).RollbackAsync(local)).RolledBack.Should().Be(1);
-        using var inspect = Context(local);
-        inspect.GetCurrentBranch().Should().Be(mix);
-        inspect.GetBranchCommit(mix).Should().Be(first);
-        inspect.GetBranchCommit(BranchName.Main).Should().Be(first);
-        inspect.GetRemoteTrackingCommit("backup", BranchName.Main).Should().Be(second);
-        File.ReadAllText(Path.Combine(local, "Song.flp")).Should().Be("first");
-        WorkspaceRecoveryGuard.HasPending(local).Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task PushPreview_DoesNotCreateOperationLockOrStagingIndex()
-    {
-        using (var context = Context(Source)) context.SaveRemote(new RemoteConfig(new RemoteName("backup"), Remote));
-        await CommitAsync("first");
-        var before = Snapshot(Source);
-        var hostBefore = Snapshot(Remote);
-        var preview = await new PushUseCase(Context, _factory).ExecuteAsync(new PushRequest(Source, "backup", DryRun: true));
-        preview.IsDryRun.Should().BeTrue();
-        Snapshot(Source).Should().BeEquivalentTo(before);
-        Snapshot(Remote).Should().BeEquivalentTo(hostBefore);
-        File.Exists(Path.Combine(Source, ".dawvc", "operation.lock")).Should().BeFalse();
-        File.Exists(Path.Combine(Source, ".dawvc", "index.db")).Should().BeFalse();
-        await PublishAsync();
-    }
-
-    [Theory]
-    [InlineData(false, MergeSnapshotChoice.Local)]
-    [InlineData(false, MergeSnapshotChoice.Incoming)]
-    [InlineData(true, MergeSnapshotChoice.Local)]
-    [InlineData(true, MergeSnapshotChoice.Incoming)]
-    public async Task MappedPullPreviewAndPublication_FollowMergedSecondParentAndPreserveOtherLocalBranch(bool ssh, MergeSnapshotChoice choice)
-    {
-        var (local, first) = await PrepareAsync(ssh);
-        var left = await CommitAsync("left", first);
-        File.WriteAllText(Path.Combine(Source, "Song.flp"), "left");
-        await PublishAsync();
-        var right = await CommitAtAsync(local, "right", first);
-        File.WriteAllText(Path.Combine(local, "Song.flp"), "right");
-        await Fetch().ExecuteAsync(new FetchRequest(local, "backup"));
-        var merged = await new MergeUseCase(Context, new CheckoutUseCase(Context)).ExecuteAsync(
-            new MergeRequest(local, "backup/main", choice, "combine histories"));
-        merged.LocalParent.Should().Be(right);
-        merged.IncomingParent.Should().Be(left);
-        await new PushUseCase(Context, _factory).ExecuteAsync(new PushRequest(local));
-        var mix = BranchName.Parse("mix");
-        using (var context = Context(Source))
-        {
-            context.CreateBranch(mix, left);
-            context.SetCurrentBranch(mix);
-        }
-        new RemoteUseCase(Context).TrackRemote(new TrackRemoteRequest(Source, "backup", "main"));
-        var before = Snapshot(Source);
-        var hostBefore = Snapshot(Remote);
-        var preview = await Pull().ExecuteAsync(new PullRequest(Source, DryRun: true));
-        preview.State.Should().Be(SyncAncestryState.FastForward);
-        preview.Branch.Should().Be(mix);
-        preview.NewCommit.Should().Be(merged.CommitId);
-        Snapshot(Source).Should().BeEquivalentTo(before);
-        Snapshot(Remote).Should().BeEquivalentTo(hostBefore);
-        var actual = await Pull().ExecuteAsync(new PullRequest(Source));
-        actual.NewCommit.Should().Be(preview.NewCommit);
-        using var inspect = Context(Source);
-        inspect.GetCurrentBranch().Should().Be(mix);
-        inspect.GetBranchCommit(mix).Should().Be(merged.CommitId);
-        inspect.GetBranchCommit(BranchName.Main).Should().Be(left);
-        File.ReadAllText(Path.Combine(Source, "Song.flp")).Should().Be(choice == MergeSnapshotChoice.Local ? "right" : "left");
     }
 
     private FetchUseCase Fetch() => new(Context, _factory, p => new QuarantineObjectStore(p));

@@ -852,6 +852,10 @@ layout/timestamps, ACLs and file modes are not a byte-identical filesystem backu
 
 Target selection and fresh-preview requirements are integrated together by
 WP-SYNC-09 on the recovery/ownership stack; their original WPs remain historical.
+| FR-SYN-007 | If the active local branch changes during Fetch, Pull stops before checkout with a typed repository-state error. Already fetched objects/tracking may remain. This is not operation-wide cross-process locking. |
+
+Pull dry-run freshness is tracked separately in WP-SYNC-03; no new guarantee of
+accurate online preview is introduced by target selection changes.
 
 # Post-MVP amendment: fresh sync previews (23 November 2026)
 

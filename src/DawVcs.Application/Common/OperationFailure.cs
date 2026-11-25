@@ -47,7 +47,7 @@ public sealed record OperationFailure(OperationFailureCategory Category, Excepti
             OperationCanceledException => OperationFailureCategory.Cancellation,
             RemoteException => OperationFailureCategory.RemoteUnavailable,
             UnauthorizedAccessException or IOException => OperationFailureCategory.PermissionOrIoFailure,
-            RepositoryStateChangedException or ArgumentException or PathSecurityException => OperationFailureCategory.Validation,
+            ArgumentException or PathSecurityException or RepositoryStateChangedException => OperationFailureCategory.Validation,
             _ => OperationFailureCategory.Unknown
         };
         return new OperationFailure(category, exception, (exception as IncompleteRollbackException)?.RecoveryPath);

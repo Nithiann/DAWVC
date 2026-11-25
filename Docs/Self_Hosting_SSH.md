@@ -171,3 +171,20 @@ publishes anything. The host can still log authentication/requests, and its refs
 can change before actual execution. No new wire, daemon or authorization policy.
 All four sync commands forward cancellation; Linux SIGINT verifies child exit.
 Windows console signals and actual deployment/storage behavior need native tests.
+## Choosing a different upstream
+
+After `remote add backup dawvc://alice@nas/projects/song`, use
+`remote track backup published` to make the active local branch push to and pull
+from backup/published. Add `--local-branch name` to configure another existing local
+branch. The host is not contacted while storing this local preference. The same
+rules apply to filesystem remotes. Explicit `pull backup published` always updates
+the active local branch; a matching explicit remote retains its upstream mapping.
+
+## Read-only sync previews
+
+`fetch --dry-run` and `pull --dry-run` use read-only host operations to pin current
+advertised tips and verify missing metadata in bounded memory. They do not open a
+push session, initialize repository directories/indexes or change local tracking
+refs. SSH authentication and operator audit logs still occur. No blob payloads
+are downloaded or remote refs reserved; a later real operation validates again.
+Existing host permissions, keys, quotas and protocol version remain unchanged.

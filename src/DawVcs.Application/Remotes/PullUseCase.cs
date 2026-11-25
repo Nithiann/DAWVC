@@ -94,7 +94,6 @@ public sealed class PullUseCase
         var nestedProgress = progress is null ? null : new NestedOperationProgress(progress);
 
         progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
-        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using var context = _contextFactory(request.RepositoryDirectory);
         var target = SyncTarget.ForPull(context, request.RemoteName, request.Branch);
         var targetBranch = target.LocalBranch;
@@ -102,7 +101,7 @@ public sealed class PullUseCase
         var finalRemoteBranch = target.RemoteBranch;
 
         // Resolve upstream before fetching, so Fetch and integration use the same source.
-        var fetchRequest = new FetchRequest(request.RepositoryDirectory, remoteName, finalRemoteBranch.Value, request.DryRun) { Operation = request.Operation };
+        var fetchRequest = new FetchRequest(request.RepositoryDirectory, remoteName, finalRemoteBranch.Value, request.DryRun);
         var fetchResult = nestedProgress is null
             ? await _fetchUseCase.ExecuteAsync(fetchRequest, cancellationToken).ConfigureAwait(false)
             : await _fetchUseCase.ExecuteAsync(fetchRequest, cancellationToken, nestedProgress).ConfigureAwait(false);

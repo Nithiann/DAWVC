@@ -224,3 +224,19 @@ verify remote blob availability. Actual execution fetches again and may see a ne
 tip. Keep previews advisory during other writers. Track/real operations respect
 operation ownership and pending recovery; await Busy owners and inspect recovery.
 Ctrl+C is forwarded for all sync commands; durable effects can remain after exit 130.
+### Tracking a shared branch
+
+Use `dawvc remote track origin shared-mix` to map the active local branch to a
+differently named remote branch before publishing. Plain Push/Pull then use that
+mapping. `pull origin shared-mix` integrates into the current local branch; use
+`switch` separately when you intend to change local branches. Cancellation is
+available on clone/fetch/pull/push, but does not undo every durable effect.
+
+### Preview before integrating
+
+`dawvc pull --dry-run` now reads current remote metadata without updating tracking
+refs or downloading blob bodies. It works with stale/missing tracking caches and
+reports divergence before workspace changes. `fetch origin --dry-run` also lists
+planned ref updates. Neither operation forecasts dirty-workspace conflicts or
+reserves remote refs; verify unsaved work separately and run actual Pull to fetch
+and apply the latest validated state.

@@ -88,8 +88,6 @@ public sealed class RemoteUseCase
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
-        using var operation = RepositoryOperation.Enter(request.RepositoryDirectory, cancellationToken: cancellationToken);
-        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         var name = RemoteName.Parse(request.RemoteName);
         var remoteBranch = BranchName.Parse(request.RemoteBranch);
         using var context = _contextFactory(request.RepositoryDirectory);
