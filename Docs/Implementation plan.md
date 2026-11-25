@@ -1500,9 +1500,9 @@ messages were not the failing test. Later CI success does not resolve this race.
   after test failure, so the actual failing test/stack remains available.
 - [x] LOCK-TEST-05a: local focused ownership cases and full Release suite (805 passed).
 - [x] LOCK-TEST-05b: local final formatting verification (--verify-no-changes).
-- [ ] LOCK-TEST-05c: Windows/Ubuntu CI; five focused Windows repetitions
+- [x] LOCK-TEST-05c: Windows/Ubuntu CI; five focused Windows repetitions
   (20 cases) exercise the previously intermittent boundary.
-- [ ] LOCK-TEST-06: publish updates to the existing repair branch; never approve/merge.
+- [x] LOCK-TEST-06: publish updates to the existing repair branch; no approval/merge.
 
 No product locking/timeout/wait behavior changes. Stock operations still fail
 immediately on contention; no forced takeover, lock deletion or swallowed runtime
@@ -1515,6 +1515,21 @@ files for 14 days, including the five Windows ownership repetitions. They are
 uploaded with always() even if test execution fails; absent reports after an
 earlier build failure are ignored. Synthetic CI test results contain no music
 fixtures from operators.
+
+Post-exit test correction: `1b9fb91` pushed to the same repair branch.
+Local focused ownership suite: 27 passed. Full Release compilation/suite:
+805 passed, 0 failed/skipped; formatting verification passed. Product source is
+unchanged. CI checks both the branch push and its existing PR merge result:
+https://github.com/Nithiann/DAWVC/actions/runs/45571240357
+https://github.com/Nithiann/DAWVC/actions/runs/45571249697
+
+Verification for test correction `1b9fb91`: both push run `45571240357` and
+PR merge-result run `45571249697` completed **Success** on Windows and Ubuntu.
+Each Windows run passed the full 805-test suite and five extra focused runs
+(4 cases each: 20 additional process-exit cases per Windows job), followed by
+42-check extracted-package acceptance. TRX uploads succeeded on both platforms.
+No product-source changes, skipped assertions, lock stealing or unconditional
+sleep was introduced. This final evidence update changes documentation only.
 
 # Appendix A. Historical upstream/preview records from develop PR #18
 
