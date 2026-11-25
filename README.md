@@ -112,7 +112,6 @@ For options, exit codes, and JSON schemas, see the complete **[CLI Command Refer
 | `dawvc branch [name]` | Lists existing branches or creates a new branch pointer. |
 | `dawvc switch <branch>` | Safely switches the workspace to a different branch. |
 | `dawvc checkout <commit>` | Restores a specific snapshot (supports `--restore-to` and `--force`). |
-| `dawvc remote track <remote> <branch>` | Sets the active local branch’s upstream without contacting the host. |
 | `dawvc push [remote] [branch]` | Sends committed history to a filesystem/UNC or dawvc:// SSH remote, fast-forward only; supports `--dry-run`. |
 | `dawvc bind <id> <path>` | Links an external asset to a logical dependency ID. |
 | `dawvc doctor` | Verifies environment health, checking local presence and compatible versions (`installed >= required`) for plugins, samples, and dependencies. |
@@ -272,6 +271,3 @@ defaults, fresh read-only Fetch/Pull previews and cancellation onto the recovery
 locking stack. Dry-runs create no local lock/index/quarantine; real operations keep
 writer ownership. See [CLI Reference](Docs/CLI_Reference.md) and the current
 [implementation plan](Docs/Implementation%20plan.md) for review/qualification status.
-Fetch/Pull support fresh `--dry-run` metadata previews without updating workspace,
-objects, staging or refs. Fetch also shows planned tracking changes. Blob contents
-and dirty workspace conflicts are not checked; see the CLI reference for limits.

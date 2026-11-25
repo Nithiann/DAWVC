@@ -1410,7 +1410,67 @@ CLI acceptance. Windows passed formatting, security audit, packaging and the
 42-check workflow using the extracted self-contained distribution. The native/
 physical/storage field gates remain pending. This final publication record changes
 documentation only. INT-07 remains the external PR-creation blocker above.
-# 28. WP-SYNC-02 — Predictable upstream workflow and CLI cancellation
+
+
+# 34. Maintenance — Repair develop merge resolution (25 November 2026)
+
+Base: maintainer merge `baf2008` on `feat/sync-workflow-integration`, which includes
+`origin/develop` at `0ee6a6e` (PR #18). Repair branch:
+`feat/sync-develop-merge-fix`; PR target `feat/sync-workflow-integration`.
+
+Cause: WP-SYNC-02/03 had been merged into develop with their original ancestry,
+while WP-SYNC-09 had ported the same behavior onto the separately stacked feature
+history. Git therefore encountered overlapping edits. The merge resolution combined
+two Clone handler variants and retained two nested `parsed` declarations (CS0136).
+It also omitted Bare forwarding, nested Pull ownership, pending-recovery/Busy
+handling and seven integration test cases. Earlier green CI verified `24377a5`,
+not the later maintainer merge `baf2008`.
+
+- [x] MERGE-FIX-01: inspect both parents and compare the resolved tree with the
+  previously validated integration; preserve the newly incorporated develop history.
+- [x] MERGE-FIX-02: restore the correct Clone handler including --bare and typed
+  errors; restore Pull nested ownership/recovery and Track guards/CLI mappings.
+- [x] MERGE-FIX-03: restore removed integration regressions; retain develop's
+  RepositoryStateChangedException base type and equivalent failure classification.
+- [x] MERGE-FIX-04: consolidate duplicate documentation/requirement/ADR rows and
+  retain maintainer PR #17/#18 evidence; archive old WP-SYNC-02/03 records below.
+- [x] MERGE-FIX-05a: full Release compilation/suite, CLI/SSH/SIGINT checks.
+- [x] MERGE-FIX-05b: final format verification (--verify-no-changes).
+- [ ] MERGE-FIX-05c: Windows/Ubuntu code CI and packaged acceptance.
+- [ ] MERGE-FIX-06: publish repair PR; maintainer approval/merge only.
+
+This is a repair of merge resolution, not another feature WP or a rewrite of
+published history. No develop/feature PR is approved or merged by the agent.
+The repair branch already contains the fetched develop commit; after its changes
+are applied to the feature PR there is no outstanding merge conflict against that
+commit. Later develop changes can of course require another integration check.
+
+Verification/publication results follow after execution. Native/storage gates stay
+pending; restoring regressions does not qualify physical deployments.
+
+Local verification (25 November 2026, Linux, SDK 10.0.404):
+
+- Full Release compilation/suite passed: 805 tests, 0 failed/skipped. No new
+  compiler/analyzer warnings or errors. Restored guards and tests run against the
+  actual maintainer merge base, including develop's exception inheritance.
+- All 42 CLI acceptance checks and 11 acceptance-tool guards passed. Real
+  OpenSSH collaboration/Bare provisioning/Merge/strict host-key checks passed.
+- Push/Fetch/Pull/Clone Linux SIGINT returned 130 and their SSH children exited.
+- Fetched develop `0ee6a6e` is an ancestor of the repair base; merge-tree reports
+  no outstanding conflict against it. Final formatting/CI/publication follow below.
+
+Repair PR comparison (target the existing feature branch first):
+https://github.com/Nithiann/DAWVC/compare/feat/sync-workflow-integration...feat/sync-develop-merge-fix?expand=1
+
+# Appendix A. Historical upstream/preview records from develop PR #18
+
+These retained records describe the original WP-SYNC-02/03 branches. Their old
+future/deferred statements and initial API restrictions are historical, superseded
+by sections 28–34 and maintainer integration in PR #18. Current behavior and review
+status are recorded in the later numbered sections; do not read the archive as
+pending implementation or duplicate active work packages.
+
+## Historical WP-SYNC-02 — Predictable upstream workflow and CLI cancellation
 
 Base: `origin/develop` at `19f37b7` (PR #17 merged by maintainer).
 Branch: `feat/sync-upstream-workflow`. Work proceeds in this order:
@@ -1422,7 +1482,7 @@ Branch: `feat/sync-upstream-workflow`. Work proceeds in this order:
 - [x] SYNC-05: forward CLI cancellation to clone/fetch/pull, retaining Push support and exit 130.
 - [x] SYNC-06: verify filesystem and transient SSH workflows, overrides, denied settings and cancellation.
 - [x] SYNC-07: update reference/workflow/limitations; local Release build, tests and formatting verified. Branch CI status is linked below.
-- [ ] SYNC-08: publish PR against develop for maintainer approval; never approve/merge.
+- [x] SYNC-08: integrated by the maintainer through develop PR #18 (`0ee6a6e`); agent did not approve/merge.
 
 Acceptance: default Push and Pull use the active branch's configured upstream; an
 explicit matching remote preserves that mapping, a different remote defaults to
@@ -1477,7 +1537,7 @@ https://github.com/Nithiann/DAWVC/compare/develop...feat/sync-upstream-workflow?
 The agent does not approve or merge. WP-SYNC-03 and WP-SYNC-04 remain deferred,
 not implicitly delivered by these changes.
 
-# 29. WP-SYNC-03 — Fresh read-only Fetch/Pull previews
+## Historical WP-SYNC-03 — Fresh read-only Fetch/Pull previews
 
 Base: `feat/sync-upstream-workflow` at `d7ccf20`.
 Branch: `feat/sync-fresh-preview`. Prior WP implementation/CI passed; manual review
@@ -1489,7 +1549,7 @@ remains a maintainer action. No approval or merge is performed by the agent.
 - [x] PREVIEW-04: eliminate constructor writes/index initialization on preview reads.
 - [x] PREVIEW-05: test fresh/missing/stale refs, ancestry, corruption, cancellation and unchanged filesystem state over filesystem/SSH.
 - [x] PREVIEW-06: update docs/requirements/ADR; build, full tests, format, smoke checks.
-- [ ] PREVIEW-07: publish stacked PR against the previous branch for manual review.
+- [x] PREVIEW-07: integrated by the maintainer through develop PR #18 (`0ee6a6e`); agent did not approve/merge.
 
 Acceptance: Fetch/Pull dry-run uses a pinned current remote advertisement, never
 promotes objects or updates workspace/index/config/refs, never creates/prunes

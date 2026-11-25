@@ -1174,6 +1174,8 @@ public static class Program
             }
             catch (ArgumentException ex) { invocation.ExitCode = 7; WriteError(ex.Message); }
             catch (OperationCanceledException) { invocation.ExitCode = 130; WriteError("Upstream configuration cancelled."); }
+            catch (RepositoryBusyException ex) { invocation.ExitCode = 11; WriteError(ex.Message); }
+            catch (WorkspaceRecoveryRequiredException ex) { invocation.ExitCode = 10; WriteError(ex.Message); }
             catch (Exception ex) { invocation.ExitCode = 1; WriteError(ex.Message); }
         });
         remoteCommand.AddCommand(remoteTrackCommand);
@@ -1253,6 +1255,8 @@ public static class Program
             {
                 WriteError($"Security violation in remote snapshot (Exit Code 3): {ex.Message}", 3);
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (OperationCanceledException)
             {
                 invocation.ExitCode = 130;
@@ -1367,6 +1371,8 @@ public static class Program
             {
                 WriteError($"Security violation in remote snapshot (Exit Code 3): {ex.Message}", 3);
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (OperationCanceledException)
             {
                 invocation.ExitCode = 130;
@@ -1432,15 +1438,13 @@ public static class Program
 
         cloneCommand.SetHandler(async (InvocationContext invocation) =>
         {
-            var parsed = invocation.ParseResult;
-            var url = parsed.GetValueForArgument(cloneUrlArg);
-            var dir = parsed.GetValueForArgument(cloneDirArg);
-            var force = parsed.GetValueForOption(cloneForceOption);
             try
             {
                 var parsed = invocation.ParseResult;
                 var useCase = serviceProvider.GetRequiredService<CloneUseCase>();
-                var result = await useCase.ExecuteAsync(new CloneRequest(url, dir, force), invocation.GetCancellationToken());
+                var result = await useCase.ExecuteAsync(new CloneRequest(parsed.GetValueForArgument(cloneUrlArg),
+                    parsed.GetValueForArgument(cloneDirArg), parsed.GetValueForOption(cloneForceOption),
+                    parsed.GetValueForOption(cloneBareOption)), invocation.GetCancellationToken());
 
                 AnsiConsole.MarkupLine($"[green]✓[/] Cloned project [bold]{Markup.Escape(result.ProjectName)}[/] into [cyan]{Markup.Escape(PathRedactor.Redact(result.TargetDirectory))}[/]");
                 if (result.HeadCommit.HasValue)
@@ -1476,15 +1480,11 @@ public static class Program
             {
                 WriteError($"Security violation in remote snapshot (Exit Code 3): {ex.Message}", 3);
             }
-            catch (OperationCanceledException)
-            {
-                invocation.ExitCode = 130;
-                WriteError("Synchronization cancelled. Inspect repository state before retrying; cancellation does not guarantee rollback.");
-            }
-            catch (Exception ex)
-            {
-                WriteError(ex.Message, 1);
-            }
+            catch (OperationCanceledException) { invocation.ExitCode = 130; WriteError("Clone cancelled; inspect the destination before retrying."); }
+            catch (ArgumentException ex) { invocation.ExitCode = 7; WriteError(ex.Message); }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
+            catch (Exception ex) { invocation.ExitCode = 1; WriteError(ex.Message); }
         });
 
         // Chronologically ordered workflow:

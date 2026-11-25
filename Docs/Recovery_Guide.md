@@ -315,22 +315,3 @@ Clone/Fetch/Pull/Push forward cancellation and return 130 after awaited cleanup.
 Linux SIGINT child cleanup is automated; Windows console Ctrl+C remains a native
 qualification item. Inspect actual refs, status and pending recovery after an
 interruption, especially after publication. Never delete a live coordination file.
-## Cancelled CLI synchronization
-
-Clone, Fetch and Pull now forward Ctrl+C to the engine, like Push, and return 130
-after awaited cleanup/compensation. A cancellation result does not guarantee
-unchanged objects/configuration/workspace or remote refs. Follow the operation's
-recovery guidance above, inspect refs/workspace and preserve retained paths before
-retrying. `remote track` is a separate local settings operation, not part of remote
-publication; an unsuccessful Push does not implicitly rewrite upstream settings.
-
-## Preview failures
-
-Fetch/Pull dry-run failures (including corrupt metadata, unsupported schema,
-missing history, budget violations, cancellation or divergence) leave repository
-content/layout unchanged. No quarantine session is created or pruned, and staging
-is not opened; preview can report committed history even with a corrupt local
-staging index. This does not repair that index or prove workspace readiness.
-Follow the offline-preservation guidance before actual mutations. A successful
-preview pins an observation rather than reserving a remote tip; actual Pull may
-fetch a newer state.

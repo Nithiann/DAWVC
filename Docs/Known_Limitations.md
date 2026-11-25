@@ -242,32 +242,3 @@ Stock context construction is side-effect free; the staging index is initialized
 only on access and unused indexes/pools are not disposed/cleared by other contexts.
 Linux sync SIGINT and SSH child cleanup are automated; native Windows console
 Ctrl+C, physical power loss, real FL Studio/two-PC and NAS/SMB remain field gates.
-## Upstream workflow and preview scope
-
-`remote track` configures existing local branches (including active unborn HEAD)
-against configured remotes; the remote branch may be created later. It does not
-probe permissions, host availability or repository identity. Those checks happen
-when transferring. Clone's automatic origin/upstream setup remains available.
-No automatic post-Push tracking update or `push --set-upstream` is introduced.
-
-Pull resolves upstream before Fetch and explicit source branches integrate into
-the active local branch. The historical stale/missing-cache dry-run limitation
-is resolved by WP-SYNC-03: Fetch/Pull preview uses pinned advertised tips and
-verified in-memory metadata without quarantine writes/pruning, object promotion,
-ref/config/index updates or workspace materialization.
-
-Preview is bounded (2 MiB per metadata object; 64 MiB cumulative received metadata;
-100,000 inspected objects; 50,000 commits; 1,000,000 remote parent edges). It does
-not download/check blob payloads, plan dirty-workspace conflicts, run Doctor/Fsck,
-probe plugins or reserve remote refs. Counts reflect declared missing transfer,
-not proof that a later operation will succeed. A later actual Pull can see a new
-remote tip. Custom context/transport providers must keep read methods side-effect
-free; custom Fetch providers must supply the current Preview snapshot for Pull
-dry-run, which fails closed if it is missing.
-
-Filesystem content/layout/mtimes are preserved by preview, but OS access-time
-updates and host SSH authentication/audit logs are not suppressed. Normal Status
-and mutating operations can still initialize the index/storage. Existing local
-commit boundaries are reused rather than conducting a full repository integrity
-audit. Bare provisioning remains WP-SYNC-04; native Windows Ctrl+C and real NAS/UNC
-validation are independent remaining items.
