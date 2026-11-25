@@ -1,273 +1,488 @@
 # DAWVC — DAW Version Control & Dependency Management
 
-[![CI](https://github.com/Nithiann/DAWVC/actions/workflows/ci.yml/badge.svg)](https://github.com/Nithiann/DAWVC/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/badge/Release-v0.2.0--preview.1-green.svg)](https://github.com/Nithiann/DAWVC/releases)
+[![CI](https://github.com/Nithiann/DAWVC/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Nithiann/DAWVC/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/badge/Release-v0.3.0--preview.1-green.svg)](https://github.com/Nithiann/DAWVC/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![.NET](https://img.shields.io/badge/.NET-10.0-purple.svg)](https://dotnet.microsoft.com/)
-[![Platform](https://img.shields.io/badge/Platform-Windows%2011%20x64-blue.svg)]()
+[![Platform](https://img.shields.io/badge/Preview-Windows%20x64-blue.svg)](Docs/Installation.md)
 
-> **DAW-agnostic version control, asset deduplication, and dependency portability for music production.**
+> Version control, project history, dependency inspection, and self-hosted collaboration for music production.
 
----
+DAWVC provides a command-line interface and a reusable engine. The current preview focuses on **FL Studio projects on Windows x64**. The core architecture supports separate DAW adapters; additional DAWs are outside this preview.
 
-## 1. What is DAWVC?
+A graphical client is a separate product and is not included in this repository's release package.
 
-**DAWVC** (Digital Audio Workstation Version Control) is a dedicated version control and dependency management system tailored for music producers and audio engineers.
+## What is DAWVC?
 
-Traditional version control systems like Git store files, but lack domain awareness for audio and DAW projects:
+DAWVC records versions of DAW projects together with explicitly bundled audio assets and discovered dependency information.
 
-- They do not know which samples, recordings, wavetables, or third-party plugins a project relies upon.
-- They depend on local, absolute file paths that break across different workstations (`D:\Samples\Kick.wav` vs. `C:\Audio\Kick.wav`).
-- They provide no insight into plugin versions, environment portability, or system reproducibility.
+It helps you:
 
-DAWVC solves this by semantically binding project files, audio assets, and plugin requirements to **content identity** rather than fragile local file paths.
+- Commit and restore project versions.
+- Explore alternative arrangements using branches.
+- Track recordings, samples, and other project assets.
+- Inspect recorded plugin and asset requirements.
+- Share committed history through your own storage or SSH host.
+- Preserve both histories when collaborators make independent changes.
+- Inspect and recover interrupted workspace updates.
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                       Core Principle:                       │
-│        "A dependency is identified by its content           │
-│         or logical identity, NEVER by its local             │
-│         filesystem path."                                   │
-└─────────────────────────────────────────────────────────────┘
-```
+DAWVC uses its own repository format and synchronization protocol. Standard GitHub and GitLab Git endpoints cannot act as DAWVC remotes.
 
-> [!IMPORTANT]
-> **Important Disclaimers (`NFR-REL-007`, `NFR-REL-008`):**
->
-> 1. **Proprietary Plugins & Libraries**: DAWVC does **not** bundle commercial plugin binaries (`.dll`, `.vst3`), license keys, or commercial sample packs. It records plugin metadata and verifies their presence via `dawvc doctor`.
-> 2. **Native Project Bytes Are Sacred**: DAWVC **never** modifies or rewrites native `.flp` files. When collaborating across machines with different folder layouts, configure FL Studio's *Extra Search Folders* to point to your DAWVC project or sample root. See [FL Studio Search Paths & Relinking Guide](Docs/FLStudio_Search_Paths_Relinking.md).
+## Core principles
 
----
+### Preserve native project bytes
 
-## 2. Core Concepts & Philosophy
+The FL Studio adapter inspects `.flp` files without rewriting their internal format. Project versions are stored and restored byte-for-byte.
 
-1. **DAW-Agnostic Core**:
-   The core engine (`Domain`, `Application`, `Infrastructure`) has zero knowledge of specific DAW formats. All DAW-specific inspection (such as FL Studio `.flp` parsing) lives inside isolated, interchangeable adapters.
-2. **Native Bytes are Sacred**:
-   Native project files are never mutated in-place or written partially. Source bytes remain the primary source of truth. Inspection metadata is derived, rebuildable, and non-destructive.
-3. **Content-Addressed Storage (BLAKE3)**:
-   All project assets and blobs are addressed via fast, cryptographically secure BLAKE3 hashes. Identical audio files across projects, branches, or folders are automatically deduplicated.
-4. **Strict Separation of Shared vs. Local State**:
-   - *Shared (versioned)*: Commits, snapshots, dependency graphs, project artifacts, bundled assets, plugin requirements, and portability policies.
-   - *Local (non-versioned)*: Absolute file paths, machine-specific plugin installations, local library directories, caches, and credentials.
-5. **Safe Checkout & Integrity-First**:
-   A checkout never silently overwrites local modifications. Forced checkouts (`--force`) always create a deterministic recovery copy first. Candidate workspace installs are always staged and atomic.
+Restoring a version replaces workspace files with the selected stored version. It does not rewrite embedded sample paths or convert plugin state.
 
----
+### Identify stored content by hash
 
-## 3. Quick Start (5-Minute Walkthrough)
+Objects use BLAKE3 content hashes. Identical stored content is reused within a repository across commits and branches.
 
-Detailed tutorial: **[Quick Start Guide](Docs/QuickStart.md)** | Setup instructions: **[Installation Guide](Docs/Installation.md)**
+Independent repositories have independent object stores.
+
+### Separate shared history from local configuration
+
+Shared history contains commits, snapshots, bundled assets, and recorded dependency information.
+
+Local state includes staging data, caches, and bindings to resources installed on a particular machine. Native FLP files may still contain their original paths, so moving a project can require relinking in FL Studio.
+
+### Protect existing work
+
+Workspace updates check for conflicting local changes. Interrupted in-place workspace publications retain recovery information.
+
+Repository locks coordinate participating DAWVC writers. They do not lock FL Studio itself: finish saves and recordings before performing repository operations.
+
+## Features in v0.3.0-preview.1
+
+| Area | Functionality |
+| --- | --- |
+| Repository management | Initialize working repositories and clone existing projects. |
+| Staging | Explicitly add new project assets; the primary project file is included when committing. |
+| History | Immutable commits and snapshots with first-parent history inspection. |
+| Branching | Create, inspect, switch, and delete local branches. |
+| Restoration | Restore committed versions into the workspace or a separate directory. |
+| Synchronization | Fetch, Pull, and fast-forward-only Push. |
+| Hosting | Filesystem paths, mounted network shares, and `dawvc://` over SSH. |
+| Bare repositories | Provision hosting repositories without a working tree. |
+| Upstreams | Configure default Push/Pull targets with `remote track`. |
+| Previews | Inspect current remote changes with Fetch/Pull dry-run without updating the local repository. |
+| Merge | Join diverged histories by explicitly choosing one complete project snapshot. |
+| Recovery | Inspect and explicitly recover interrupted workspace publications. |
+| Diagnostics | Inspect dependencies and environment health with `doctor`. |
+| Integrity | Verify stored objects and repository history with `fsck`. |
+
+## Installation
+
+Download the Windows x64 ZIP and `SHA256SUMS.txt` from [GitHub Releases](https://github.com/Nithiann/DAWVC/releases).
+
+The Windows distribution is self-contained and does not require a separately installed .NET runtime.
+
+1. Verify the ZIP against its entry in `SHA256SUMS.txt`.
+2. Extract the package into a permanent directory.
+3. Add that directory to your user `PATH`.
+4. Verify the installation:
 
 ```powershell
-# 1. Initialize repository inside an FL Studio project folder
-cd C:\Music\My_Track
-dawvc init
+dawvc --version
+dawvc --help
+```
 
-# 2. Inspect project dependencies and referenced samples
+SSH synchronization additionally requires the OpenSSH client, `ssh`, in `PATH`.
+
+See the [Installation Guide](Docs/Installation.md) for detailed instructions.
+
+## Quick start
+
+The following example assumes an existing, saved `Song.flp` and a project-owned sample at `Samples\Kick.wav`.
+
+```powershell
+cd C:\Music\MySong
+
+# Initialize the project repository.
+dawvc init --name "My Song" --primary Song.flp
+
+# Inspect the project and workspace.
 dawvc scan
-
-# 3. Check workspace state
 dawvc status
 
-# 4. Stage external samples for bundling into version control
-dawvc add samples\vocals.wav
+# Explicitly include a sample in repository history.
+dawvc add Samples\Kick.wav
 
-# 5. Record your first immutable snapshot
-dawvc commit -m "feat: initial arrangement and vocal stems"
+# Record the first version.
+dawvc commit -m "Initial arrangement"
 
-# 6. Check environment health on another workstation
+# Inspect history, dependencies, and stored integrity.
+dawvc log
 dawvc doctor
+dawvc fsck
 ```
 
----
+Use paths that exist in your own project. Files passed to `add` should be inside the working repository.
 
-## 4. MVP v0.1 Scope & Feature Set
+The primary project file is included by Commit. Newly discovered assets are not silently added to shared history.
 
-The initial release (**MVP v0.1**) focuses on a rock-solid, local workflow for **FL Studio** on **Windows 11 x64**:
+See the [Quick Start Guide](Docs/QuickStart.md) for the complete workflow.
 
-- [x] **Repository Management**: Local repositories per musical project (`dawvc init`, `dawvc.yaml`).
-- [x] **Hybrid Staging**: Automatic tracking for the primary project file and tracked assets; explicit staging for newly discovered dependencies (`dawvc add`).
-- [x] **Immutable History**: Commits, snapshot creation, log visualization (`dawvc commit`, `dawvc log`).
-- [x] **Branching**: Creating, switching, and inspecting local branches (`dawvc branch`, `dawvc switch`).
-- [x] **Read-Only FL Studio Adapter**: Non-destructive inspection and validation of `.flp` projects (FL Studio 2026.x baseline) with safe *opaque fallback* for future versions.
-- [x] **Safe Checkout**: Staged verification and atomic restore into active workspaces or clean target folders (`dawvc checkout --restore-to <dir>`).
-- [x] **Environment Diagnostics**: Project and system environment validation (`dawvc doctor`).
-- [x] **Repository Integrity**: Object graph, envelope, and hash verification (`dawvc fsck`).
+## Branches and restoration
 
----
+Create an alternative version of the project:
 
-## 5. CLI Overview
+```powershell
+dawvc switch -c alternative-mix
 
-For options, exit codes, and JSON schemas, see the complete **[CLI Command Reference](Docs/CLI_Reference.md)**.
+# Edit and save the project in FL Studio, then commit.
+dawvc commit -m "Alternative mix"
 
-| Command | Description |
-| --- | --- |
-| `dawvc init` | Initializes a new DAWVC repository in the current or target directory. |
-| `dawvc scan` | Inspects the project for referenced samples, recordings, and plugins. |
-| `dawvc status` | Shows workspace state, modified tracked assets, and uncommitted discoveries. |
-| `dawvc add <path>` | Adds an external asset or sample to tracked repository dependencies. |
-| `dawvc commit -m <msg>` | Records a new immutable project snapshot into repository history. |
-| `dawvc log` | Displays commit history with snapshot metadata and author info. |
-| `dawvc branch [name]` | Lists existing branches or creates a new branch pointer. |
-| `dawvc switch <branch>` | Safely switches the workspace to a different branch. |
-| `dawvc checkout <commit>` | Restores a specific snapshot (supports `--restore-to` and `--force`). |
-| `dawvc push [remote] [branch]` | Sends committed history to a filesystem/UNC or dawvc:// SSH remote, fast-forward only; supports `--dry-run`. |
-| `dawvc bind <id> <path>` | Links an external asset to a logical dependency ID. |
-| `dawvc doctor` | Verifies environment health, checking local presence and compatible versions (`installed >= required`) for plugins, samples, and dependencies. |
-| `dawvc fsck` | Validates internal integrity across the object store and refs. |
+# Return to the original branch.
+dawvc switch main
+```
 
----
+To inspect an older version without replacing the active workspace, substitute an actual commit ID from `dawvc log`:
 
-## 6. Architecture & Solution Structure
+```powershell
+dawvc checkout <commit-id> --restore-to C:\Music\RestoredVersion
+```
 
-The solution adheres to Clean Architecture principles with strictly enforced dependency boundaries:
+Use a separate destination for external restoration. Review local changes before switching or checking out another version.
+
+## Filesystem remotes and bare hosting
+
+A bare repository stores shared history without checked-out project files. It is suitable for hosting.
+
+Create an empty receiver with the current project's repository identity:
+
+```powershell
+cd C:\Music\MySong
+
+dawvc init --bare --from . --dir C:\DawvcRemotes\MySong
+dawvc remote add origin C:\DawvcRemotes\MySong
+dawvc remote track origin main
+
+dawvc push --dry-run
+dawvc push
+```
+
+The destination must be absent or empty. Bare initialization inherits the source identity; independently initializing an unrelated project does not create a compatible receiver.
+
+Alternatively, copy existing history into a new bare repository:
+
+```powershell
+dawvc clone C:\Music\MySong C:\DawvcRemotes\MySongCopy --bare
+```
+
+Clone a working copy from a hosted repository:
+
+```powershell
+dawvc clone C:\DawvcRemotes\MySong C:\Music\MySong-Collaboration
+```
+
+Filesystem remotes also support `file://` URLs and mounted network shares. Actual NAS/SMB locking, permissions, and rename behavior must be validated on the intended deployment.
+
+## Self-hosted synchronization over SSH
+
+SSH remotes use this format:
 
 ```text
-                  ┌──────────────────────┐
-                  │      DawVcs.Cli      │ (Presentation / Host)
-                  └──────────┬───────────┘
-                             │
-                             ▼
-                  ┌──────────────────────┐
-                  │  DawVcs.Application  │ (Use Cases, Ports, Orchestration)
-                  └──────┬────────┬──────┘
-                         │        │
-           ┌─────────────┘        └─────────────┐
-           ▼                                    ▼
-┌──────────────────────┐             ┌─────────────────────────────┐
-│    DawVcs.Domain     │             │ DawVcs.Adapters.Abstractions│
-└──────────────────────┘             └──────────────┬──────────────┘
-           ▲                                        ▲
-           │                                        │
-┌──────────┴───────────┐             ┌──────────────┴──────────────┐
-│ DawVcs.Infrastructure│             │   DawVcs.Adapters.FLStudio  │
-└──────────────────────┘             └─────────────────────────────┘
+dawvc://[user@]host[:port]/repository-alias
 ```
 
----
+Examples:
 
-## 7. Development, Building & Packaging
+```text
+dawvc://alice@studio-server/projects/my-song
+dawvc://alice@nas:2222/projects/my-song
+```
 
-### Prerequisites
+The default SSH port is 22.
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) (version `10.0.301` or later)
-- Windows 11 x64 (recommended for FL Studio adapter validation) or Linux/macOS for core domain development.
-- Git & PowerShell
+The repository alias is configured by the host operator. It is not a client-selected filesystem path.
 
-### Build
+The host requires:
+
+- A compatible DAWVC deployment.
+- An OpenSSH server.
+- An initialized repository with the source project's identity.
+- A host-owned policy mapping allowed aliases to repository paths.
+- Explicit push permission for writable repositories.
+
+SSH starts a temporary `dawvc serve` process for each connection. No permanent DAWVC daemon is required, but the host must be online and reachable.
+
+DAWVC uses public-key/agent authentication and strict host-key verification. Unknown or changed host keys are refused; credentials are not embedded in remote URLs.
+
+After the host is configured:
 
 ```powershell
-# Restore and build all projects in Release configuration (TreatWarningsAsErrors enabled)
-dotnet build -c Release
+dawvc remote add studio dawvc://alice@studio-server/projects/my-song
+dawvc remote track studio main
+
+dawvc push --dry-run
+dawvc push
 ```
 
-### Test
+Another collaborator can clone the same project:
 
 ```powershell
-# Run unit, architecture, infrastructure, adapter, performance, and smoke tests
-dotnet test -c Release --logger "console;verbosity=normal"
+dawvc clone dawvc://alice@studio-server/projects/my-song C:\Music\SharedSong
 ```
 
-### Package Distribution
+See [Self-hosting over SSH](Docs/Self_Hosting_SSH.md) for provisioning, authorization, host-key setup, and platform requirements.
+
+## Remote management and upstreams
 
 ```powershell
-# Produces self-contained win-x64 ZIP and SHA256SUMS.txt
-pwsh -File ./scripts/package.ps1
+dawvc remote add <name> <url>
+dawvc remote remove <name>
+dawvc remote list
+dawvc remote track <name> <remote-branch> [--local-branch <local-branch>]
 ```
 
----
+Configure a differently named remote branch:
 
-## 8. Documentation & Specifications
+```powershell
+dawvc remote track origin published
+```
 
-### Guides & References
+Plain Push and Pull now use `origin/published` for the active local branch.
 
-- **[Installation & Setup Guide](Docs/Installation.md)** — Self-contained setup, verification, and uninstall.
-- **[Quick Start Guide](Docs/QuickStart.md)** — Step-by-step tutorial on project versioning.
-- **[CLI Command Reference](Docs/CLI_Reference.md)** — Full command arguments, flags, and exit code reference.
-- **[FL Studio Search Paths & Relinking](Docs/FLStudio_Search_Paths_Relinking.md)** — Resolving audio assets across systems without modifying project files.
-- **[Disaster Recovery & Workspace Safety](Docs/Recovery_Guide.md)** — Uncommitted change guards, forced checkout backups, and `fsck`.
-- **[Known Limitations & Scope](Docs/Known_Limitations.md)** — v0.1 boundaries, plugin bundling policy, and privacy redactions.
+Target selection follows these rules:
 
-### Architecture & Security
+- An explicit matching upstream remote preserves its branch mapping.
+- A different explicit remote defaults to the local branch name.
+- An explicit Push branch selects that local branch and the same destination branch name.
+- An explicit Pull branch selects a remote source to integrate into the active local branch.
 
-- **[Technical Design](Docs/Technical%20Design.md)** — Normative architecture v1.1, BLAKE3 models, and envelopes.
-- **[MVP Requirements Specification](Docs/MVP%20Requirements.md)** — Normative requirements and acceptance criteria.
-- **[Implementation Plan](Docs/Implementation%20plan.md)** — Work packages (WP-00 through WP-10) and release gate criteria.
-- **[Security Threat Model & Dependency Audit](Docs/SecurityThreatModelReview.md)** — Vulnerability analysis and mitigations.
-- **[Software Bill of Materials (SBOM)](Docs/SBOM.md)** — NuGet runtime inventory and license validation.
-- **[Architecture Decision Records](Docs/adr/README.md)** — Formally documented architectural decisions.
+`remote track` works offline. The remote must already be configured; the selected local branch must exist, except that the active unborn branch is allowed. The remote branch may be created by a future Push.
 
----
+## Fetch, Pull, and previews
 
-## 9. License
+```powershell
+dawvc fetch origin
+dawvc pull --dry-run
+dawvc pull
+```
 
-This project is licensed under the **[MIT License](LICENSE)**.
+Fetch retrieves and verifies history and updates remote-tracking references. Pull fetches its selected source and integrates a fast-forward update into the active local branch.
+
+Fresh Fetch/Pull previews read current remote advertisements and bounded commit/snapshot metadata. They work with missing or stale tracking references.
+
+```powershell
+dawvc fetch origin --dry-run
+dawvc pull --dry-run
+```
+
+These previews do not update local objects, refs, configuration, workspace files, the staging index, or quarantine.
+
+Fetch/Pull preview counts are transfer estimates. They do not download remote blob bodies, prove their availability, or predict dirty-workspace conflicts. Previews do not reserve refs or provide an atomic view during concurrent changes. Actual execution fetches and validates again.
+
+## Resolving diverged histories
+
+Push and Pull do not automatically merge independently changed projects.
+
+When collaborators create diverged commits:
+
+1. Commit or move conflicting local work.
+2. Fetch the remote history.
+3. Review the available versions.
+4. Explicitly choose one complete snapshot.
+
+For example:
+
+```powershell
+dawvc fetch origin
+dawvc merge origin/main --take incoming -m "Choose incoming project version"
+dawvc push
+```
+
+Use `--take local` to retain the local snapshot instead.
+
+Merge creates a two-parent commit, preserving both histories. The choice applies to the complete project snapshot, including its recorded asset set.
+
+DAWVC does not automatically combine arrangements, automation, recordings, or FLP internals.
+
+See the [Collaborator Workflow](Docs/Collaborator_Workflow.md) for a full example.
+
+## Recovery and concurrent operations
+
+Inspect interrupted workspace publication:
+
+```powershell
+dawvc recover
+```
+
+Explicitly recover or finalize it:
+
+```powershell
+dawvc recover --rollback
+```
+
+For a Prepared publication, recovery restores the saved pre-publication state. For a Committed publication, it verifies the completed state and finalizes recovery metadata.
+
+Unexpected edits, corrupt backups, or ambiguous recovery data cause refusal rather than forced overwrite.
+
+Participating local writers and incoming push sessions use repository-wide ownership:
+
+| Exit code | Meaning |
+| --- | --- |
+| `10` | Pending or conflicting workspace recovery requires attention. |
+| `11` | Another participating local operation owns the repository. |
+| `130` | The operation was cooperatively cancelled. |
+
+A busy receiving host is reported through the remote error contract.
+
+Await the active operation before retrying. Persistent empty lock files are normal; never delete them to break a live owner's lock.
+
+Cancellation does not guarantee that already published changes were undone. Inspect repository state after an interruption.
+
+See the [Recovery Guide](Docs/Recovery_Guide.md) for exact coverage, cleanup, and failure boundaries.
+
+## Dependencies and FL Studio portability
+
+DAWVC records dependency information discovered by the FL Studio adapter and supports local bindings to installed resources.
+
+```powershell
+dawvc scan
+dawvc doctor
+dawvc bind <dependency-id> <local-path>
+```
+
+Keep these boundaries in mind:
+
+- Required plugins must be installed and licensed separately.
+- Plugin binaries, license keys, and external libraries are not automatically supplied or bundled.
+- Explicitly bundled files become part of shared repository history; only include material you may share.
+- A matching or newer plugin version does not by itself guarantee identical playback.
+- FL Studio may require Extra Search Folders or manual relinking when paths differ between machines.
+- Unsupported project formats may fall back to opaque file tracking, with reduced dependency inspection.
+
+A successful integrity check proves repository integrity, not complete musical reproducibility.
+
+See [FL Studio Search Paths & Relinking](Docs/FLStudio_Search_Paths_Relinking.md).
+
+## CLI overview
+
+Use `dawvc <command> --help` for exact arguments and options.
+
+| Command | Purpose |
+| --- | --- |
+| `dawvc init` | Initialize a working repository. |
+| `dawvc init --bare --from <source>` | Provision an empty hosting repository with source identity. |
+| `dawvc clone <url> [directory]` | Create a working copy; `--bare` creates hosting storage. |
+| `dawvc scan` | Inspect project format and discover dependencies. |
+| `dawvc status` | Inspect working-tree and staging state. |
+| `dawvc add <path>...` | Stage project files or assets. |
+| `dawvc commit -m <message>` | Record a project version. |
+| `dawvc log` | Inspect first-parent commit history. |
+| `dawvc branch [name]` | List or create local branches; deletion options are available. |
+| `dawvc switch <branch>` | Switch the working tree to another branch. |
+| `dawvc checkout <reference>` | Restore a committed version, optionally into a separate directory. |
+| `dawvc remote add <name> <url>` | Configure a remote. |
+| `dawvc remote remove <name>` | Remove a configured remote. |
+| `dawvc remote list` | List configured remotes. |
+| `dawvc remote track <name> <branch>` | Configure a local branch's upstream. |
+| `dawvc fetch [remote] [branch]` | Retrieve remote history and update tracking refs. |
+| `dawvc pull [remote] [branch]` | Fetch and integrate into the active local branch. |
+| `dawvc push [remote] [branch]` | Publish committed history with fast-forward protection. |
+| `dawvc merge <reference> --take local\|incoming -m <message>` | Join diverged histories using one complete snapshot. |
+| `dawvc recover [--rollback]` | Inspect or explicitly recover interrupted workspace publication. |
+| `dawvc doctor` | Report project dependency and environment health. |
+| `dawvc bind <dependency-id> <path>` | Bind a recorded dependency to a local resource. |
+| `dawvc fsck` | Verify repository objects and history integrity. |
+| `dawvc serve` | Serve configured repositories through an SSH stdio session. |
+
+Complete reference: [CLI Command Reference](Docs/CLI_Reference.md).
+
+## Preview scope and validation
+
+The current preview targets FL Studio projects on Windows x64. The engine and CLI are also exercised by automated tests on Ubuntu; that does not establish a supported native FL Studio deployment on every OS.
+
+Automated validation includes:
+
+- Unit, infrastructure, adapter, integration, and end-to-end tests.
+- A synthetic collaboration workflow using the extracted Windows release executable.
+- SSH protocol and process-lifetime tests.
+- Workspace recovery tests using actual process termination.
+- Repeated Windows post-exit lock checks.
+- CI test-result artifacts retained for failure diagnosis.
+
+Real FL Studio opening/playback, two physical workstations, native Windows console cancellation, and deployment-specific NAS/SMB and power-loss behavior require separate field acceptance.
+
+Use copies of projects during preview testing. See [Preview Acceptance](Docs/Preview_Acceptance.md) and [Known Limitations](Docs/Known_Limitations.md).
+
+## Development and packaging
+
+### Requirements
+
+- .NET 10 SDK.
+- Git.
+- PowerShell for the Windows packaging script.
+- OpenSSH client/server when testing actual SSH hosting.
+- Windows and an appropriate FL Studio installation for native adapter acceptance.
+
+### Build and test
+
+```powershell
+dotnet restore
+dotnet build -c Release --no-restore
+dotnet test -c Release --no-build --logger "trx"
+dotnet format --no-restore --verify-no-changes
+```
+
+### Package the Windows distribution
+
+```powershell
+pwsh -File ./scripts/package.ps1 -Version 0.3.0-preview.1
+```
+
+This produces a self-contained Windows x64 ZIP and `SHA256SUMS.txt` under `artifacts`.
+
+### Solution structure
+
+```text
+src/
+  DawVcs.Domain/                 Domain models and contracts
+  DawVcs.Application/            Use cases and orchestration
+  DawVcs.Infrastructure/         Filesystem storage, SQLite, and transports
+  DawVcs.Adapters.Abstractions/   DAW adapter contracts
+  DawVcs.Adapters.FLStudio/       Read-only FL Studio inspection
+  DawVcs.Bootstrap/              Shared engine composition
+  DawVcs.Cli/                    Command-line application
+
+tests/                          Automated tests and test-only process host
+scripts/                        Packaging and acceptance tools
+Docs/                           Guides, requirements, design, and decisions
+```
+
+Independent clients can reuse the engine through `DawVcs.Bootstrap`. See [Engine Integration](Docs/Engine_Integration.md) for ownership, progress, cancellation, and failure contracts.
+
+## Documentation
+
+### User and operator guides
+
+- [Installation & Setup](Docs/Installation.md)
+- [Quick Start](Docs/QuickStart.md)
+- [CLI Command Reference](Docs/CLI_Reference.md)
+- [Collaborator Workflow](Docs/Collaborator_Workflow.md)
+- [Self-hosting over SSH](Docs/Self_Hosting_SSH.md)
+- [Recovery Guide](Docs/Recovery_Guide.md)
+- [FL Studio Search Paths & Relinking](Docs/FLStudio_Search_Paths_Relinking.md)
+- [Known Limitations](Docs/Known_Limitations.md)
+- [Preview Acceptance](Docs/Preview_Acceptance.md)
+
+### Architecture and development
+
+- [Engine Integration](Docs/Engine_Integration.md)
+- [Remote Protocol](Docs/Remote_Protocol.md)
+- [Technical Design](Docs/Technical%20Design.md)
+- [Requirements](Docs/MVP%20Requirements.md)
+- [Implementation Plan](Docs/Implementation%20plan.md)
+- [Security Threat Model](Docs/SecurityThreatModelReview.md)
+- [Software Bill of Materials](Docs/SBOM.md)
+- [Architecture Decision Records](Docs/adr/README.md)
+
+## License
+
+DAWVC is licensed under the [MIT License](LICENSE).
 
 Copyright (c) 2026 DAWVC Contributors.
-
-## Engine integration
-
-The CLI and independent clients can share the framework-independent engine through `DawVcs.Bootstrap`. See [Engine integration](Docs/Engine_Integration.md) for ownership, progress, cancellation, typed failures and paged queries. No desktop framework is required.
-
-## Self-hosted synchronization
-
-Use `dawvc://[user@]host[:port]/repository-alias` for clone, fetch, pull and push
-over SSH, alongside existing filesystem remotes. Host on your own PC, compatible
-NAS or server with OpenSSH and DAWVC installed. SSH starts a temporary receiver;
-no permanent DAWVC daemon is required. Strict host-key verification, public-key
-authentication and host-owned repository policies apply. See
-[SSH hosting](Docs/Self_Hosting_SSH.md) and [Protocol v1](Docs/Remote_Protocol.md).
-This is DAWVC synchronization, not compatibility with GitHub/GitLab Git endpoints.
-
-
-## Bare hosting and first publication
-
-Create an empty receiver with the existing project's identity:
-`dawvc init --bare --from <source> --dir <hosting-path>`.
-Or seed all branches/history without working files:
-`dawvc clone <source> <hosting-path> --bare`.
-Both require absent/empty local destinations; source may be a path or dawvc:// URL.
-Then configure filesystem origin or the host's SSH alias and Push normally. See
-[SSH hosting](Docs/Self_Hosting_SSH.md) for provisioning and authorization details.
-
-
-## Explicit divergence resolution
-
-After `dawvc fetch origin`, choose one complete committed project snapshot with
-`dawvc merge origin/main --take local -m "Keep local project version"` or
-`--take incoming`. A two-parent commit preserves both histories; normal Push/Pull
-can then resume. This does not combine FLP contents or mix assets automatically.
-Commit your tracked/staged changes first. See [collaboration workflow](Docs/Collaborator_Workflow.md).
-
-
-## Preview acceptance evidence
-
-CI exercises the extracted Windows release executable with a synthetic collaboration
-workflow and uploads a scoped JSON result. Linux DLL checks are recorded separately.
-See [Preview acceptance](Docs/Preview_Acceptance.md) for the runner, mounted-share
-option and pending real Windows/FL Studio/two-PC/SSH/NAS qualification procedures.
-
-
-## Interrupted workspace publication
-
-`dawvc recover` inspects persistent publication recovery data;
-`dawvc recover --rollback` explicitly restores a Prepared workspace or verifies/
-finalizes a Committed publication. Pending envelopes block new cooperating
-mutations. Unexpected edits/corrupt backups are preserved for inspection, without
-force overwrite. See [Recovery Guide](Docs/Recovery_Guide.md) for ownership,
-staging replay, private backups, cleanup and power-loss qualification boundaries.
-
-WP-SYNC-08 adds cooperative operation-wide writer ownership across CLI processes
-and incoming SSH/filesystem push sessions. Busy local operations return exit 11;
-busy receivers return remote exit 8. Await the owning operation; never delete live
-lock files. Status/Doctor participate, and Pull/Push retain local ownership during
-network waits. Older/raw clients, DAW saves and external restores still require
-exclusive coordination. See [Recovery Guide](Docs/Recovery_Guide.md) and
-[ADR-OPS-001](Docs/adr/ADR-OPS-001-repository-operation-locking.md).
-
-The WP-SYNC-09 candidate integrates offline `remote track`, shared Push/Pull upstream
-defaults, fresh read-only Fetch/Pull previews and cancellation onto the recovery/
-locking stack. Dry-runs create no local lock/index/quarantine; real operations keep
-writer ownership. See [CLI Reference](Docs/CLI_Reference.md) and the current
-[implementation plan](Docs/Implementation%20plan.md) for review/qualification status.
