@@ -1436,7 +1436,7 @@ not the later maintainer merge `baf2008`.
   retain maintainer PR #17/#18 evidence; archive old WP-SYNC-02/03 records below.
 - [x] MERGE-FIX-05a: full Release compilation/suite, CLI/SSH/SIGINT checks.
 - [x] MERGE-FIX-05b: final format verification (--verify-no-changes).
-- [ ] MERGE-FIX-05c: Windows/Ubuntu code CI and packaged acceptance.
+- [x] MERGE-FIX-05c: Windows/Ubuntu code CI and packaged acceptance.
 - [ ] MERGE-FIX-06: publish repair PR; maintainer approval/merge only.
 
 This is a repair of merge resolution, not another feature WP or a rewrite of
@@ -1461,6 +1461,25 @@ Local verification (25 November 2026, Linux, SDK 10.0.404):
 
 Repair PR comparison (target the existing feature branch first):
 https://github.com/Nithiann/DAWVC/compare/feat/sync-workflow-integration...feat/sync-develop-merge-fix?expand=1
+
+Publication: repair implementation `719ca94` pushed to
+`feat/sync-develop-merge-fix`. Both GraphQL and REST PR creation returned Forbidden;
+MERGE-FIX-06 remains open. Use the comparison above to target the existing feature
+branch first, then let the maintainer finish its develop PR. No approval or merge
+was performed by the agent. Merge-tree against fetched develop `0ee6a6e` produces
+exactly the repaired HEAD tree, without conflicts.
+
+Repair code CI (Windows/Ubuntu):
+https://github.com/Nithiann/DAWVC/actions/runs/45567182065
+
+Code CI result: **Success** for repair `719ca94`, run `45567182065`.
+Windows and Ubuntu passed full compilation/tests and acceptance guards. Windows
+also passed formatting, security audit, packaging and extracted-package acceptance;
+Ubuntu passed sync SIGINT/child cleanup and CLI acceptance. This final record
+changes documentation only. The existing feature/develop PR still needs the
+maintainer to apply this repair and complete their own review/merge; the agent
+has updated only the separate repair branch. MERGE-FIX-06 remains blocked by
+GitHub API Forbidden, not by code validation.
 
 # Appendix A. Historical upstream/preview records from develop PR #18
 
