@@ -1,4 +1,6 @@
 using DawVcs.Application.Common;
+using DawVcs.Application.Operations;
+using DawVcs.Application.Recovery;
 using DawVcs.Domain.Dependencies;
 using DawVcs.Domain.Hashing;
 using DawVcs.Domain.Repositories;
@@ -8,7 +10,10 @@ namespace DawVcs.Application.Dependencies;
 public sealed record BindDependencyRequest(
     string RepositoryDirectory,
     string DependencyId,
-    string LocalPath);
+    string LocalPath)
+{
+    internal RepositoryOperation? Operation { get; init; }
+}
 
 public sealed record BindDependencyResult(
     DependencyBinding Binding);
@@ -34,6 +39,8 @@ public sealed class BindDependencyUseCase : IUseCase<BindDependencyRequest, Bind
         ArgumentException.ThrowIfNullOrWhiteSpace(request.LocalPath);
 
         cancellationToken.ThrowIfCancellationRequested();
+        using var operation = RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation, cancellationToken: cancellationToken);
+        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using var context = _contextFactory(request.RepositoryDirectory);
         var depId = new DependencyId(request.DependencyId);
         var fullPath = Path.GetFullPath(request.LocalPath);

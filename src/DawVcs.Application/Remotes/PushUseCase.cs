@@ -1,4 +1,6 @@
 using DawVcs.Application.Common;
+using DawVcs.Application.Operations;
+using DawVcs.Application.Recovery;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Configuration;
 using DawVcs.Domain.Hashing;
@@ -8,7 +10,10 @@ using DawVcs.Domain.Storage;
 
 namespace DawVcs.Application.Remotes;
 
-public sealed record PushRequest(string RepositoryDirectory, string? RemoteName = null, string? Branch = null, bool DryRun = false);
+public sealed record PushRequest(string RepositoryDirectory, string? RemoteName = null, string? Branch = null, bool DryRun = false)
+{
+    internal RepositoryOperation? Operation { get; init; }
+}
 public sealed record PushResult(string RemoteName, BranchName LocalBranch, BranchName RemoteBranch,
     CommitId? OldCommit, CommitId NewCommit, int ObjectsTransferred, long BytesTransferred, bool IsDryRun, bool UpToDate);
 
@@ -21,7 +26,10 @@ public sealed class PushUseCase(Func<string, IRepositoryContext> contexts, IRemo
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
+        using var operation = request.DryRun ? null
+            : RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation, cancellationToken: cancellationToken);
         progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
+        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using var context = contexts(request.RepositoryDirectory);
         var config = context.LoadConfig();
         var target = SyncTarget.ForPush(context, request.RemoteName, request.Branch);

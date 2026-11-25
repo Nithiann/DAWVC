@@ -1,4 +1,6 @@
 using DawVcs.Application.Common;
+using DawVcs.Application.Operations;
+using DawVcs.Application.Recovery;
 using DawVcs.Domain.Artifacts;
 using DawVcs.Domain.Hashing;
 using DawVcs.Domain.Repositories;
@@ -8,7 +10,10 @@ namespace DawVcs.Application.Staging;
 public sealed record AddRequest(
     string RepositoryDirectory,
     IReadOnlyList<string>? Paths = null,
-    bool All = false);
+    bool All = false)
+{
+    internal RepositoryOperation? Operation { get; init; }
+}
 
 public sealed record AddResult(
     IReadOnlyList<ArtifactPath> StagedPaths);
@@ -41,6 +46,8 @@ public sealed class AddUseCase : IUseCase<AddRequest, AddResult>
         ArgumentException.ThrowIfNullOrWhiteSpace(request.RepositoryDirectory);
 
         cancellationToken.ThrowIfCancellationRequested();
+        using var operation = RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation, cancellationToken: cancellationToken);
+        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using var context = _contextFactory(request.RepositoryDirectory);
         var repoRoot = Path.GetFullPath(context.RootPath);
         var config = context.LoadConfig();

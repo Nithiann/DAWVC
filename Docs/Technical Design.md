@@ -1416,32 +1416,55 @@ or on-disk repository schema is introduced. Operational policy/protocol definiti
 are in [Self-hosting SSH](Self_Hosting_SSH.md), [Remote Protocol](Remote_Protocol.md)
 and [ADR-REM-002](adr/ADR-REM-002-ssh-hosting.md).
 
-# Sync workflow amendment (23 November 2026)
 
-Application uses shared SyncTarget selection before Push/Pull transfer. Pull
-fetches its selected upstream/source into the active local branch; explicit source
-arguments do not select another local destination. RemoteUseCase exposes validated
-upstream configuration through `remote track`; existing remotes.json storage uses
-atomic replacement without a schema change. Clone keeps automatic origin setup.
-CLI sync handlers pass invocation cancellation tokens and return 130 after awaited
-engine completion on cancellation. No wire/security boundary changes. See
-[ADR-REM-003](adr/ADR-REM-003-upstream-workflow.md), FR-SYN-001..007 and WP-SYNC-02.
-Fresh Pull preview is delivered by the WP-SYNC-03 amendment below; bare
-provisioning remains a subsequent WP.
+# Bare provisioning amendment — WP-SYNC-04
 
-# Fresh read-only sync preview amendment (23 November 2026)
+ADR-REM-005 defines explicit source-derived empty receivers and bare cloning.
+A bare root uses dawvc.yaml, HEAD, objects/ and refs/heads/ directly, as already
+understood by filesystem/SSH transports. No schema or wire-format change.
+Application provisioning reuses normal contexts only in isolated sibling staging,
+then publishes their metadata/shared configuration as bare storage by same-volume
+rename after disposing resources. Clone copies verified fetched tips to branch
+heads, without checkout/Doctor. Empty init copies source identity/configuration
+only. Existing nonempty targets, links/junctions and force replacement are refused.
+Host alias/SSH permissions remain operator-owned; no remote arbitrary-path create.
 
-Fetch branches into a bounded in-memory planner before quarantine creation when
-DryRun=true. Missing metadata envelopes are verified; selected tips and parent
-links are copied into FetchPreview. UpdatedRefs is planned rather than applied
-for dry-runs. Pull uses a bounded preview/local ancestry overlay rather than stale
-tracking refs. No blob payload is downloaded or workspace plan materialized.
 
-FileSystemRepositoryContext and LooseObjectStore construction no longer create
-directories. StagingIndex is lazy and disposed only if owned/used. WriteBlob
-creates scratch directories; config/ref writers create their own parents; Init
-explicitly creates objects/refs layout. This enables read-only previews without
-new disk/wire schemas or a separate framework-specific engine.
+# Explicit snapshot Merge amendment — WP-SYNC-05
 
-See [ADR-REM-004](adr/ADR-REM-004-read-only-sync-preview.md), FR-PRV-001..007
-and WP-SYNC-03. This is not fsck, a dirty-workspace forecast or remote reservation.
+ADR-REM-006 introduces deliberate whole-snapshot divergence resolution. Reuse the
+existing multi-parent commit payload: parents are local/incoming tips in that
+order; snapshotId is exactly one chosen existing snapshot. No new object/schema
+or protocol format. Validate bounded complete commit ancestry and both tip
+snapshots/blobs, then reuse staged checkout publication with dirty/collision
+guards and opt-in expected branch/tip checking. Source/tracking refs are retained;
+Push/Pull continue enforcing fast-forward ancestry. No semantic/native FLP writer,
+per-file merge, force, persistent merge state or global transaction is introduced.
+
+
+# Durable workspace recovery amendment — WP-SYNC-07
+
+ADR-REC-001 adds private schema-1 write-ahead recovery envelopes, atomically moved
+from transaction-preparation to active transactions before publication. Flushed
+before/after identities, backups, HEAD/ref metadata and staged intent support
+explicit restartable rollback; a durable Committed decision precedes cleanup.
+Terminal directory rename precedes recursive deletion. Existing immutable/shared
+object formats and remote protocol remain unchanged. SQLite staging synchronous
+mode changes from NORMAL to FULL for durability; no database schema migration.
+Process termination, handled compensation and actual power/storage qualification
+are distinct guarantees. Global local-writer serialization remains a separate WP.
+
+## WP-SYNC-09: integrated synchronization workflow
+
+SyncTarget resolves local/remote branches once before transfer; Pull integrates
+into the active local branch. Track persists validated upstreams atomically under
+operation/pending guards. Fetch dry-run uses FetchPreviewPlanner before any
+quarantine/index creation; Pull uses the immutable advertisement/parent overlay
+plus local commits for ancestry. Metadata limits and DTO contracts are documented
+in ADR-REM-004/007. Both merge parents participate in traversal.
+
+Dry-runs skip writer ownership to preserve filesystem layout; real operations
+retain explicit nested capabilities and durable checkout publication. Backend
+constructors are side-effect free, index creation is lazy, and only an accessed
+index is disposed/cleared. Previews remain advisory across concurrent changes;
+actual execution re-fetches. No shared object or wire schema is changed.

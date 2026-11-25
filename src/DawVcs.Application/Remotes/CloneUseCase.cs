@@ -1,6 +1,8 @@
 using DawVcs.Application.Checkouts;
 using DawVcs.Application.Common;
 using DawVcs.Application.Diagnostics;
+using DawVcs.Application.Operations;
+using DawVcs.Application.Recovery;
 using DawVcs.Domain.Artifacts;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Configuration;
@@ -13,7 +15,8 @@ namespace DawVcs.Application.Remotes;
 public sealed record CloneRequest(
     string Url,
     string? TargetDirectory = null,
-    bool Force = false);
+    bool Force = false,
+    bool Bare = false);
 
 public sealed record CloneResult(
     string TargetDirectory,
@@ -69,6 +72,9 @@ public sealed class CloneUseCase
         ArgumentException.ThrowIfNullOrWhiteSpace(request.Url);
 
         cancellationToken.ThrowIfCancellationRequested();
+        if (request.Bare && request.TargetDirectory?.Contains("://", StringComparison.Ordinal) == true)
+            throw new ArgumentException("Bare destination must be a local filesystem path, not a URL.");
+        if (request.Bare && request.Force) throw new ArgumentException("--bare cannot be combined with --force.");
         var nestedProgress = progress is null ? null : new NestedOperationProgress(progress);
         progress?.Report(new OperationProgress(OperationStage.ConnectingRemote));
         var remoteUrl = request.Url.Trim();
@@ -90,11 +96,24 @@ public sealed class CloneUseCase
             ? Path.GetFullPath(request.TargetDirectory)
             : DeriveTargetDirectory(remoteUrl, remoteConfig.ProjectName);
 
-        if (Directory.Exists(targetDir) && Directory.EnumerateFileSystemEntries(targetDir).Any() && !request.Force)
+        WorkspaceRecoveryGuard.ThrowIfPending(targetDir);
+        if (request.Bare)
+        {
+            var bare = await new BareRepositoryUseCase(_contextFactory, _transportFactory, _fetchUseCase)
+                .ExecuteAsync(new BareRepositoryRequest(remoteUrl, targetDir, CopyHistory: true), cancellationToken, nestedProgress).ConfigureAwait(false);
+            return new CloneResult(bare.TargetDirectory, bare.Configuration.ProjectName, bare.Configuration.DefaultBranch,
+                bare.HeadCommit, bare.ObjectsFetched, bare.BytesFetched, Array.Empty<string>(), null);
+        }
+
+        if (!request.Force && !RepositoryOperation.OnlyCreationScaffold(targetDir))
         {
             throw new InvalidOperationException($"Destination path '{targetDir}' already exists and is not an empty directory.");
         }
 
+        using var operation = RepositoryOperation.Enter(targetDir, create: true, cancellationToken: cancellationToken);
+        WorkspaceRecoveryGuard.ThrowIfPending(targetDir);
+        if (!request.Force && !RepositoryOperation.OnlyCreationScaffold(targetDir))
+            throw new InvalidOperationException("Clone destination changed during creation.");
         progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
         Directory.CreateDirectory(targetDir);
         Directory.CreateDirectory(Path.Combine(targetDir, ".dawvc"));
@@ -116,7 +135,7 @@ public sealed class CloneUseCase
         context.SetUpstream(defaultBranch, "origin", defaultBranch);
 
         // 6. Fetch all remote branches into quarantine & objects
-        var fetchRequest = new FetchRequest(targetDir, "origin");
+        var fetchRequest = new FetchRequest(targetDir, "origin") { Operation = operation };
         var fetchResult = nestedProgress is null
             ? await _fetchUseCase.ExecuteAsync(fetchRequest, cancellationToken).ConfigureAwait(false)
             : await _fetchUseCase.ExecuteAsync(fetchRequest, cancellationToken, nestedProgress).ConfigureAwait(false);
@@ -127,7 +146,7 @@ public sealed class CloneUseCase
 
         if (trackingCommit.HasValue)
         {
-            var target = new FastForwardTarget(targetDir, defaultBranch, null, trackingCommit.Value);
+            var target = new FastForwardTarget(targetDir, defaultBranch, null, trackingCommit.Value) { Operation = operation };
             var checkoutResult = nestedProgress is null
                 ? await _checkoutUseCase.ExecuteFastForwardAsync(target, force: true, cancellationToken).ConfigureAwait(false)
                 : await _checkoutUseCase.ExecuteFastForwardAsync(target, true, cancellationToken, nestedProgress).ConfigureAwait(false);
@@ -141,7 +160,7 @@ public sealed class CloneUseCase
             progress?.Report(new OperationProgress(OperationStage.ProbingEnvironment));
             try
             {
-                var docReport = await _doctorUseCase.ExecuteAsync(new DoctorRequest(targetDir), cancellationToken).ConfigureAwait(false);
+                var docReport = await _doctorUseCase.ExecuteAsync(new DoctorRequest(targetDir) { Operation = operation }, cancellationToken).ConfigureAwait(false);
                 var plugins = docReport.DependencyHealth.Where(d => d.Category.Equals("Plugin", StringComparison.OrdinalIgnoreCase)).ToList();
                 var assets = docReport.DependencyHealth.Where(d => d.Category.Equals("Asset", StringComparison.OrdinalIgnoreCase)).ToList();
 

@@ -8,7 +8,6 @@ import json
 import os
 from pathlib import Path
 import shlex
-import shutil
 import socket
 import struct
 import subprocess
@@ -56,9 +55,8 @@ def main():
 
         cli("init", "--dir", local, "--primary", "Song.flp")
         cli("commit", "-m", "SSH smoke", "--dir", local)
-        shutil.copy(local / "dawvc.yaml", remote / "dawvc.yaml")
-        (remote / "objects").mkdir()
-        (remote / "refs/heads").mkdir(parents=True)
+        cli("init", "--bare", "--from", local, "--dir", remote)
+        assert not (remote / ".dawvc").exists()
         policy = root / "policy.json"
         policy.write_text(json.dumps({
             "Repositories": {"projects/song": {"Path": str(remote), "AllowPush": True}}
@@ -130,6 +128,19 @@ LogLevel VERBOSE
                 clone = root / "clone"
                 cli("clone", url, clone, env=env)
                 assert (clone / "Song.flp").read_bytes() == (local / "Song.flp").read_bytes()
+                bare_copy = root / "bare-copy"
+                cli("clone", url, bare_copy, "--bare", env=env)
+                assert not (bare_copy / ".dawvc").exists()
+                assert not (bare_copy / "Song.flp").exists()
+                copy_worktree = root / "copy-worktree"
+                cli("clone", bare_copy, copy_worktree)
+                assert (copy_worktree / "Song.flp").read_bytes() == (local / "Song.flp").read_bytes()
+                empty_receiver = root / "empty-receiver"
+                cli("init", "--bare", "--from", url, "--dir", empty_receiver, env=env)
+                assert not list((empty_receiver / "refs/heads").iterdir())
+                cli("remote", "add", "seed", empty_receiver, "--dir", local)
+                cli("push", "seed", "--dir", local)
+                print("Bare init/clone from real SSH and first publication: passed.", flush=True)
                 first_bytes = (clone / "Song.flp").read_bytes()
                 (local / "Song.flp").write_bytes(first_bytes.replace(b"25.2.5.5319", b"25.2.5.5320"))
                 cli("commit", "-m", "SSH update", "--dir", local)
@@ -138,6 +149,20 @@ LogLevel VERBOSE
                 assert (clone / "Song.flp").read_bytes() == first_bytes
                 cli("pull", "--dir", clone, env=env)
                 assert (clone / "Song.flp").read_bytes() == (local / "Song.flp").read_bytes()
+                # Make two independent versions, then join their histories explicitly.
+                (clone / "Song.flp").write_bytes(first_bytes.replace(b"25.2.5.5319", b"25.2.5.5321"))
+                cli("commit", "-m", "Collaborator version", "--dir", clone)
+                cli("push", "--dir", clone, env=env)
+                (local / "Song.flp").write_bytes(first_bytes.replace(b"25.2.5.5319", b"25.2.5.5322"))
+                cli("commit", "-m", "Local independent version", "--dir", local)
+                cli("push", "--dir", local, env=env, expected=9)
+                cli("fetch", "--dir", local, env=env)
+                cli("merge", "origin/main", "--take", "incoming", "-m", "Choose collaborator version", "--dir", local)
+                assert (local / "Song.flp").read_bytes() == (clone / "Song.flp").read_bytes()
+                cli("push", "--dir", local, env=env)
+                cli("pull", "--dir", clone, env=env)
+                cli("fsck", "--dir", local)
+                print("Explicit merge resolves divergence and resumes SSH Push/Pull: passed.", flush=True)
                 subprocess.run(
                     ["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(root / "wronghost")],
                     check=True,

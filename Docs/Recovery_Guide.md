@@ -90,7 +90,9 @@ Simply copy the desired `.flp` or `.wav` back to your project directory, or open
 
 ## 5. Repository Corruption Recovery (`dawvc fsck`)
 
-If a system crash or power outage occurs during a disk write, verify the integrity of the repository:
+After a system crash or power outage, inspect `dawvc recover` first and follow the
+durable workspace procedure below. Repository graph verification is a separate
+check and does not replace recovery:
 
 ```powershell
 dawvc fsck --artifacts
@@ -157,22 +159,159 @@ of the host identity. Never disable verification or delete known_hosts entries
 merely to bypass an unexpected key change. Preserve evidence and fix the host
 policy/key permissions locally for denied access; protocol errors omit raw paths.
 
-## Cancelled CLI synchronization
 
-Clone, Fetch and Pull now forward Ctrl+C to the engine, like Push, and return 130
-after awaited cleanup/compensation. A cancellation result does not guarantee
-unchanged objects/configuration/workspace or remote refs. Follow the operation's
-recovery guidance above, inspect refs/workspace and preserve retained paths before
-retrying. `remote track` is a separate local settings operation, not part of remote
-publication; an unsuccessful Push does not implicitly rewrite upstream settings.
+## Interrupted bare provisioning
 
-## Preview failures
+Bare init/clone prepares in `.dawvc-provision-<id>` under the destination parent.
+It publishes the complete bare layout by directory rename and never recursively
+replaces an existing destination. Before publication, errors/cancellation leave
+no partial repository at the target. An empty target placeholder can disappear
+if the final rename fails after removing it; existing user data is not overwritten.
 
-Fetch/Pull dry-run failures (including corrupt metadata, unsupported schema,
-missing history, budget violations, cancellation or divergence) leave repository
-content/layout unchanged. No quarantine session is created or pruned, and staging
-is not opened; preview can report committed history even with a corrupt local
-staging index. This does not repair that index or prove workspace readiness.
-Follow the offline-preservation guidance before actual mutations. A successful
-preview pins an observation rather than reserving a remote tip; actual Pull may
-fetch a newer state.
+After a hard crash or cleanup permission failure, staging can remain. First await
+or stop the owning process and check that nobody is provisioning that target.
+Inspect the destination using its dawvc.yaml, HEAD, objects/ and refs/heads/;
+absence of .dawvc is expected for bare storage. Use normal Clone to obtain and
+check a working copy; do not point workspace commands at a bare root. Remove
+abandoned staging only after confirming ownership/inactivity, then retry into an
+absent/empty destination. Do not merge staging directories into live storage.
+An interrupted SSH connection/source read does not provision a target on the SSH
+host; configuration and destination creation happen on the initiating machine.
+
+
+## Explicit snapshot Merge recovery
+
+Merge has no persistent conflicted state: there is no `merge --abort`/`--continue`.
+It requires a committed workspace and chooses one complete pre-existing snapshot.
+Before publication, dirty/collision/integrity/state-change failures do not
+intentionally move the active branch; an immutable unreachable merge object can
+remain. Checkout's existing journal compensates handled publication failures.
+If compensation fails, preserve recovery data reported by IncompleteRollbackException.
+
+After cancellation, a hard process stop or an error during post-publication
+binding resolution, inspect `dawvc log` and `dawvc status` before retrying. A merge
+may already be committed. Never delete object storage to undo it. Both parent
+IDs are printed by log; inspect/restore either old project in a separate directory:
+`dawvc checkout <full-parent-id> --restore-to <empty-directory>`. Restore outputs
+are ordinary files for review; the active branch is unaffected. Do not use Git's
+`HEAD^` syntax: it is not implemented. Keep source refs or note full IDs when
+reviewing alternate versions, and commit subsequent manual edits normally.
+
+
+## Durable workspace recovery (WP-SYNC-07)
+
+In-place Checkout/Switch and the fast-forward publication used by Pull, explicit
+Merge and initial Clone checkout now save persistent recovery data. After a killed
+process, stop/await all operations and do not save/edit the same project in a DAW.
+Inspect first:
+
+```powershell
+dawvc recover --dir D:\Music\Song
+# Only after inspection and after the owning operation has stopped:
+dawvc recover --rollback --dir D:\Music\Song
+```
+
+Inspection reports transaction ID, Prepared/Committed state and saved file/staging
+counts without opening the index. Prepared restores original file bytes, HEAD/
+affected branch and staged intent, including dirty pre-publication files protected
+by force checkout. Committed verifies the published files/ref/empty index and
+cleans recovery metadata; it never silently reverts the completed version. Neither
+mode fetches, writes FLP internals or offers force/discard. Exit 10 means pending,
+conflicting or unreadable recovery state and requires inspection. A live ownership
+lock refuses recovery: await the operation; do not delete its lock files.
+
+Backups and the manifest are under `.dawvc/transactions/<id>`. Keep them private:
+backups contain actual project/audio bytes, and manifests contain relative names
+and staged object IDs. They are not shared objects or diagnostic upload material.
+Unknown versions, foreign repository IDs, invalid paths, bad backups, unexpected
+file/ref/index edits and multiple active envelopes are refused before recovery
+writes. Preserve all evidence. A later edit detected during recovery can stop it
+after some other files were restored; the envelope remains for retry. No lock
+against arbitrary concurrent filesystem/DAW writers is claimed.
+
+If recovery conflicts, first copy your unexpected new work to a separate safe
+location. Inspect the manifest/backups and known parent snapshots. External
+`checkout <full-id> --restore-to <separate-directory>` remains available for review;
+while pending it must be outside the source workspace and its ancestry, and cannot
+write into another pending workspace. Bring only deliberately reviewed affected
+paths/refs back to an expected state before retrying. Do not delete a transaction,
+edit its hashes/state, erase objects or run force-like repairs to bypass checks.
+For unknown metadata, missing backups or changed refs, manual expert inspection is
+required; automatic recovery cannot safely guess your intended version.
+
+A stopped recovery can be run again. Files restore via flushed temporary copies
+and atomic rename; refs accept only expected old/new tips; a partial original
+staging subset is recognized and rebuilt. A corrupt SQLite index is not erased or
+recreated to make recovery pass. Existing handled journal compensation failures
+still surface IncompleteRollbackException and retain recovery data.
+
+Terminal envelopes first move to `.dawvc/transaction-cleanup/<id>`, then deletion
+is best-effort. Crashes/permissions can leave terminal data there. Unpublished
+preparation can remain under `.dawvc/transaction-preparation/<id>` without user
+file changes. Legacy `.journal_backup_*`, `.staging_checkout_*` and interrupted
+private incomplete restore copies may remain. Only after confirming ownership/inactivity and
+successful state inspection may an operator archive/remove identified leftovers.
+Do not feed terminal/preparation directories back into active recovery or merge
+copies into live storage. No secure erasure or automatic GC is provided.
+
+Recovery preserves contents and logical staged entries, not filesystem/SQL bytes,
+cache hints, timestamps, permissions or ACLs. A created Switch branch can remain
+following a crash; both histories are retained. A rolled-back initial Clone can
+remain initialized with fetched objects/tracking settings: use normal Pull to
+finish materializing it after inspection. No atomic whole-Clone/Commit/Push/bare
+provisioning transaction is introduced. Post-commit dependency/binding errors may
+still leave a completed publication; inspect log/status before retrying.
+
+Actual process-kill tests are separate from physical power-cycle evidence.
+Flush-to-disk, atomic rename and SQLite synchronous=FULL do not certify directory
+ordering, hardware/controller caches or NAS/SMB behavior. Real power-loss and
+storage qualification remain open deployment gates. Operation-wide serialization
+of all local writers is the next independent implementation scope.
+
+
+## Busy repository (WP-SYNC-08)
+
+A cooperating local mutation, cache-writing Status or binding-writing Doctor owns
+`.dawvc/operation.lock` for its full operation. A second writer returns exit 11
+immediately; an incoming filesystem/SSH push to a busy receiver returns remote
+exit 8. Await/cancel the owning operation and await its completion before retrying.
+The lock covers network waits; a stalled remote can keep the local repository busy.
+No automatic waiting, forced takeover, PID expiry or lock-file removal is offered.
+
+The order is operation → workspace publication/recovery → ref writer. Explicit
+`recover --rollback` participates in the operation lock; read-only `recover`
+inspection does not. After a killed process the OS releases its handles: inspect
+pending recovery first, then roll back/finalize it. Busy alone does not imply a
+recovery envelope exists. Empty operation/creation/ref/recovery files persist and
+are not evidence of a live process. Never delete them to bypass a live owner.
+
+Init/Clone/bare provisioning coordinate through a persistent hashed sibling
+`.dawvc-create-<sha256>.lock`. They need parent write permission. Failed normal
+creation can leave an empty `.dawvc/operation.lock` scaffold; Clone accepts that
+scaffold, but does not silently replace other existing destination data.
+
+Only upgraded stock use cases/receivers participate. Older binaries, direct backend
+calls and DAW/editor writes must still be kept exclusive. External restoration
+requires an exclusive separate target and must not write into an active working
+repository. Read-only views can observe changes and are not multi-file snapshots.
+NAS/SMB lock semantics and real power-loss durability still require field testing.
+
+
+## Integrated target selection and preview (WP-SYNC-09)
+
+`remote track` is a guarded writer: Busy exit 11 and pending local recovery exit 10
+preserve existing upstream settings. It never connects to the host. A real Pull
+uses the selected remote source to update the active local branch under the full
+operation lease; a killed mapped Pull recovers that branch/workspace, while already
+fetched objects/tracking remain. Never assume rollback also undid the Fetch phase.
+
+Fetch/Pull/Push dry-runs take no writer lease and create no local lock/index/
+storage/quarantine. Fetch/Pull pin fresh remote tips and verify bounded missing
+metadata without downloading blob bodies. Previews are not dirty-file checks or
+reservations and do not authorize bypassing recovery; pending local recovery
+still refuses sync preview. Actual execution fetches and revalidates again.
+
+Clone/Fetch/Pull/Push forward cancellation and return 130 after awaited cleanup.
+Linux SIGINT child cleanup is automated; Windows console Ctrl+C remains a native
+qualification item. Inspect actual refs, status and pending recovery after an
+interruption, especially after publication. Never delete a live coordination file.

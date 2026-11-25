@@ -133,15 +133,84 @@ See ADR-REM-002, Remote_Protocol.md and Self_Hosting_SSH.md for the implemented
 contract. Linux protocol/OpenSSH validation is not a full production security
 audit or certification of every NAS/Windows/OpenSSH deployment.
 
-## Read-only preview extension
 
-Preview verifies remote metadata envelopes, object identities/types/lengths,
-BLAKE3, schema/graph references and snapshot path safety before using parent
-links. Payload and aggregate metadata/graph limits prevent unbounded planning.
-It avoids all quarantine creation/pruning, object/ref/config writes and staging
-access; no adapter/native project execution occurs. Context construction is now
-side-effect free and an unused index is not created/disposed. Custom providers
-remain responsible for read-only behavior. This is not a sandbox against arbitrary
-provider code, a full blob/local integrity audit or a concurrency reservation.
-OS access times and SSH audit logs are outside the repository-content guarantee.
-See ADR-REM-004 and FR-PRV-001..007.
+## Bare provisioning review — WP-SYNC-04
+
+Provisioning inherits an explicit compatible source identity and shared config;
+there is no first-writer identity adoption. Source reads use existing filesystem
+or strict-key SSH transports. History ingestion reuses Fetch envelope/hash/path
+validation; no source index, binding store or native project execution occurs.
+SSH exposes no arbitrary-path repository-creation command. Host path/alias and
+AllowPush policies remain administrative settings.
+
+Local destinations reject URLs, existing files/nonempty dirs and link/junction
+ancestry, and are rechecked before publication. A same-parent staged directory is
+renamed only after validation and resource disposal. Concurrent destination data
+is not recursively removed. These path checks do not sandbox malicious parent
+replacement; restrict parent ACLs/permissions to trusted operators. Cleanup may
+leave staging after a crash/permissions failure and is not secure erasure. Existing
+empty placeholders may be absent if final publication fails. Remote sources can
+consume staging space up to existing transfer limits; provision adequate disk.
+
+
+## Explicit snapshot Merge review — WP-SYNC-05
+
+Merge performs no network calls, native FLP editing or plugin execution. Input
+references use the existing local resolver; fetched objects must already have
+passed transport verification. Merge additionally validates bounded commit
+metadata/ancestry and both tip snapshots/blobs, with existing path traversal and
+collision guards. Unknown schemas/type mismatches and missing/corrupt objects
+fail before workspace publication. Whole-snapshot selection avoids silently
+combining incompatible FLP/asset sets. Both parent histories stay reachable.
+
+No force or implicit history rewrite. Dirty/staged work and selected untracked
+collisions are refused. Expected branch/tip checks reduce callback-observable
+state-change windows; a hostile/concurrent local writer is not sandboxed and
+there is no global workspace lock. Existing journal/rollback/crash boundaries
+apply. Earlier snapshots/blobs require Fsck; an unreachable merge object may
+remain on failure. Selected incomplete snapshots remain incomplete.
+
+Merge-specific mutation guards also reject reserved `.dawvc`/`.git`/`dawvc.yaml`
+artifact roots and link/junction ancestry in affected workspace/metadata paths.
+Checks repeat after the publication progress callback; trusted local writers
+must still avoid concurrent path replacement. Snapshot container shape and
+aggregate hash must match their entries. The new merge object must itself fit
+the metadata/graph limits (including its two parent edges).
+
+
+## Durable recovery review — WP-SYNC-07
+
+Recovery data is local/private: actual musical bytes and relative manifest names
+must not enter shared objects, arbitrary-path server operations or CI uploads.
+Read-only inspection exposes counts/IDs, not backup contents. Explicit rollback
+validates repository/schema, bounded JSON/list sizes, canonical paths/reserved
+metadata roots, link ancestry, derived backup names and BLAKE3 before/after proofs.
+All initial targets and backups are preflighted; copies and targets are rechecked
+before atomic replacement. Unknown edits, bad manifests/backups and multiple
+transactions preserve evidence and refuse; no force or automatic repair.
+
+Exclusive ownership prevents recovering a live publisher; existing ref-write
+ownership prevents cooperating ref writers during replay. Older clients, raw
+backend APIs, malicious same-user path replacement and already-started writers
+are outside global serialization. Do not run/save concurrently. Terminal envelopes
+leave the active namespace before deletion, so interrupted cleanup is not mistaken
+for a damaged active manifest. Private orphan data/locks require ownership-aware
+operator handling; secure erasure is not claimed. Power-cycle/controller/NAS
+qualification is separate from actual process-kill regression evidence.
+
+Recovery envelopes are owner-only directories: Unix 0700, Windows protected DACL
+with inheritable full control for the current user. Restoration copies stay
+inside that private envelope before rename, rather than exposing old musical
+bytes in public workspace temporary files. These controls do not exclude OS
+administrators/privileged backup tools or certify a NAS ACL implementation.
+
+### WP-SYNC-09: preview/upstream integration
+
+Track validates names and configured/local branch identity, updates settings
+atomically offline and honors operation/recovery guards. Fresh previews verify
+missing metadata envelopes, identities/types/schema and paths with fixed graph/
+byte budgets; they do not create quarantine or clear unused SQLite pools. Preview
+blob availability/integrity and dirty work remain unverified. Do not treat a
+preview as a reserved or atomic view during other writers. Existing host-key,
+allowlist, push policy and protocol limits remain; credentials/paths are not added
+to the preview DTO. Custom providers retain the read-only contract obligation.

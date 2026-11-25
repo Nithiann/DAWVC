@@ -31,3 +31,11 @@ and host SSH authentication/audit logs are not repository content mutations.
 
 The snapshot does not reserve refs, verify/download blobs or plan dirty workspace
 conflicts. Actual execution re-fetches. No global mutation lock or forced recovery.
+
+
+WP-SYNC-09 integration (24 November 2026): these previously separate changes
+are ported onto the recovery/operation-ownership stack for review. Mutating
+operations retain WP-SYNC-08 ownership; read-only dry-runs take no writer lease
+and do not create coordination files. Track mutations honor Busy/recovery guards.
+A preview is advisory and is not an atomic view across concurrent local writers.
+No PR approval/merge or native/storage qualification is implied.

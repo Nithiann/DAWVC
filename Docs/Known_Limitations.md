@@ -37,7 +37,7 @@
 ## 4. Remote Synchronization & Transports (v0.2 Baseline)
 
 - **Supported Transports:** DAWVC v0.2 supports remote collaboration via the filesystem transport (`FileSystemRemoteTransport`), covering local paths, external drives, and network UNC shares (`\\server\share\repo`). The SSH extension adds `dawvc://` through OpenSSH; HTTPS and standard Git hosting remain unsupported. See [Self-hosting SSH](Self_Hosting_SSH.md).
-- **Fast-Forward Only Synchronization:** In v0.2, synchronization operations (`dawvc pull` and `dawvc push`) enforce fast-forward integration (`--ff-only`). If histories diverge (e.g. concurrent commits made on different machines), the pull is rejected with exit code `9` (`NonFastForward`) to prevent automated binary corruption. Three-way structural merging of DAW projects is planned for future releases.
+- **Fast-Forward Only Synchronization:** In v0.2, synchronization operations (`dawvc pull` and `dawvc push`) enforce fast-forward integration (`--ff-only`). If histories diverge (e.g. concurrent commits made on different machines), the pull is rejected with exit code `9` (`NonFastForward`) to prevent automated binary corruption. WP-SYNC-05 adds explicit whole-snapshot Merge to join diverged history; three-way structural merging of DAW projects remains deferred.
 - **Quarantine Ingestion:** All remote payloads pass through incoming staging (`.dawvc/incoming/<sessionId>/`) with envelope inspection, BLAKE3 verification, and strict path traversal validation (`NFR-SEC-001..003`) before promotion to `.dawvc/objects/`.
 
 ---
@@ -61,14 +61,14 @@
 
 - In v0.1, the `PublicationJournal` provides automatic, in-memory rollback of file operations when an exception occurs during staging, candidate installation, reference updates, or index clearing.
 - If a handled error is encountered, temporary file-level backups are restored in reverse order, returning the workspace to its exact pre-checkout state.
-- **Crash Recovery Scope:** Unhandled terminations (e.g. `SIGKILL`, abrupt power outage, or OS panic) mid-publication cannot be rolled back until persistent on-disk transaction manifests (`.dawvc/transactions/<id>/`) are implemented in a future release.
+- **Crash Recovery Scope:** WP-SYNC-07 adds explicit persistent recovery for interrupted in-place workspace publication. Physical power-cut/controller/NAS guarantees still require deployment qualification; see the current boundaries below and Recovery Guide.
 
 
 ## Filesystem Push boundaries (23 November 2026)
 
 - The original filesystem Push baseline supports filesystem/file:// and UNC
   repositories with matching identity. The SSH extension below adds authenticated
-  network hosting. Neither extension adds `init --bare` or force-push.
+  network hosting. WP-SYNC-04 adds source-derived bare provisioning; force-push remains unsupported.
 - Non-bare checked-out destination branches are refused. Do not concurrently use
   destination worktrees while pushing to inactive branches.
 - Push and cooperating local branch/HEAD writers share a destination-wide
@@ -115,32 +115,130 @@ Platform evidence is recorded in WP-SSH-01 in the implementation plan. Real Wind
 OpenSSH, specific NAS deployments and actual UNC/SMB storage need independent
 validation; a successful Linux loopback test does not establish those guarantees.
 
-## Upstream workflow and preview scope
 
-`remote track` configures existing local branches (including active unborn HEAD)
-against configured remotes; the remote branch may be created later. It does not
-probe permissions, host availability or repository identity. Those checks happen
-when transferring. Clone's automatic origin/upstream setup remains available.
-No automatic post-Push tracking update or `push --set-upstream` is introduced.
+## Bare provisioning boundaries (WP-SYNC-04)
 
-Pull resolves upstream before Fetch and explicit source branches integrate into
-the active local branch. The historical stale/missing-cache dry-run limitation
-is resolved by WP-SYNC-03: Fetch/Pull preview uses pinned advertised tips and
-verified in-memory metadata without quarantine writes/pruning, object promotion,
-ref/config/index updates or workspace materialization.
+`init --bare --from` prepares an empty receiver with source identity;
+`clone --bare` copies verified history/all fetched branches without a workspace.
+Both reject existing nonempty destinations and links/junctions in destination
+ancestry. Bare cloning rejects force. No bare mirror update, source-local
+bindings/index copy, random-ID receiver adoption or SSH remote-create operation.
+Bare roots are hosting endpoints; use normal Clone to obtain a working copy.
 
-Preview is bounded (2 MiB per metadata object; 64 MiB cumulative received metadata;
-100,000 inspected objects; 50,000 commits; 1,000,000 remote parent edges). It does
-not download/check blob payloads, plan dirty-workspace conflicts, run Doctor/Fsck,
-probe plugins or reserve remote refs. Counts reflect declared missing transfer,
-not proof that a later operation will succeed. A later actual Pull can see a new
-remote tip. Custom context/transport providers must keep read methods side-effect
-free; custom Fetch providers must supply the current Preview snapshot for Pull
-dry-run, which fails closed if it is missing.
+Publication is a same-volume directory rename after preparation. Failures before
+publication do not expose a partial repository. Existing empty placeholders are
+deleted immediately before rename; a failed rename may leave that placeholder
+absent. Parent directories created during preparation may remain. Cleanup is
+best-effort; crashes/permissions can leave `.dawvc-provision-*` sibling directories.
+There is no provisioning recovery journal, secure erase or protection from a
+hostile writer replacing parent directories between checks. Restrict parent
+permissions and do not manipulate staging/destination paths concurrently.
 
-Filesystem content/layout/mtimes are preserved by preview, but OS access-time
-updates and host SSH authentication/audit logs are not suppressed. Normal Status
-and mutating operations can still initialize the index/storage. Existing local
-commit boundaries are reused rather than conducting a full repository integrity
-audit. Bare provisioning remains WP-SYNC-04; native Windows Ctrl+C and real NAS/UNC
-validation are independent remaining items.
+
+## Explicit snapshot Merge boundaries (WP-SYNC-05)
+
+`merge --take local|incoming` chooses an entire immutable snapshot, not individual
+tracks, plugins or files. Both original commits remain parents of a new commit.
+Only diverged histories with a common ancestor are accepted. No automatic Fetch,
+force, dry-run, merge state/abort, semantic FLP merge or ref rewriting. Log remains
+first-parent and displays both merge parent IDs for explicit restoration.
+
+Both tip snapshots/blobs and commit histories are verified; earlier snapshots/
+blobs need Fsck for exhaustive auditing. Graph/metadata limits are 50k commits,
+1m parent edges, 2 MiB/object and 64 MiB cumulative metadata payload. Selected
+incomplete snapshots retain their incomplete flag; choosing a version does not
+make missing external plugins/libraries reproducible.
+
+Expected branch/tip checks catch changes before checkout publication, but there
+is an operation-wide cooperating writer lease in WP-SYNC-08. Older/raw clients
+and DAW saves must still be kept exclusive. Handled publication failures use existing
+compensation; incomplete rollback can retain recovery data. Hard crashes and
+post-publication dependency-resolution failure/cancellation need inspection.
+An unreachable immutable merge object can remain after failure; no GC is added.
+
+Merge-specific mutation guards also reject reserved `.dawvc`/`.git`/`dawvc.yaml`
+artifact roots and link/junction ancestry in affected workspace/metadata paths.
+Checks repeat after the publication progress callback; trusted local writers
+must still avoid concurrent path replacement. Snapshot container shape and
+aggregate hash must match their entries. The new merge object must itself fit
+the metadata/graph limits (including its two parent edges).
+
+
+## Preview acceptance and deployment qualification
+
+See [Preview acceptance](Preview_Acceptance.md) for automated packaged-CLI evidence
+and the separate real Windows/FL Studio/two-PC/OpenSSH/NAS checklist. Synthetic
+single-host success does not certify native playback or deployment-specific
+locking/rename behavior. Those release gates remain pending until measured on
+actual supported setups; no GUI or additional DAW support is implied.
+
+
+## Durable workspace recovery boundaries (WP-SYNC-07)
+
+Persistent local manifests/backups now cover in-place Checkout/Switch and shared
+fast-forward publication (Pull, explicit Merge, initial Clone checkout). Prepared
+recovery restores pre-publication bytes/HEAD/ref/staged intent; Committed recovery
+verifies and finalizes the completed version. Unexpected edits/corruption retain
+recovery data and refuse; there is no forced overwrite or implicit repair.
+
+Backup capacity is additional to candidate and legacy handled-journal storage.
+Metadata is limited to schema 1, 16 MiB, 10k files and 10k staged entries. Recovery
+is logical/content-based, not a complete filesystem/database-image backup. Private
+orphan preparation, terminal cleanup, staging and recovery copies can remain;
+cleanup is not secure erasure. No GC/reset command is introduced.
+
+The ownership lock prevents simultaneous publication/recovery, and existing ref
+locks protect recovery metadata writes. WP-SYNC-08 adds serialization for upgraded stock writers. Older
+clients/raw backend calls and external DAW/file edits are not globally serialized.
+Do not mutate/save concurrently. External restore, Commit, Push and bare storage
+provisioning are not newly crash-journaled. Process-kill tests do not certify true
+power loss, directory-rename ordering or specific NAS/SMB behavior. Those native
+field gates remain open; see Preview_Acceptance.md and Recovery_Guide.md.
+
+Recovery backup directories require owner-only permissions (Unix 0700 or a Windows
+protected owner DACL). Non-ACL filesystems or NAS identity/ACL mappings may reject
+preparation before workspace mutation. Journaled workspaces require storage with
+qualified permissions and atomic rename semantics; bare remote storage is a
+separate scope. Restore does not preserve original file ACLs/modes.
+
+
+## Cooperative operation ownership (WP-SYNC-08)
+
+Stock local writers, Status/Doctor and incoming push sessions now share an
+operation-wide OS handle lease; independent processes/callbacks fail fast rather
+than wait. This supersedes earlier statements that stock operations lack a global
+writer lease. Local busy is exit 11; incoming busy is remote exit 8. Network waits
+hold local ownership, and self-push to the same physical repository is refused.
+Creation uses a persistent hashed sibling lock and needs parent write permission.
+
+Older binaries, raw context/index calls, custom overrides/providers, DAW/editor
+saves and external restore destinations remain outside this cooperative protocol.
+External restores require exclusive separate targets. Read-only inspection is not
+an atomic view. No new crash journal for Commit/Push/bare provisioning, automatic
+lock stealing/cleanup, GC, distributed locking service or NAS qualification is
+added. Persistent empty coordination files are normal. Native FL Studio/two-PC,
+physical-power and actual storage permission/locking/rename tests remain open.
+
+
+## Integrated sync candidate (WP-SYNC-09)
+
+The previously separate upstream/fresh-preview implementations are now ported onto
+the recovery/ownership stack in `feat/sync-workflow-integration`, pending review.
+This is a feature candidate, not a claim of merges into develop or native release
+qualification. Push/Pull share upstream defaults; `remote track` configures them
+offline and respects Busy/recovery refusal. Explicit remote/branch overrides are
+documented in CLI Reference.
+
+Fetch/Pull previews use current advertised tips and bounded verified missing
+metadata, not stale tracking. Counts are estimates without blob downloads, dirty
+workspace conflict planning or native-DAW validation. Cached local objects are not
+fully re-audited by the preview; use Fsck for that. Previews take no writer lease,
+create no coordination/index/quarantine/storage and do not reserve refs or provide
+an atomic view during concurrent writers. Actual execution re-fetches and retains
+writer ownership and durable workspace recovery. Pending local/remote recovery
+still refuses sync previews. Push preview also avoids local lock/index creation.
+
+Stock context construction is side-effect free; the staging index is initialized
+only on access and unused indexes/pools are not disposed/cleared by other contexts.
+Linux sync SIGINT and SSH child cleanup are automated; native Windows console
+Ctrl+C, physical power loss, real FL Studio/two-PC and NAS/SMB remain field gates.

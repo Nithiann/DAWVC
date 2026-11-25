@@ -39,6 +39,8 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<Func<string, IRepositoryContext>>(),
             sp.GetRequiredService<IDawAdapterRegistry>()));
         services.AddTransient<LogUseCase>();
+        services.AddTransient<MergeUseCase>();
+        services.AddTransient<DawVcs.Application.Recovery.WorkspaceRecoveryUseCase>();
         services.AddTransient<CheckoutRestoreUseCase>();
         services.AddTransient<CheckoutUseCase>(sp => new CheckoutUseCase(
             sp.GetRequiredService<Func<string, IRepositoryContext>>(),
@@ -62,6 +64,7 @@ public static class ServiceCollectionExtensions
         services.AddTransient<Func<string, IQuarantineStore>>(_ => dir => new QuarantineObjectStore(dir));
         services.AddTransient<ObjectGraphWalker>();
         services.AddTransient<FetchUseCase>();
+        services.AddTransient<BareRepositoryUseCase>();
         services.AddTransient<PushUseCase>();
         services.AddTransient<AncestryService>();
         services.AddTransient<PullUseCase>(sp => new PullUseCase(

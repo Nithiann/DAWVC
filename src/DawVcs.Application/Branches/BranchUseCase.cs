@@ -1,3 +1,5 @@
+using DawVcs.Application.Operations;
+using DawVcs.Application.Recovery;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Hashing;
 using DawVcs.Domain.Repositories;
@@ -7,12 +9,18 @@ namespace DawVcs.Application.Branches;
 public sealed record BranchCreateRequest(
     string RepositoryDirectory,
     string BranchName,
-    string? StartPoint = null);
+    string? StartPoint = null)
+{
+    internal RepositoryOperation? Operation { get; init; }
+}
 
 public sealed record BranchDeleteRequest(
     string RepositoryDirectory,
     string BranchName,
-    bool Force = false);
+    bool Force = false)
+{
+    internal RepositoryOperation? Operation { get; init; }
+}
 
 /// <summary>
 /// Beheert het aanmaken, listen en verwijderen van branches (FR-BRA-001..003).
@@ -48,6 +56,8 @@ public sealed class BranchUseCase
             throw new ArgumentException(validationError ?? $"Invalid branch name '{request.BranchName}'.", nameof(request));
         }
 
+        using var operation = RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation, cancellationToken: cancellationToken);
+        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using var context = _contextFactory(request.RepositoryDirectory);
 
         CommitId commitId;
@@ -84,6 +94,8 @@ public sealed class BranchUseCase
             throw new ArgumentException(validationError ?? $"Invalid branch name '{request.BranchName}'.", nameof(request));
         }
 
+        using var operation = RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation, cancellationToken: cancellationToken);
+        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using var context = _contextFactory(request.RepositoryDirectory);
         var currentBranch = context.GetCurrentBranch();
 

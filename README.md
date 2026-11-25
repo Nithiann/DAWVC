@@ -112,7 +112,6 @@ For options, exit codes, and JSON schemas, see the complete **[CLI Command Refer
 | `dawvc branch [name]` | Lists existing branches or creates a new branch pointer. |
 | `dawvc switch <branch>` | Safely switches the workspace to a different branch. |
 | `dawvc checkout <commit>` | Restores a specific snapshot (supports `--restore-to` and `--force`). |
-| `dawvc remote track <remote> <branch>` | Sets the active local branch’s upstream without contacting the host. |
 | `dawvc push [remote] [branch]` | Sends committed history to a filesystem/UNC or dawvc:// SSH remote, fast-forward only; supports `--dry-run`. |
 | `dawvc bind <id> <path>` | Links an external asset to a logical dependency ID. |
 | `dawvc doctor` | Verifies environment health, checking local presence and compatible versions (`installed >= required`) for plugins, samples, and dependencies. |
@@ -221,6 +220,54 @@ authentication and host-owned repository policies apply. See
 [SSH hosting](Docs/Self_Hosting_SSH.md) and [Protocol v1](Docs/Remote_Protocol.md).
 This is DAWVC synchronization, not compatibility with GitHub/GitLab Git endpoints.
 
-Fetch/Pull support fresh `--dry-run` metadata previews without updating workspace,
-objects, staging or refs. Fetch also shows planned tracking changes. Blob contents
-and dirty workspace conflicts are not checked; see the CLI reference for limits.
+
+## Bare hosting and first publication
+
+Create an empty receiver with the existing project's identity:
+`dawvc init --bare --from <source> --dir <hosting-path>`.
+Or seed all branches/history without working files:
+`dawvc clone <source> <hosting-path> --bare`.
+Both require absent/empty local destinations; source may be a path or dawvc:// URL.
+Then configure filesystem origin or the host's SSH alias and Push normally. See
+[SSH hosting](Docs/Self_Hosting_SSH.md) for provisioning and authorization details.
+
+
+## Explicit divergence resolution
+
+After `dawvc fetch origin`, choose one complete committed project snapshot with
+`dawvc merge origin/main --take local -m "Keep local project version"` or
+`--take incoming`. A two-parent commit preserves both histories; normal Push/Pull
+can then resume. This does not combine FLP contents or mix assets automatically.
+Commit your tracked/staged changes first. See [collaboration workflow](Docs/Collaborator_Workflow.md).
+
+
+## Preview acceptance evidence
+
+CI exercises the extracted Windows release executable with a synthetic collaboration
+workflow and uploads a scoped JSON result. Linux DLL checks are recorded separately.
+See [Preview acceptance](Docs/Preview_Acceptance.md) for the runner, mounted-share
+option and pending real Windows/FL Studio/two-PC/SSH/NAS qualification procedures.
+
+
+## Interrupted workspace publication
+
+`dawvc recover` inspects persistent publication recovery data;
+`dawvc recover --rollback` explicitly restores a Prepared workspace or verifies/
+finalizes a Committed publication. Pending envelopes block new cooperating
+mutations. Unexpected edits/corrupt backups are preserved for inspection, without
+force overwrite. See [Recovery Guide](Docs/Recovery_Guide.md) for ownership,
+staging replay, private backups, cleanup and power-loss qualification boundaries.
+
+WP-SYNC-08 adds cooperative operation-wide writer ownership across CLI processes
+and incoming SSH/filesystem push sessions. Busy local operations return exit 11;
+busy receivers return remote exit 8. Await the owning operation; never delete live
+lock files. Status/Doctor participate, and Pull/Push retain local ownership during
+network waits. Older/raw clients, DAW saves and external restores still require
+exclusive coordination. See [Recovery Guide](Docs/Recovery_Guide.md) and
+[ADR-OPS-001](Docs/adr/ADR-OPS-001-repository-operation-locking.md).
+
+The WP-SYNC-09 candidate integrates offline `remote track`, shared Push/Pull upstream
+defaults, fresh read-only Fetch/Pull previews and cancellation onto the recovery/
+locking stack. Dry-runs create no local lock/index/quarantine; real operations keep
+writer ownership. See [CLI Reference](Docs/CLI_Reference.md) and the current
+[implementation plan](Docs/Implementation%20plan.md) for review/qualification status.

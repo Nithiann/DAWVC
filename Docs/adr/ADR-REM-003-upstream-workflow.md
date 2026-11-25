@@ -45,3 +45,11 @@ not last-writer conflicts. Existing corrupt-config recovery policy is unchanged.
 Fresh Pull dry-run ancestry requires a separate preview metadata lifetime design
 (WP-SYNC-03). This WP fixes source selection, not that historical limitation. Bare
 repository provisioning is WP-SYNC-04. No new on-disk schema or wire protocol.
+
+
+WP-SYNC-09 integration (24 November 2026): these previously separate changes
+are ported onto the recovery/operation-ownership stack for review. Mutating
+operations retain WP-SYNC-08 ownership; read-only dry-runs take no writer lease
+and do not create coordination files. Track mutations honor Busy/recovery guards.
+A preview is advisory and is not an atomic view across concurrent local writers.
+No PR approval/merge or native/storage qualification is implied.

@@ -233,7 +233,17 @@ dawvc push origin shared-mix
 
 The recipient can fetch and explicitly pull that branch. Nothing is automatically
 installed in their workspace by Push. Bare repositories have no active worktree
-restriction; this change does not introduce an `init --bare` command. See the
+restriction. Provision one locally on the hosting machine or mounted storage:
+
+```powershell
+dawvc init --bare --from D:\Music\Song --dir D:\Hosting\Song
+# Or copy all existing branches/history instead of preparing an empty receiver:
+# dawvc clone D:\Music\Song D:\Hosting\Song --bare
+```
+
+Choose one command and an absent/empty destination. For SSH, configure the target
+alias and push authorization on the host before the first Push. The source may
+also be a trusted dawvc:// URL; the destination remains a local path. See the
 [CLI reference](CLI_Reference.md) for argument defaults and rejection codes.
 
 ### Using a PC, NAS or server over SSH
@@ -254,36 +264,39 @@ All sync commands share the same transport-independent engine behavior. The host
 need not keep DAWVC running; SSH starts the temporary receiver. See
 [Self-hosting SSH](Self_Hosting_SSH.md) for PC/NAS/server requirements and limits.
 
-### Tracking a different host or remote branch
 
-Clone sets origin/upstream automatically. To use another configured host or
-publish the current local branch under another remote branch name:
+### When both collaborators have committed changes
+
+Pull/Push reject diverged history. Commit your local tracked/staged changes,
+fetch the other version, inspect it if necessary, and choose one complete project:
 
 ```powershell
-dawvc remote add backup dawvc://alice@nas/projects/song
-dawvc remote track backup published
-dawvc push
+dawvc fetch origin
+dawvc checkout origin/main --restore-to D:\Review\IncomingSong
+dawvc merge origin/main --take incoming -m "Choose incoming project and samples"
+# --take local keeps your committed snapshot instead.
+dawvc push origin main
+```
+
+Both original commits remain in history. `dawvc log` shows both merge parent IDs;
+restore either to a separate folder for review. This chooses FLP and assets
+as a set, without combining tracks or automatically rewriting FL Studio files.
+Do not run local mutating commands concurrently. A newer remote commit may
+require another fetch/review/merge before Push succeeds.
+
+
+### Map a different remote branch and inspect fresh incoming history
+
+```powershell
+dawvc remote track origin published
+dawvc fetch origin published --dry-run
+dawvc pull --dry-run
 dawvc pull
 ```
 
-The default commands now use backup/published. An explicit `pull backup published`
-always integrates into your active local branch. To track another existing local
-branch, add `--local-branch <name>`. Tracking settings are local and do not connect
-to the host or create commits. Press Ctrl+C to cancel any sync command; await its
-completion and inspect state before retrying. See CLI_Reference.md for the
-existing fresh-Pull-preview limitation.
-
-### Preview current remote changes without applying them
-
-```powershell
-dawvc fetch origin --dry-run
-dawvc pull --dry-run
-```
-
-Fetch shows estimated missing transfer and planned tracking updates. Pull checks
-current advertised history even when your tracking refs are missing/stale; it
-reports fast-forward, already-current or local-ahead state and rejects divergence.
-Neither preview updates workspace, objects, staging, settings or refs, creates
-quarantine or deletes old incoming sessions. Blob contents and unsaved workspace
-conflicts are not checked. The later real Pull fetches again; inspect the CLI
-reference for limits and advisory semantics.
+This maps the active local branch to origin/published; Pull updates that active
+branch without switching to a local branch named published. Track is offline and
+the remote branch may be created by a future Push. Explicit matching remote names
+retain the mapping. Dry-run uses current remote tips without local files/index/
+lock/quarantine writes; it estimates transfers, not native playback or unsaved-file
+conflicts. A real Pull fetches again. See CLI Reference for overrides and limits.

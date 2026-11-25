@@ -50,7 +50,7 @@ public sealed class SqliteStagingIndex : IStagingIndex, IDisposable
                 await using var connection = new SqliteConnection(_connectionString);
                 await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
 
-                await connection.ExecuteAsync(new CommandDefinition("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;", cancellationToken: cancellationToken)).ConfigureAwait(false);
+                await connection.ExecuteAsync(new CommandDefinition("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;", cancellationToken: cancellationToken)).ConfigureAwait(false);
 
                 const string createSql = @"
 CREATE TABLE IF NOT EXISTS staging_entries (

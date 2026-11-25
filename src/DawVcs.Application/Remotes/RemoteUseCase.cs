@@ -1,11 +1,19 @@
+using DawVcs.Application.Operations;
+using DawVcs.Application.Recovery;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Remotes;
 using DawVcs.Domain.Repositories;
 
 namespace DawVcs.Application.Remotes;
 
-public sealed record RemoteAddRequest(string RepositoryDirectory, string Name, string Url);
-public sealed record RemoteRemoveRequest(string RepositoryDirectory, string Name);
+public sealed record RemoteAddRequest(string RepositoryDirectory, string Name, string Url)
+{
+    internal RepositoryOperation? Operation { get; init; }
+}
+public sealed record RemoteRemoveRequest(string RepositoryDirectory, string Name)
+{
+    internal RepositoryOperation? Operation { get; init; }
+}
 public sealed record RemoteListRequest(string RepositoryDirectory);
 public sealed record TrackRemoteRequest(string RepositoryDirectory, string RemoteName, string RemoteBranch, string? LocalBranch = null);
 public sealed record TrackRemoteResult(BranchName LocalBranch, string RemoteName, BranchName RemoteBranch);
@@ -28,6 +36,8 @@ public sealed class RemoteUseCase
     public RemoteConfig AddRemote(RemoteAddRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        using var operation = RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation);
+        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using var context = _contextFactory(request.RepositoryDirectory);
 
         if (!RemoteName.TryCreate(request.Name, out var remoteName, out var error))
@@ -61,6 +71,8 @@ public sealed class RemoteUseCase
     public bool RemoveRemote(RemoteRemoveRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
+        using var operation = RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation);
+        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using var context = _contextFactory(request.RepositoryDirectory);
         return context.RemoveRemote(request.Name);
     }
@@ -76,6 +88,8 @@ public sealed class RemoteUseCase
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
+        using var operation = RepositoryOperation.Enter(request.RepositoryDirectory, cancellationToken: cancellationToken);
+        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         var name = RemoteName.Parse(request.RemoteName);
         var remoteBranch = BranchName.Parse(request.RemoteBranch);
         using var context = _contextFactory(request.RepositoryDirectory);

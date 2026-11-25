@@ -1,4 +1,6 @@
 using DawVcs.Application.Common;
+using DawVcs.Application.Operations;
+using DawVcs.Application.Recovery;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Configuration;
 using DawVcs.Domain.Hashing;
@@ -12,7 +14,10 @@ public sealed record FetchRequest(
     string RepositoryDirectory,
     string? RemoteName = null,
     string? Branch = null,
-    bool DryRun = false);
+    bool DryRun = false)
+{
+    internal RepositoryOperation? Operation { get; init; }
+}
 
 public sealed record UpdatedRemoteRef(
     BranchName Branch,
@@ -58,7 +63,10 @@ public class FetchUseCase
     public virtual async Task<FetchResult> ExecuteAsync(
         FetchRequest request, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
     {
-        var result = await ExecuteCoreAsync(request, cancellationToken, progress).ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(request);
+        using var operation = request.DryRun ? null
+            : RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation, cancellationToken: cancellationToken);
+        var result = await ExecuteCoreAsync(request with { Operation = operation }, cancellationToken, progress).ConfigureAwait(false);
         progress?.Report(new OperationProgress(OperationStage.Completed));
         return result;
     }
@@ -70,6 +78,7 @@ public class FetchUseCase
         cancellationToken.ThrowIfCancellationRequested();
         progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
 
+        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using var context = _contextFactory(request.RepositoryDirectory);
         progress?.Report(new OperationProgress(OperationStage.LoadingMetadata));
         var localConfig = context.LoadConfig();

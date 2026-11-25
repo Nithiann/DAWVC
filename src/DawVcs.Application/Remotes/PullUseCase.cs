@@ -1,6 +1,8 @@
 using DawVcs.Application.Checkouts;
 using DawVcs.Application.Common;
 using DawVcs.Application.Diagnostics;
+using DawVcs.Application.Operations;
+using DawVcs.Application.Recovery;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Dependencies;
 using DawVcs.Domain.Remotes;
@@ -14,7 +16,10 @@ public sealed record PullRequest(
     string? Branch = null,
     bool Force = false,
     bool FfOnly = true,
-    bool DryRun = false);
+    bool DryRun = false)
+{
+    internal RepositoryOperation? Operation { get; init; }
+}
 
 public sealed record DoctorReportSummary(
     double ReproducibilityScore,
@@ -71,7 +76,10 @@ public sealed class PullUseCase
     public async Task<PullResult> ExecuteAsync(
         PullRequest request, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
     {
-        var result = await ExecuteCoreAsync(request, cancellationToken, progress).ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(request);
+        using var operation = request.DryRun ? null
+            : RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation, cancellationToken: cancellationToken);
+        var result = await ExecuteCoreAsync(request with { Operation = operation }, cancellationToken, progress).ConfigureAwait(false);
         progress?.Report(new OperationProgress(OperationStage.Completed));
         return result;
     }
@@ -86,6 +94,7 @@ public sealed class PullUseCase
         var nestedProgress = progress is null ? null : new NestedOperationProgress(progress);
 
         progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
+        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
         using var context = _contextFactory(request.RepositoryDirectory);
         var target = SyncTarget.ForPull(context, request.RemoteName, request.Branch);
         var targetBranch = target.LocalBranch;
@@ -93,7 +102,7 @@ public sealed class PullUseCase
         var finalRemoteBranch = target.RemoteBranch;
 
         // Resolve upstream before fetching, so Fetch and integration use the same source.
-        var fetchRequest = new FetchRequest(request.RepositoryDirectory, remoteName, finalRemoteBranch.Value, request.DryRun);
+        var fetchRequest = new FetchRequest(request.RepositoryDirectory, remoteName, finalRemoteBranch.Value, request.DryRun) { Operation = request.Operation };
         var fetchResult = nestedProgress is null
             ? await _fetchUseCase.ExecuteAsync(fetchRequest, cancellationToken).ConfigureAwait(false)
             : await _fetchUseCase.ExecuteAsync(fetchRequest, cancellationToken, nestedProgress).ConfigureAwait(false);
@@ -176,6 +185,7 @@ public sealed class PullUseCase
 
                 // 3. Fast-forward workspace update via PublicationJournal (FR-PUL-006..008, AC-030)
                 var ffTarget = new FastForwardTarget(request.RepositoryDirectory, targetBranch, localTip, remoteTip.Value);
+                ffTarget = ffTarget with { Operation = request.Operation };
                 var checkoutResult = nestedProgress is null
                     ? await _checkoutUseCase.ExecuteFastForwardAsync(ffTarget, request.Force, cancellationToken).ConfigureAwait(false)
                     : await _checkoutUseCase.ExecuteFastForwardAsync(ffTarget, request.Force, cancellationToken, nestedProgress).ConfigureAwait(false);
@@ -187,7 +197,7 @@ public sealed class PullUseCase
                     progress?.Report(new OperationProgress(OperationStage.ProbingEnvironment));
                     try
                     {
-                        var docReport = await _doctorUseCase.ExecuteAsync(new DoctorRequest(request.RepositoryDirectory), cancellationToken).ConfigureAwait(false);
+                        var docReport = await _doctorUseCase.ExecuteAsync(new DoctorRequest(request.RepositoryDirectory) { Operation = request.Operation }, cancellationToken).ConfigureAwait(false);
                         var plugins = docReport.DependencyHealth.Where(d => d.Category.Equals("Plugin", StringComparison.OrdinalIgnoreCase)).ToList();
                         var assets = docReport.DependencyHealth.Where(d => d.Category.Equals("Asset", StringComparison.OrdinalIgnoreCase)).ToList();
 

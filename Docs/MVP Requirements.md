@@ -752,6 +752,92 @@ missing closure objects, interrupted transfers, expected-tip races and CLI exits
 | FR-SSH-008 | Serve stdout is protocol-only. Errors carry safe typed codes rather than raw host paths/exception messages. Private keys/passwords are never stored in repository configuration or wire frames. |
 | FR-SSH-009 | PC, NAS and server hosting use identical SSH/DAWVC behavior where compatible OpenSSH and DAWVC are installed. Existing GitHub/GitLab Git endpoints are not DAWVC protocol endpoints. |
 
+
+# Post-MVP amendment: bare hosting and first publication (23 November 2026)
+
+| ID | Priority | Requirement |
+|---|---|---|
+| FR-BARE-001 | Must | `init --bare --from <source> --dir <target>` creates an empty bare receiver with the source identity, configuration and default branch; no primary file is needed at the target. |
+| FR-BARE-002 | Must | Source configuration must be available through a compatible matching handshake. Identity checks are not relaxed for first Push. |
+| FR-BARE-003 | Must | `clone <source> [target] --bare` transfers verified reachable objects and creates every fetched branch without workspace materialization or Doctor/index access. |
+| FR-BARE-004 | Must | Bare layout has dawvc.yaml, HEAD, objects/ and refs/heads/ at its root, with no nested .dawvc or copied source bindings/index. Empty histories and unborn defaults are valid. |
+| FR-BARE-005 | Must | Destinations must be absent or empty; existing files/nonempty repositories, bare force and destination links/junctions are rejected without replacing user data. |
+| FR-BARE-006 | Must | Prepare under the target parent and publish the complete layout only after success. Corruption, incompatible identity and cancellation before publication must not expose a partial repository. |
+| FR-BARE-007 | Must | Both built-in filesystem/file:// and dawvc:// sources work; destination provisioning remains a host-local administrative operation, with explicit SSH alias/push authorization. |
+| FR-BARE-008 | Must | Shared API and CLI expose cancellation/progress and typed errors; completion follows publication. Document crash/cleanup/empty-placeholder and cooperating-writer boundaries. |
+
+No `init --bare` with random identity, remote provisioning wire command, mirror
+update, force replacement, GUI, merge or additional DAW adapter is introduced.
+
+
+# Post-MVP amendment: explicit snapshot merge (23 November 2026)
+
+| ID | Priority | Requirement |
+|---|---|---|
+| FR-MRG-001 | Must | `merge <reference> --take local|incoming -m <message>` requires explicit whole-snapshot choice and message; no semantic/native FLP rewriting. |
+| FR-MRG-002 | Must | A new immutable commit retains local and incoming tips as ordered parents and references the exact chosen snapshot ID, preserving asset/dependency/metadata/completeness semantics. |
+| FR-MRG-003 | Must | Accept only existing diverged local histories with a common ancestor. Reject unborn, identical, ancestor/descendant, unrelated or missing references without moving refs. |
+| FR-MRG-004 | Must | Verify commit ancestry and both tip snapshots/blobs before publication; reject corrupt/missing data, unsafe paths, unsupported schemas/types and oversized metadata. |
+| FR-MRG-005 | Must | Bound traversal to 50,000 unique commits, 1,000,000 parent edges, 2 MiB per metadata object and 64 MiB cumulative metadata payload. |
+| FR-MRG-006 | Must | Block tracked/staged local changes and collisions with untracked files. No force option. Reuse checkout staged publication/compensation. |
+| FR-MRG-007 | Must | Detect expected active-branch/tip changes before checkout journal application. Document cooperating-client, crash and incomplete-rollback limits; no global transaction claim. |
+| FR-MRG-008 | Must | Preserve source/tracking refs and both histories; a later normal Push/Pull may fast-forward through either parent. No automatic network transfer inside Merge. |
+| FR-MRG-009 | Must | Shared API supports typed failures, progress/cancellation; log displays merge parents. Publication may survive later cancellation/failure; unreachable immutable objects may remain. |
+
+This amendment supersedes the historical blanket deferral of merging for this
+explicit snapshot-choice workflow only. Semantic/per-file merges remain deferred.
+
+
+# Preview qualification amendment: scoped acceptance evidence (24 November 2026)
+
+| ID | Priority | Requirement |
+|---|---|---|
+| NFR-ACC-001 | Must | Exercise the verified, extracted Windows distribution through CLI collaboration, independently of in-process/DLL tests. |
+| NFR-ACC-002 | Must | Record candidate version/hash, platform/time, fixture/transport/workstation scope and per-check outcomes in versioned QA evidence. |
+| NFR-ACC-003 | Must | Unexpected exits, timeouts and content/ref mismatches fail the runner/CI; expected protection refusals are explicitly tested. |
+| NFR-ACC-004 | Must | Use disposable synthetic projects and own temporary remote storage; do not upload musical contents, keys, private paths or native scan logs as CI evidence. |
+| NFR-ACC-005 | Must | Validate archive integrity, safe paths/aliases/member types and extraction budgets before execution; checksums do not establish publisher identity. |
+| NFR-ACC-006 | Must | Keep real Windows/FL Studio playback, clean-VM, two-machine, SSH and NAS/SMB qualification gates pending until executed on the actual setups. Synthetic single-host tests do not satisfy those gates. |
+
+These requirements govern QA tooling/evidence only; no GUI, additional DAW,
+product runtime dependency, persisted engine schema or wire change is introduced.
+
+
+# Durability amendment: workspace recovery (24 November 2026)
+
+| ID | Priority | Requirement |
+|---|---|---|
+| FR-REC-001 | Must | Prepare flushed private backups and a versioned recovery manifest before in-place checkout/switch/fast-forward publication changes any workspace file. |
+| FR-REC-002 | Must | Capture before/after file hashes, repository identity, HEAD/affected branch tips and logical staged entries; do not depend on an in-memory action list after restart. |
+| FR-REC-003 | Must | Persist a Committed decision after file/ref/index success and before backup cleanup; restart distinguishes rollback of Prepared from verification/finalization of Committed. |
+| FR-REC-004 | Must | Provide read-only `recover` inspection and explicit `recover --rollback`; no automatic or force overwrite mode. |
+| FR-REC-005 | Must | Validate every affected target/backup/ref/index before restoration; unexpected edits, corrupt/foreign/unknown manifests, links/unsafe paths and ambiguous multiple transactions retain evidence and refuse. |
+| FR-REC-006 | Must | Recovery is restartable across file, ref and partial staging restoration. Atomic flushed per-file replacement and expected staging subsets preserve retryability. |
+| FR-REC-007 | Must | Own publication/recovery exclusively with a persistent handle lock; new cooperating mutations and remote handshakes refuse pending envelopes. Never infer active ownership from lock-file existence. |
+| FR-REC-008 | Must | Terminal envelopes move out of the active namespace before recursive cleanup; interrupted cleanup cannot create a half-deleted active recovery manifest. |
+| FR-REC-009 | Must | Bound local manifests to schema 1, 16 MiB, 10k affected files and 10k staged entries; use validated relative paths/derived backup names and BLAKE3 identities. |
+| FR-REC-010 | Must | Test actual process kill at publication/metadata/decision/recovery points. Document incomplete compensation, orphan/private data, power-cycle/storage qualification, non-journaled operations and operation-wide concurrency limits. |
+
+This adds local recovery metadata only, not shared object or remote wire schemas.
+SQLite staged intent is preserved logically; cache rows, SQL timestamps, directory
+layout/timestamps, ACLs and file modes are not a byte-identical filesystem backup.
+
+
+# Concurrency amendment: repository operation ownership (24 November 2026)
+
+| ID | Priority | Requirement |
+|---|---|---|
+| FR-OPS-001 | Must | Serialize cooperating local working-repository writers across processes for the entire read/plan/write span, including local network waits and cache/binding updates. |
+| FR-OPS-002 | Must | Allow awaited nested Fetch/Status/Checkout/Doctor under explicit internal ownership; independent callbacks and public operations must not inherit reentrancy. |
+| FR-OPS-003 | Must | Refuse contention immediately with RepositoryBusyException, appended RepositoryBusy category and local CLI exit 11; busy remote receivers retain RemoteError/exit 8. |
+| FR-OPS-004 | Must | Own incoming filesystem/SSH destination writes throughout quarantine/publication/session disposal, with operation-before-recovery-before-ref lock order and no waiting across repositories. |
+| FR-OPS-005 | Must | Coordinate Init, normal Clone and bare provisioning with a canonical-target sibling creation lease before creating/replacing destination contents. |
+| FR-OPS-006 | Must | Release handles on success, validation failure, cancellation and process death; persistent empty coordination files must never be deleted to break ownership. |
+| FR-OPS-007 | Must | Reject linked/reparse-point lock paths and unknown nonempty lock-file contents; preserve repository data on contention. |
+| FR-OPS-008 | Must | Test real child-process contention/crash release, callback isolation, independent copies, creation and incoming push ownership, and nested workflow regressions. |
+| FR-OPS-009 | Must | Document cooperative participation, raw/older clients and external writers/restore exclusions; keep native, physical-power and NAS qualification gates distinct. |
+
+
 # Post-MVP amendment: sync target selection (23 November 2026)
 
 | ID | Requirement |
@@ -762,10 +848,10 @@ missing closure objects, interrupted transfers, expected-tip races and CLI exits
 | FR-SYN-004 | Tracking updates preserve other remote/upstream settings and use atomic file replacement; no persisted schema change. |
 | FR-SYN-005 | Pull fetches only its selected remote/source branch before ancestry/materialization; it does not move another local branch or switch HEAD because a remote branch argument was supplied. |
 | FR-SYN-006 | CLI clone/fetch/pull/push forward Ctrl+C cancellation tokens, await engine completion/compensation, and report cancellation with exit 130. Cancellation still does not imply rollback of all durable effects. |
-| FR-SYN-007 | If the active local branch changes during Fetch, Pull stops before checkout with a typed repository-state error. Already fetched objects/tracking may remain. This is not operation-wide cross-process locking. |
+| FR-SYN-007 | If the active local branch changes during Fetch, Pull stops before checkout with a typed repository-state error. Already fetched objects/tracking may remain. This expected-state check complements WP-SYNC-08 cooperating writer ownership. |
 
-Pull dry-run freshness is tracked separately in WP-SYNC-03; no new guarantee of
-accurate online preview is introduced by target selection changes.
+Target selection and fresh-preview requirements are integrated together by
+WP-SYNC-09 on the recovery/ownership stack; their original WPs remain historical.
 
 # Post-MVP amendment: fresh sync previews (23 November 2026)
 
@@ -782,3 +868,14 @@ accurate online preview is introduced by target selection changes.
 FetchResult.UpdatedRefs means planned updates when IsDryRun=true and applied
 updates otherwise. A preview snapshot carries only immutable refs/parent links,
 not writable handles, local paths or retained quarantine.
+
+
+# Integration amendment: coherent sync workflow (24 November 2026)
+
+| ID | Priority | Requirement |
+|---|---|---|
+| FR-INT-001 | Must | Port upstream and fresh-preview workflows onto durable recovery and operation ownership without losing bare provisioning, both-parent merge history, typed errors or existing CLI flags. |
+| FR-INT-002 | Must | Track upstream mutations honor operation ownership and pending recovery before opening a mutable context; preserve settings on refusal. |
+| FR-INT-003 | Must | Fetch/Pull/Push dry-runs create no operation lock, index, object directories or quarantine; execution retains writer ownership and nested capability forwarding. |
+| FR-INT-004 | Must | Test mapped Pull preview/execution through a merge's second parent for both snapshot choices over filesystem and SSH; preserve the other local branch and preview bytes/layout. |
+| FR-INT-005 | Must | Publish integration as a separate reviewable WP, document source commits and native/storage/Ctrl+C qualification limits, and never imply maintainer approval/merge. |

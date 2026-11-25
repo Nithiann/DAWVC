@@ -85,3 +85,37 @@ observes disconnect/EOF and releases its session. Abrupt host termination releas
 OS locks but may leave quarantine. Acknowledgement loss after ref publication is
 ambiguous: fetch/inspect refs before retrying. Push-session disposal closes that
 SSH connection. No implicit tracking-ref/upstream changes or destructive repair.
+
+
+## Bare provisioning compatibility (WP-SYNC-04)
+
+Bare init/clone adds no wire operation or version change. A local operator uses
+`init --bare --from <source>` to read source configuration via hello, or
+`clone --bare` to read configuration/refs/verified objects via the existing read
+operations. The target is a local filesystem directory. Provisioning never asks
+SSH serve to create an arbitrary remote path; expose the resulting host path
+through an explicitly configured alias/push policy. First Push keeps the same
+repository identity and fast-forward/closure/conditional-publication checks.
+
+
+## Explicit Merge compatibility (WP-SYNC-05)
+
+Explicit local Merge uses the existing multi-parent commit payload and a reused
+snapshot ID. Object traversal/closure validation and fast-forward checks already
+follow all parents; no hello, ref, object, publication operation or wire version
+changes. Fetch precedes local Merge; publication remains ordinary Push. Receivers
+need the existing compatible DAWVC protocol, not a native FLP merge service.
+
+WP-SYNC-08: receiving push sessions acquire the same destination operation lease
+as upgraded local writers before the ref lock, retaining both through session
+disposal. Busy destinations fail through the existing remote error, not a new
+wire frame/code. This applies to bare `operation.lock` and non-bare
+`.dawvc/operation.lock`. A prior handshake is not authorization to bypass a later
+pending recovery/ownership check. Hosts/older clients/raw backends and storage
+qualification remain cooperative deployment responsibilities.
+
+WP-SYNC-09 fresh previews reuse handshake/refs/object reads with no new wire
+operation. Missing commit/snapshot metadata is verified in bounded memory and
+parent links are pinned for ancestry; preview blob bodies are not downloaded.
+Upstream settings are client-local and `remote track` makes no host request.
+Actual Pull re-reads the host before publication. No ref reservation is provided.

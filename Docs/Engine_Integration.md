@@ -47,9 +47,8 @@ commit cursors/offsets and retain the selected immutable commit ID across pages.
 Snapshot dependencies omit original locators, provenance and machine paths.
 They describe recorded snapshots, not a live dependency scan.
 
-Queries avoid staging/index repair. Context/object-store construction is now side-effect free. Staging-index creation
-is lazy and happens only if requested. Object writes initialize scratch storage;
-explicit Init creates its layout. Metadata/viewer/preview reads do not create it.
+Queries avoid staging/index repair. Stock filesystem context/object-store construction is now side-effect free
+(WP-SYNC-09); actual writes initialize their storage and the staging index is lazy.
 Snapshot objects are still fully deserialized internally, so bounded output does
 not provide bounded-memory loading for arbitrarily large snapshots.
 
@@ -91,43 +90,108 @@ or adding a remote. Keys/host trust come from OpenSSH configuration and agent,
 not engine or GUI credential fields. A host exposes only aliases in its policy
 through transient `serve`. See Remote_Protocol.md and Self_Hosting_SSH.md.
 
-## Upstream configuration and sync target selection
 
-Call `RemoteUseCase.TrackRemote(TrackRemoteRequest, CancellationToken)` to configure
-an existing local branch against a configured remote; active unborn HEAD is valid.
-It performs no network I/O. Existing settings are atomically replaced and other
-remote/upstream entries are retained. Resolve Push/Pull through the shared use
-cases rather than reimplementing target rules in a client. Pull's optional Branch
-is the remote source; its result Branch is always the active local destination.
-A matching explicit remote preserves an upstream mapping.
+## Bare hosting integration (WP-SYNC-04)
 
-CLI handlers now use the same per-invocation cancellation contract for clone,
-fetch, pull and push. Fresh Pull dry-run metadata is implemented in WP-SYNC-03 below; it is distinct
-from target selection.
+Resolve `BareRepositoryUseCase` from Bootstrap. `BareRepositoryRequest(Source,
+TargetDirectory)` initializes an empty same-identity receiver; `CopyHistory: true`
+fetches verified reachable history and publishes all fetched branch heads. Results
+include configuration, copied branch count, default tip and transfer counts.
+`CloneRequest.Bare` exposes the same copy path through Clone without checkout or
+Doctor; `Force` plus `Bare` is rejected. Existing positional request arguments keep
+their meaning. No GUI or new package/protocol dependency is introduced.
 
-For developer validation, `scripts/test_sync_cancellation.py` sends real SIGINT to
-the Linux CLI while an isolated SSH shim blocks connection setup. It checks exit
-130 and SSH child termination for all four sync commands, without a real host or
-keys. Set DAWVC_DOTNET if needed. This is not native Windows Ctrl+C validation.
+Contexts/transports are disposed before publishing the bare root. Child completion
+is suppressed; top-level completion follows directory publication. Await the call
+on cancellation; it does not reserve the destination or undo a completed rename.
+Source providers must include matching configuration in their handshake. Custom
+Fetch providers must supply accurate updated refs/verified objects in the new
+empty staging repository. The target is local, even when the source uses SSH.
+See ADR-REM-005 and the recovery guide for publication and cleanup boundaries.
 
-Pull rechecks the active branch after Fetch. `RepositoryStateChangedException`
-(classified as Validation) stops checkout if the branch changed during transfer.
-Fetched metadata may remain. This precondition check is not a cross-process lock
-against all concurrent local mutations.
 
-## Fresh preview contract
+## Explicit merge integration (WP-SYNC-05)
 
-FetchResult.UpdatedRefs contains planned updates when IsDryRun=true, actual applied
-updates otherwise. Preview carries copied read-only advertised refs and verified
-commit parent lists, no handles/paths; it remains usable after transport/context
-disposal. Pull dry-run uses that snapshot through DeterminePreviewStateAsync plus
-existing local commit reads, never cached tracking refs. A custom FetchUseCase
-implementation must populate Preview for dry-run; missing snapshots fail closed.
+Resolve `MergeUseCase`; pass MergeRequest(repository, reference,
+MergeSnapshotChoice.Local/Incoming, message, author). There is no default snapshot
+choice. The result exposes new commit ID, both ordered parent IDs, selected
+snapshot ID, active branch and restored files. Merge accepts only diverged related
+local tips; clients own Fetch, review and deliberate snapshot selection. Both tip
+snapshots/blobs are verified, selected metadata/dependencies/completeness are
+reused by identity, and checkout publishes the result without force.
 
-No quarantine factory is invoked or stale sessions pruned during preview. No
-staging property is accessed, so disposal does not clear another index owner's
-SQLite pool. Each metadata object is capped at 2 MiB, aggregate received metadata
-at 64 MiB, inspected object identities at 100,000, commit/ancestry budgets at
-50,000 and remote parent links at 1,000,000. Limit, integrity and cancellation
-failures preserve local content/layout. Blob payloads and workspace dirty-state
-planning are deliberately excluded; see the CLI reference for advisory semantics.
+Progress uses existing typed stages and nested completion suppression. Await
+cancellation; a durable merge is not undone after publication. State-change errors
+classify as Validation. `FastForwardTarget.RequireExpectedState` opts into active
+branch/tip checks immediately before journal application; Merge sets it. Existing
+callers retain their prior behavior. These state checks complement the operation-wide ownership added in WP-SYNC-08.
+No persisted schema, wire contract, UI or dependency changes. Failed operations
+can leave unreachable objects; full historical snapshot/blob auditing remains Fsck.
+
+
+## Workspace recovery integration (WP-SYNC-07)
+
+Resolve WorkspaceRecoveryUseCase for explicit RollbackAsync; static InspectAsync
+reads manifest summaries without opening a context/index. Results expose counts,
+IDs and states. WorkspaceRecoveryRequiredException maps to the appended
+OperationFailureCategory.RecoveryRequired; CLI exit 10. Clients must not infer
+that a process failure undid publication, nor retry mutations before inspecting
+pending recovery. No forced conflict overwrite or auto-recovery is exposed.
+
+Checkout's working-repository publication writes a local durable envelope and
+retains existing handled rollback. Recovery preserves logical staged entries
+(path/blob/hash/size/role), not SQLite/cache bytes. Ownership remains caller/local
+operation based; low-level repository/index methods bypass use-case guards and
+must not be used concurrently to mutate a recovering repository. Read the recovery
+guide for committed decisions, partial staging replay, cleanup and power limits.
+No shared object/wire schema or new runtime dependency; a test-only crash host is
+not part of the shipped CLI. WP-SYNC-08 adds operation-wide ownership as described below.
+
+
+## Operation ownership (WP-SYNC-08)
+
+Stock mutation use cases now acquire a fail-fast repository-wide OS handle lease
+before context creation and keep it through local work/resource disposal. Status
+and Doctor participate because they update caches/bindings. Pull/Push retain local
+ownership while awaiting the remote. Await operations and cancellation before
+retrying; RepositoryBusyException maps to appended OperationFailureCategory.
+RepositoryBusy and CLI exit 11. A busy incoming SSH/filesystem push is RemoteError
+(exit 8). No public token/reentrancy API or wire change is introduced.
+
+Known nested calls use internal explicit capability copies; unrelated calls from
+progress handlers/Task.Run receive Busy rather than inheriting ambient authority.
+A slow progress handler can therefore prolong ownership. Do not await a second
+public writer from a handler. Operation, recovery and ref handles always acquire
+in that order; no cross-repository waits. Init/Clone/bare provision also use a
+persistent hashed sibling creation lease (parent write permission required).
+
+Use the stock composition for this guarantee. Raw context/index methods and custom
+overrides/providers must implement their own coordination; old clients, DAW saves
+and external restore targets remain outside it. Read-only queries are not atomic
+workspace snapshots and custom backend opening may write housekeeping metadata.
+Do not delete operation/ref/recovery/creation lock files. Empty files persist after
+handles close; process death releases ownership. See ADR-OPS-001 and Recovery Guide.
+
+
+## Integrated sync targets and previews (WP-SYNC-09)
+
+`RemoteUseCase.TrackRemote(TrackRemoteRequest)` validates/saves an upstream offline;
+track mutations share the Busy/recovery guard contract. Push/Pull resolve one
+SyncTarget before transfer. Pull always integrates into the active local branch;
+explicit matching remote names retain upstream mapping. Existing public request
+constructors and bare/merge/recovery entry points are retained.
+
+FetchResult.Preview is an immutable pinned advertisement/verified parent overlay.
+Pull dry-run requires this from custom Fetch providers instead of falling back to
+stale tracking. Metadata is bounded, verified and kept in memory; blobs are not
+fetched by Fetch/Pull preview. Dry-run creates no writer lease or storage/index/
+quarantine. Previews are advisory read operations, not atomic views during other
+writers; pending recovery still refuses them. Real Fetch/Pull/Push retain ownership
+across network waits and nested Status/Checkout/Doctor, and publication still uses
+the durable envelope. Both merge parents participate in preview and execution.
+
+Stock context construction no longer creates directories or opens an index.
+Disposal only disposes/clears an index pool actually owned by that context. Using
+StagingIndex after context disposal throws. Custom providers must maintain the
+same read-only/lifetime contract; contexts remain caller-owned and not shared
+across concurrent operations. No new on-disk/object/wire schema or runtime package.

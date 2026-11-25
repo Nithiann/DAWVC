@@ -1,4 +1,6 @@
 using DawVcs.Application.Common;
+using DawVcs.Application.Operations;
+using DawVcs.Application.Recovery;
 using DawVcs.Domain.Artifacts;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Configuration;
@@ -9,7 +11,10 @@ namespace DawVcs.Application.Repositories;
 public sealed record InitRequest(
     string TargetDirectory,
     string? ProjectName = null,
-    string? PrimaryArtifactPath = null);
+    string? PrimaryArtifactPath = null)
+{
+    internal RepositoryOperation? Operation { get; init; }
+}
 
 public sealed record InitResult(
     RepositoryId RepositoryId,
@@ -40,6 +45,8 @@ public sealed class InitRepositoryUseCase : IUseCase<InitRequest, InitResult>
 
         cancellationToken.ThrowIfCancellationRequested();
         var targetDir = Path.GetFullPath(request.TargetDirectory);
+        using var operation = RepositoryOperation.Enter(targetDir, request.Operation, create: true, cancellationToken: cancellationToken);
+        WorkspaceRecoveryGuard.ThrowIfPending(targetDir);
         Directory.CreateDirectory(targetDir);
 
         using var context = _contextFactory(targetDir);

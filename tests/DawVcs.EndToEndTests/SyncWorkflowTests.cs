@@ -145,6 +145,17 @@ public sealed class SyncWorkflowTests : IDisposable
         inspect.GetRemote("backup")!.Url.Should().Be(Remote);
     }
 
+    [Fact]
+    public async Task CliTrack_PendingRecoveryRefusesWithoutChangingUpstreamSettings()
+    {
+        using (var context = Context(Local)) context.SaveRemote(new RemoteConfig(new RemoteName("backup"), Remote));
+        var path = Path.Combine(Local, ".dawvc", "remotes.json");
+        var before = File.ReadAllBytes(path);
+        Directory.CreateDirectory(Path.Combine(Local, ".dawvc", "transactions", "pending"));
+        (await DawVcs.Cli.Program.Main(["remote", "track", "backup", "published", "--dir", Local])).Should().Be(10);
+        File.ReadAllBytes(path).Should().Equal(before);
+    }
+
     [Theory]
     [InlineData("missing", "main", null)]
     [InlineData("backup", "../invalid", null)]

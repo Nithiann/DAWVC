@@ -10,6 +10,7 @@ using DawVcs.Application.Common;
 using DawVcs.Application.Dependencies;
 using DawVcs.Application.Diagnostics;
 using DawVcs.Application.Exceptions;
+using DawVcs.Application.Recovery;
 using DawVcs.Application.Remotes;
 using DawVcs.Application.Repositories;
 using DawVcs.Application.Scanning;
@@ -84,14 +85,35 @@ public static class Program
         initCommand.AddOption(initDirOption);
         initCommand.AddOption(initNameOption);
         initCommand.AddOption(initPrimaryOption);
+        var initBareOption = new Option<bool>("--bare", "Create an empty hosting repository with the source identity");
+        var initFromOption = new Option<string?>("--from", "Source repository path or dawvc:// URL (required with --bare)");
+        initCommand.AddOption(initBareOption);
+        initCommand.AddOption(initFromOption);
 
-        initCommand.SetHandler(async (dir, name, primary) =>
+        initCommand.SetHandler(async (InvocationContext invocation) =>
         {
             try
             {
+                var parsed = invocation.ParseResult;
+                var dir = parsed.GetValueForOption(initDirOption);
+                var name = parsed.GetValueForOption(initNameOption);
+                var primary = parsed.GetValueForOption(initPrimaryOption);
+                var bare = parsed.GetValueForOption(initBareOption);
+                var from = parsed.GetValueForOption(initFromOption);
                 var targetDir = string.IsNullOrWhiteSpace(dir) ? Directory.GetCurrentDirectory() : dir;
+                if (bare)
+                {
+                    if (string.IsNullOrWhiteSpace(from) || name is not null || primary is not null)
+                        throw new ArgumentException("init --bare requires --from <source>; --name and --primary are inherited and cannot be overridden.");
+                    var provisioned = await serviceProvider.GetRequiredService<BareRepositoryUseCase>()
+                        .ExecuteAsync(new BareRepositoryRequest(from, targetDir), invocation.GetCancellationToken());
+                    AnsiConsole.MarkupLine($"[green]✓[/] Initialized empty bare repository in [bold]{Markup.Escape(PathRedactor.Redact(provisioned.TargetDirectory))}[/]");
+                    AnsiConsole.MarkupLine($"  [dim]Repository ID:[/] {provisioned.Configuration.RepositoryId}");
+                    return;
+                }
+                if (from is not null) throw new ArgumentException("--from requires --bare.");
                 var useCase = serviceProvider.GetRequiredService<InitRepositoryUseCase>();
-                var result = await useCase.ExecuteAsync(new InitRequest(targetDir, name, primary));
+                var result = await useCase.ExecuteAsync(new InitRequest(targetDir, name, primary), invocation.GetCancellationToken());
 
                 if (result.WasAlreadyInitialized)
                 {
@@ -107,11 +129,83 @@ public static class Program
                 AnsiConsole.MarkupLine($"  [dim]Primary File:[/]  [cyan]{Markup.Escape(result.PrimaryArtifact.Value)}[/]");
                 AnsiConsole.MarkupLine($"  [dim]Branch:[/]        [yellow]{result.DefaultBranch.Value}[/]");
             }
-            catch (Exception ex)
+            catch (OperationCanceledException) { invocation.ExitCode = 130; WriteError("Initialization cancelled; inspect the destination before retrying."); }
+            catch (RemoteException ex) { invocation.ExitCode = 8; WriteError(ex.Message); }
+            catch (PathSecurityException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
+            catch (ArgumentException ex) { invocation.ExitCode = 7; WriteError(ex.Message); }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
+            catch (Exception ex) { invocation.ExitCode = 1; WriteError(ex.Message); }
+        });
+
+        // Explicit whole-snapshot resolution; no semantic FLP merge or implicit Fetch.
+        var mergeCommand = new Command("merge", "Resolve diverged history by choosing one complete project snapshot");
+        var mergeReference = new Argument<string>("reference", "Fetched tracking ref, local branch or commit ID");
+        var mergeTake = new Option<string>("--take", "Required: local or incoming (entire project snapshot)") { IsRequired = true };
+        var mergeMessage = new Option<string>(MessageAliases, "Merge commit message") { IsRequired = true };
+        var mergeAuthor = new Option<string?>("--author", "Author name/identity");
+        var mergeDir = new Option<string?>("--dir", "Working repository directory");
+        mergeCommand.AddArgument(mergeReference);
+        mergeCommand.AddOption(mergeTake);
+        mergeCommand.AddOption(mergeMessage);
+        mergeCommand.AddOption(mergeAuthor);
+        mergeCommand.AddOption(mergeDir);
+        mergeCommand.SetHandler(async (InvocationContext invocation) =>
+        {
+            try
             {
-                WriteError(ex.Message, 1);
+                var parsed = invocation.ParseResult;
+                var take = parsed.GetValueForOption(mergeTake) switch
+                {
+                    "local" => MergeSnapshotChoice.Local,
+                    "incoming" => MergeSnapshotChoice.Incoming,
+                    _ => throw new ArgumentException("--take must be local or incoming; it selects the complete project snapshot.")
+                };
+                var result = await serviceProvider.GetRequiredService<MergeUseCase>().ExecuteAsync(new MergeRequest(
+                    ResolveRepoDirectory(parsed.GetValueForOption(mergeDir)), parsed.GetValueForArgument(mergeReference),
+                    take, parsed.GetValueForOption(mergeMessage)!, parsed.GetValueForOption(mergeAuthor)), invocation.GetCancellationToken());
+                AnsiConsole.MarkupLine($"[green]✓[/] Created merge [bold]{result.CommitId.ToString()[..8]}[/] using the {take.ToString().ToLowerInvariant()} snapshot; both parent histories are preserved.");
             }
-        }, initDirOption, initNameOption, initPrimaryOption);
+            catch (DirtyWorkspaceException ex) { invocation.ExitCode = 4; WriteError(ex.Message); }
+            catch (RepositoryStateChangedException ex) { invocation.ExitCode = 7; WriteError(ex.Message); }
+            catch (ArgumentException ex) { invocation.ExitCode = 7; WriteError(ex.Message); }
+            catch (InvalidEnvelopeException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
+            catch (PathSecurityException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
+            catch (CheckoutStagingException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
+            catch (FileNotFoundException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
+            catch (OperationCanceledException) { invocation.ExitCode = 130; WriteError("Merge cancelled. Inspect the current branch before retrying; a completed publication is not undone."); }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
+            catch (Exception ex) { invocation.ExitCode = 1; WriteError(ex.Message); }
+        });
+
+        var recoverCommand = new Command("recover", "Inspect or roll back interrupted workspace publication");
+        var recoverDir = new Option<string?>("--dir", "Working repository directory");
+        var recoverRollback = new Option<bool>("--rollback", "Explicitly restore the previous workspace/ref/staging state; committed transactions are verified and cleaned");
+        recoverCommand.AddOption(recoverDir);
+        recoverCommand.AddOption(recoverRollback);
+        recoverCommand.SetHandler(async (InvocationContext invocation) =>
+        {
+            try
+            {
+                var root = ResolveRepoDirectory(invocation.ParseResult.GetValueForOption(recoverDir));
+                if (invocation.ParseResult.GetValueForOption(recoverRollback))
+                {
+                    var result = await serviceProvider.GetRequiredService<WorkspaceRecoveryUseCase>().RollbackAsync(root, invocation.GetCancellationToken());
+                    AnsiConsole.MarkupLine($"[green]✓[/] Recovery finished: {result.RolledBack} rolled back, {result.CommittedCleaned} committed transaction(s) cleaned.");
+                }
+                else
+                {
+                    var pending = await WorkspaceRecoveryUseCase.InspectAsync(root, invocation.GetCancellationToken());
+                    foreach (var item in pending) AnsiConsole.MarkupLine($"[yellow]{item.Id}[/] {item.State}: {item.Files} file(s), {item.StagedEntries} saved staged entry/entries.");
+                    if (pending.Count == 0) AnsiConsole.MarkupLine("No pending workspace transactions.");
+                }
+            }
+            catch (RepositoryBusyException ex) { invocation.ExitCode = 11; WriteError(ex.Message); }
+            catch (WorkspaceRecoveryRequiredException ex) { invocation.ExitCode = 10; WriteError(ex.Message); }
+            catch (OperationCanceledException) { invocation.ExitCode = 130; WriteError("Recovery cancelled; retain the transaction and retry after inspecting state."); }
+            catch (Exception ex) { invocation.ExitCode = 10; WriteError(ex.Message); }
+        });
 
         // --- dawvc commit ---
         var commitCommand = new Command("commit", "Record changes to the repository");
@@ -152,6 +246,8 @@ public static class Program
                 AnsiConsole.MarkupLine($"[yellow]{Markup.Escape(PathRedactor.Redact(ex.Message))}[/]");
                 Environment.ExitCode = 0;
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -185,11 +281,15 @@ public static class Program
                     AnsiConsole.MarkupLine($"Author:    {Markup.Escape(entry.Author)}");
                     AnsiConsole.MarkupLine($"Date:      {entry.Timestamp:yyyy-MM-dd HH:mm:ss zzz}");
                     AnsiConsole.MarkupLine($"Snapshot:  [dim]{entry.SnapshotId}[/]");
+                    if (entry.Parents.Count > 1)
+                        AnsiConsole.MarkupLine($"Parents:   [dim]{string.Join(" ", entry.Parents)}[/]");
                     AnsiConsole.WriteLine();
                     AnsiConsole.WriteLine($"    {entry.Message}");
                     AnsiConsole.WriteLine();
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -262,6 +362,8 @@ public static class Program
             {
                 WriteError(ex.Message, 5);
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -303,6 +405,8 @@ public static class Program
                         break;
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -377,6 +481,8 @@ public static class Program
                     AnsiConsole.MarkupLine("nothing to commit, working tree clean");
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -406,6 +512,8 @@ public static class Program
                     AnsiConsole.MarkupLine($"  [green]+[/] {Markup.Escape(path.Value)}");
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -518,6 +626,8 @@ public static class Program
                 }
                 AnsiConsole.WriteLine();
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -575,6 +685,8 @@ public static class Program
                     }
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -633,6 +745,8 @@ public static class Program
                 WriteError($"Staging conflict (Exit Code 7): {ex.Message}", 7);
                 AnsiConsole.MarkupLine("[yellow]Remediation:[/] Commit or stage your changes, or use [bold]dawvc switch --force <branch>[/] to create a recovery copy.");
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -844,6 +958,8 @@ public static class Program
                     Environment.ExitCode = 0;
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -942,6 +1058,8 @@ public static class Program
                     Environment.ExitCode = 0;
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -968,6 +1086,8 @@ public static class Program
                 var remote = useCase.AddRemote(new RemoteAddRequest(repoDir, name, url));
                 AnsiConsole.MarkupLine($"[green]✓[/] Added remote '[yellow]{Markup.Escape(remote.Name.Value)}[/]' -> [cyan]{Markup.Escape(PathRedactor.Redact(remote.Url))}[/]");
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -996,6 +1116,8 @@ public static class Program
                     WriteError($"Remote '{name}' not found.", 1);
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -1023,6 +1145,8 @@ public static class Program
                     AnsiConsole.MarkupLine($"[yellow]{Markup.Escape(rem.Name.Value)}[/]\t{Markup.Escape(PathRedactor.Redact(rem.Url))}");
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -1050,6 +1174,8 @@ public static class Program
             }
             catch (ArgumentException ex) { invocation.ExitCode = 7; WriteError(ex.Message); }
             catch (OperationCanceledException) { invocation.ExitCode = 130; WriteError("Upstream configuration cancelled."); }
+            catch (RepositoryBusyException ex) { invocation.ExitCode = 11; WriteError(ex.Message); }
+            catch (WorkspaceRecoveryRequiredException ex) { invocation.ExitCode = 10; WriteError(ex.Message); }
             catch (Exception ex) { invocation.ExitCode = 1; WriteError(ex.Message); }
         });
         remoteCommand.AddCommand(remoteTrackCommand);
@@ -1129,6 +1255,8 @@ public static class Program
             {
                 WriteError($"Security violation in remote snapshot (Exit Code 3): {ex.Message}", 3);
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (OperationCanceledException)
             {
                 invocation.ExitCode = 130;
@@ -1243,6 +1371,8 @@ public static class Program
             {
                 WriteError($"Security violation in remote snapshot (Exit Code 3): {ex.Message}", 3);
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (OperationCanceledException)
             {
                 invocation.ExitCode = 130;
@@ -1289,6 +1419,8 @@ public static class Program
             catch (NotSupportedException ex) { invocation.ExitCode = 8; WriteError(ex.Message); }
             catch (IOException ex) { invocation.ExitCode = 8; WriteError(ex.Message); }
             catch (UnauthorizedAccessException ex) { invocation.ExitCode = 8; WriteError(ex.Message); }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex) { invocation.ExitCode = 1; WriteError(ex.Message); }
         });
 
@@ -1301,17 +1433,18 @@ public static class Program
         cloneCommand.AddArgument(cloneUrlArg);
         cloneCommand.AddArgument(cloneDirArg);
         cloneCommand.AddOption(cloneForceOption);
+        var cloneBareOption = new Option<bool>("--bare", "Copy all branches and objects for hosting, without a working tree");
+        cloneCommand.AddOption(cloneBareOption);
 
         cloneCommand.SetHandler(async (InvocationContext invocation) =>
         {
-            var parsed = invocation.ParseResult;
-            var url = parsed.GetValueForArgument(cloneUrlArg);
-            var dir = parsed.GetValueForArgument(cloneDirArg);
-            var force = parsed.GetValueForOption(cloneForceOption);
             try
             {
+                var parsed = invocation.ParseResult;
                 var useCase = serviceProvider.GetRequiredService<CloneUseCase>();
-                var result = await useCase.ExecuteAsync(new CloneRequest(url, dir, force), invocation.GetCancellationToken());
+                var result = await useCase.ExecuteAsync(new CloneRequest(parsed.GetValueForArgument(cloneUrlArg),
+                    parsed.GetValueForArgument(cloneDirArg), parsed.GetValueForOption(cloneForceOption),
+                    parsed.GetValueForOption(cloneBareOption)), invocation.GetCancellationToken());
 
                 AnsiConsole.MarkupLine($"[green]✓[/] Cloned project [bold]{Markup.Escape(result.ProjectName)}[/] into [cyan]{Markup.Escape(PathRedactor.Redact(result.TargetDirectory))}[/]");
                 if (result.HeadCommit.HasValue)
@@ -1347,15 +1480,11 @@ public static class Program
             {
                 WriteError($"Security violation in remote snapshot (Exit Code 3): {ex.Message}", 3);
             }
-            catch (OperationCanceledException)
-            {
-                invocation.ExitCode = 130;
-                WriteError("Synchronization cancelled. Inspect repository state before retrying; cancellation does not guarantee rollback.");
-            }
-            catch (Exception ex)
-            {
-                WriteError(ex.Message, 1);
-            }
+            catch (OperationCanceledException) { invocation.ExitCode = 130; WriteError("Clone cancelled; inspect the destination before retrying."); }
+            catch (ArgumentException ex) { invocation.ExitCode = 7; WriteError(ex.Message); }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
+            catch (Exception ex) { invocation.ExitCode = 1; WriteError(ex.Message); }
         });
 
         // Chronologically ordered workflow:
@@ -1373,6 +1502,7 @@ public static class Program
         // 3. Branching & navigation
         rootCommand.AddCommand(branchCommand);
         rootCommand.AddCommand(switchCommand);
+        rootCommand.AddCommand(mergeCommand);
         rootCommand.AddCommand(checkoutCommand);
 
         // 4. Remote collaboration & synchronization
@@ -1385,6 +1515,7 @@ public static class Program
         rootCommand.AddCommand(doctorCommand);
         rootCommand.AddCommand(bindCommand);
         rootCommand.AddCommand(fsckCommand);
+        rootCommand.AddCommand(recoverCommand);
 
         Environment.ExitCode = 0;
         var exitCode = await rootCommand.InvokeAsync(args);

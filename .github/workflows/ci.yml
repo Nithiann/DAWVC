@@ -42,6 +42,48 @@ jobs:
       - name: Run all tests
         run: dotnet test --no-build -c Release --verbosity normal --logger "trx;LogFileName=test_results.trx"
 
+      - name: Repeat Windows post-exit ownership checks
+        shell: pwsh
+        run: |
+          foreach ($iteration in 1..5) {
+            dotnet test tests/DawVcs.EndToEndTests/DawVcs.EndToEndTests.csproj --no-build -c Release --filter "FullyQualifiedName~CrossProcessCreationLease_CoordinatesBareAndWorkingTargets|FullyQualifiedName~ChildProcessHolder_RefusesCliThenReleasesOnExitOrKill" --logger "trx;LogFileName=ownership-$iteration.trx"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: Upload Windows test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-windows
+          path: tests/**/TestResults/*.trx
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Setup Python for release acceptance
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Test acceptance harness guards
+        run: python -m unittest discover -s scripts -p "test_preview_acceptance_guards.py"
+
+      - name: Verify and exercise extracted Windows release
+        shell: pwsh
+        run: |
+          $archives = @(Get-ChildItem artifacts/dawvc-*-win-x64.zip)
+          if ($archives.Count -ne 1) { throw "Expected exactly one release archive" }
+          python scripts/test_preview_acceptance.py --archive ($archives[0].FullName) --checksums artifacts/SHA256SUMS.txt --report artifacts/preview-acceptance-windows.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload Windows acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-acceptance-windows
+          path: artifacts/preview-acceptance-windows.json
+          if-no-files-found: warn
+          retention-days: 14
+
   build-and-test-linux:
     name: Core, CLI & Protocol Integrity (Ubuntu)
     runs-on: ubuntu-latest
@@ -63,3 +105,35 @@ jobs:
 
       - name: Run all tests including transient SSH protocol tests
         run: dotnet test --no-build -c Release --logger "trx;LogFileName=test_results.trx"
+
+      - name: Upload Linux test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-linux
+          path: tests/**/TestResults/*.trx
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Setup Python for CLI acceptance
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Test acceptance harness guards
+        run: python -m unittest discover -s scripts -p "test_preview_acceptance_guards.py"
+
+      - name: Verify sync SIGINT and SSH child cleanup
+        run: python scripts/test_sync_cancellation.py
+
+      - name: Exercise synthetic CLI collaboration workflow
+        run: python scripts/test_preview_acceptance.py --dll src/DawVcs.Cli/bin/Release/net10.0/dawvc.dll --dotnet "$(command -v dotnet)" --report artifacts/preview-acceptance-linux.json
+
+      - name: Upload Linux acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preview-acceptance-linux
+          path: artifacts/preview-acceptance-linux.json
+          if-no-files-found: warn
+          retention-days: 14

@@ -20,12 +20,16 @@ public sealed class PublicationJournal : IAsyncDisposable
     private readonly string _targetDir;
     private readonly string _backupDir;
     private readonly List<JournalEntry> _appliedEntries = [];
+    private readonly Action? _afterMutation;
     private bool _committed;
     private bool _rolledBack;
     private bool _rollbackFailed;
 
-    public PublicationJournal(string targetDir, string workspaceDotDawvcDir)
+    public PublicationJournal(string targetDir, string workspaceDotDawvcDir) : this(targetDir, workspaceDotDawvcDir, null) { }
+
+    internal PublicationJournal(string targetDir, string workspaceDotDawvcDir, Action? afterMutation)
     {
+        _afterMutation = afterMutation;
         _targetDir = targetDir;
         var backupBase = Directory.Exists(workspaceDotDawvcDir) ? workspaceDotDawvcDir : targetDir;
         _backupDir = Path.Combine(backupBase, $".journal_backup_{Guid.NewGuid():N}");
@@ -127,6 +131,7 @@ public sealed class PublicationJournal : IAsyncDisposable
                             break;
                         }
                 }
+                if (action.Kind != CheckoutActionKind.Unchanged) _afterMutation?.Invoke();
             }
 
             return modifiedFiles;
