@@ -118,3 +118,109 @@ To prevent repository bloat and respect software licenses:
 - Large multi-gigabyte instrument libraries (e.g. Native Instruments Kontakt, Spectrasonics Omnisphere, reFX Nexus) are **not** bundled by default.
 - They are classified as `UserChoice` or `ReferenceOnly`.
 - If Collaborator B does not have a required commercial library installed, `dawvc doctor` will clearly flag it as a missing plugin or content dependency without corrupting or breaking the project file.
+
+## Hosting-independent collaboration over SSH
+
+A host operator configures an alias and per-key/account read/write permissions
+([setup](Self_Hosting_SSH.md)). Contributors can then use:
+
+```powershell
+dawvc clone dawvc://alice@studio-host/projects/song Song
+cd Song
+# Edit, stage and commit as usual
+dawvc push
+dawvc pull
+```
+
+Use independently verified SSH host keys and public-key authentication. PC, NAS
+and server hosts use the same protocol; standard Git hosting is a different
+protocol. A non-bare host's active branch cannot receive Push. Push publishes
+committed history without changing the host workspace; divergence requires
+explicit integration, not force-push.
+
+
+## First publication to your own hosting storage
+
+On the host or a machine with the storage mounted, provision a receiver from the
+existing project rather than independently generating a different project ID:
+
+```powershell
+dawvc init --bare --from D:\Music\Song --dir D:\Hosting\Song
+# Or copy all existing history immediately (choose one provisioning command):
+# dawvc clone D:\Music\Song D:\Hosting\Song --bare
+```
+
+For a share, configure the resulting filesystem path as origin on the producer.
+For SSH, configure its host-owned alias and explicitly permit Push first, then:
+
+```powershell
+dawvc remote add origin dawvc://producer@host/projects/song
+dawvc push origin main
+```
+
+Collaborators use normal `dawvc clone`, not `clone --bare`, to obtain working
+files. Neither provisioning command copies source bindings/index or installs
+plugins. Targets must be absent/empty. Fast-forward-only collaboration and FL
+Studio search-folder/relinking requirements remain unchanged.
+
+
+## Resolving two independently committed project versions
+
+First commit/save your own work, then fetch the other producer's history. If Pull
+rejects divergence, inspect both versions separately before choosing:
+
+```powershell
+dawvc fetch origin
+# Optional: inspect the fetched version outside your workspace:
+dawvc checkout origin/main --restore-to D:\Review\IncomingSong
+# Choose one entire snapshot, retaining both histories:
+dawvc merge origin/main --take incoming -m "Use incoming arrangement and samples"
+# Alternatively --take local retains your committed project and recorded assets.
+dawvc push origin main
+```
+
+This choice applies to the whole project, including bundled samples/dependencies;
+it is not a per-track/per-file merge. Both parent IDs appear in `dawvc log` and
+can be restored with `checkout <full-id> --restore-to <empty-directory>`. To combine
+musical ideas manually, restore the other version separately, edit in FL Studio,
+explicitly add any newly imported assets, and commit the result normally.
+
+Merge refuses staged or modified/missing tracked work and untracked collisions.
+It does not fetch automatically, install plugins or configure FL Studio search
+paths. Do not run simultaneous local mutating commands. If the remote advances
+before Push, fetch and reassess; no force-push or history rewriting is needed.
+
+
+## Preview acceptance and deployment qualification
+
+See [Preview acceptance](Preview_Acceptance.md) for automated packaged-CLI evidence
+and the separate real Windows/FL Studio/two-PC/OpenSSH/NAS checklist. Synthetic
+single-host success does not certify native playback or deployment-specific
+locking/rename behavior. Those release gates remain pending until measured on
+actual supported setups; no GUI or additional DAW support is implied.
+
+
+## Choose a persistent sync target (WP-SYNC-09)
+
+After adding a remote, configure the active local branch once:
+
+```powershell
+dawvc remote track backup published
+dawvc fetch backup published --dry-run
+dawvc pull --dry-run
+dawvc push
+dawvc pull
+```
+
+The configured upstream is backup/published even when the active local branch has
+another name. `push backup`/`pull backup` keep that mapping. An explicit Pull branch
+is a remote source into the active branch, not a local branch switch. Track works
+offline and allows a future remote branch; `--local-branch mix` configures another
+existing local branch without switching it.
+
+Fresh previews do not modify repository files/layout or prune incoming sessions.
+They estimate transfers from bounded metadata and do not plan unsaved work or
+verify remote blob availability. Actual execution fetches again and may see a new
+tip. Keep previews advisory during other writers. Track/real operations respect
+operation ownership and pending recovery; await Busy owners and inspect recovery.
+Ctrl+C is forwarded for all sync commands; durable effects can remain after exit 130.

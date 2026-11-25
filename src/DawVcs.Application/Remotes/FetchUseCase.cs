@@ -1,3 +1,6 @@
+using DawVcs.Application.Common;
+using DawVcs.Application.Operations;
+using DawVcs.Application.Recovery;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Configuration;
 using DawVcs.Domain.Hashing;
@@ -11,7 +14,10 @@ public sealed record FetchRequest(
     string RepositoryDirectory,
     string? RemoteName = null,
     string? Branch = null,
-    bool DryRun = false);
+    bool DryRun = false)
+{
+    internal RepositoryOperation? Operation { get; init; }
+}
 
 public sealed record UpdatedRemoteRef(
     BranchName Branch,
@@ -23,7 +29,10 @@ public sealed record FetchResult(
     IReadOnlyList<UpdatedRemoteRef> UpdatedRefs,
     int ObjectsFetched,
     long BytesFetched,
-    bool IsDryRun);
+    bool IsDryRun)
+{
+    public FetchPreview? Preview { get; init; }
+}
 
 /// <summary>
 /// Fetches commits, snapshots, and blobs from a remote repository into quarantine,
@@ -48,33 +57,55 @@ public class FetchUseCase
         _graphWalker = graphWalker ?? new ObjectGraphWalker();
     }
 
-    public virtual async Task<FetchResult> ExecuteAsync(FetchRequest request, CancellationToken cancellationToken = default)
+    public virtual Task<FetchResult> ExecuteAsync(FetchRequest request, CancellationToken cancellationToken = default)
+        => ExecuteAsync(request, cancellationToken, null);
+
+    public virtual async Task<FetchResult> ExecuteAsync(
+        FetchRequest request, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
     {
         ArgumentNullException.ThrowIfNull(request);
+        using var operation = request.DryRun ? null
+            : RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation, cancellationToken: cancellationToken);
+        var result = await ExecuteCoreAsync(request with { Operation = operation }, cancellationToken, progress).ConfigureAwait(false);
+        progress?.Report(new OperationProgress(OperationStage.Completed));
+        return result;
+    }
 
-        var context = _contextFactory(request.RepositoryDirectory);
+    private async Task<FetchResult> ExecuteCoreAsync(
+        FetchRequest request, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
+        progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
+
+        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
+        using var context = _contextFactory(request.RepositoryDirectory);
+        progress?.Report(new OperationProgress(OperationStage.LoadingMetadata));
         var localConfig = context.LoadConfig();
 
         var remoteNameStr = !string.IsNullOrWhiteSpace(request.RemoteName) ? request.RemoteName : "origin";
         var remoteConfig = context.GetRemote(remoteNameStr)
             ?? throw new RemoteException($"No remote named '{remoteNameStr}' is configured. Use 'dawvc remote add {remoteNameStr} <url>' first.");
 
+        progress?.Report(new OperationProgress(OperationStage.ConnectingRemote));
         using var transport = _transportFactory.CreateTransport(remoteConfig.Url);
 
         // 1. Handshake & Repository Identity Verification (FR-FET-001)
         var handshake = await transport.HandshakeAsync(cancellationToken).ConfigureAwait(false);
         if (handshake.SchemaVersion > RepositoryConfig.CurrentSchemaVersion)
         {
-            throw new RemoteException($"Remote schemaVersion '{handshake.SchemaVersion}' is newer than supported version '{RepositoryConfig.CurrentSchemaVersion}'.");
+            throw new IncompatibleRemoteRepositoryException($"Remote schemaVersion '{handshake.SchemaVersion}' is newer than supported version '{RepositoryConfig.CurrentSchemaVersion}'.");
         }
 
         if (handshake.RepositoryId != localConfig.RepositoryId)
         {
-            throw new RemoteException($"Remote repositoryId '{handshake.RepositoryId}' does not match local repositoryId '{localConfig.RepositoryId}'.");
+            throw new IncompatibleRemoteRepositoryException($"Remote repositoryId '{handshake.RepositoryId}' does not match local repositoryId '{localConfig.RepositoryId}'.");
         }
 
         // 2. Enumerate remote refs
+        progress?.Report(new OperationProgress(OperationStage.ReadingRemoteReferences));
         var allRemoteRefs = await transport.ListRefsAsync(cancellationToken).ConfigureAwait(false);
+        progress?.Report(new OperationProgress(OperationStage.ReadingRemoteReferences, allRemoteRefs.Count, allRemoteRefs.Count));
         var targetRefs = new List<RemoteRef>();
 
         if (!string.IsNullOrWhiteSpace(request.Branch))
@@ -96,6 +127,9 @@ public class FetchUseCase
             targetRefs.AddRange(allRemoteRefs);
         }
 
+        progress?.Report(new OperationProgress(OperationStage.TraversingHistory));
+        if (request.DryRun)
+            return await FetchPreviewPlanner.PlanAsync(remoteNameStr, targetRefs, transport, context, cancellationToken, progress).ConfigureAwait(false);
         using var quarantineStore = _quarantineStoreFactory(request.RepositoryDirectory);
         quarantineStore.PruneStaleDirectories(TimeSpan.FromHours(24));
 
@@ -106,22 +140,13 @@ public class FetchUseCase
             context,
             quarantineStore,
             remoteTips,
-            cancellationToken).ConfigureAwait(false);
-
-        // 4. Handle Dry Run
-        if (request.DryRun)
-        {
-            quarantineStore.DiscardSession();
-            return new FetchResult(
-                remoteNameStr,
-                Array.Empty<UpdatedRemoteRef>(),
-                walkResult.TotalObjectsToFetch,
-                walkResult.TotalBytesToFetch,
-                IsDryRun: true);
-        }
+            cancellationToken,
+            progress).ConfigureAwait(false);
 
         // 5. Stream and verify missing blobs into quarantine, promoting them immediately for resume capability
         var verifiedBlobs = new List<VerifiedIncomingObject>();
+        var blobTotal = walkResult.MissingBlobs.Count;
+        progress?.Report(new OperationProgress(OperationStage.TransferringObjects, 0, blobTotal));
         foreach (var blob in walkResult.MissingBlobs)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -131,6 +156,7 @@ public class FetchUseCase
                 continue;
             }
 
+            progress?.Report(new OperationProgress(OperationStage.TransferringObjects, verifiedBlobs.Count, blobTotal));
             var incomingPath = quarantineStore.GetIncomingPath(blob.Hash);
             VerifiedIncomingObject verifiedBlob;
             await using (var remoteStream = await transport.OpenObjectPayloadStreamAsync(blob.Hash, cancellationToken).ConfigureAwait(false)
@@ -149,16 +175,22 @@ public class FetchUseCase
             }
 
             verifiedBlobs.Add(verifiedBlob);
+            progress?.Report(new OperationProgress(OperationStage.TransferringObjects, verifiedBlobs.Count, blobTotal));
 
             // Promote verified blob immediately so interrupted fetches don't re-download it
+            progress?.Report(new OperationProgress(OperationStage.PromotingObjects));
             await quarantineStore.PromoteAsync(verifiedBlob, cancellationToken).ConfigureAwait(false);
         }
 
         // 6. Promote metadata objects (Snapshots, then Commits)
+        progress?.Report(new OperationProgress(OperationStage.PromotingObjects, 0, walkResult.StagedMetadataObjects.Count));
         await quarantineStore.PromoteAllAsync(walkResult.StagedMetadataObjects, cancellationToken).ConfigureAwait(false);
+        progress?.Report(new OperationProgress(OperationStage.PromotingObjects, walkResult.StagedMetadataObjects.Count, walkResult.StagedMetadataObjects.Count));
 
         // 7. Update remote-tracking refs (FR-FET-006)
         var updatedRefs = new List<UpdatedRemoteRef>();
+        var refsProcessed = 0;
+        progress?.Report(new OperationProgress(OperationStage.UpdatingReferences, 0, targetRefs.Count));
         foreach (var rRef in targetRefs)
         {
             var branchClean = rRef.Name.StartsWith("refs/heads/", StringComparison.OrdinalIgnoreCase)
@@ -174,6 +206,7 @@ public class FetchUseCase
                     updatedRefs.Add(new UpdatedRemoteRef(branchName, oldCommit, rRef.HeadCommit));
                 }
             }
+            progress?.Report(new OperationProgress(OperationStage.UpdatingReferences, ++refsProcessed, targetRefs.Count));
         }
 
         return new FetchResult(

@@ -20,11 +20,16 @@ public sealed class PublicationJournal : IAsyncDisposable
     private readonly string _targetDir;
     private readonly string _backupDir;
     private readonly List<JournalEntry> _appliedEntries = [];
+    private readonly Action? _afterMutation;
     private bool _committed;
     private bool _rolledBack;
+    private bool _rollbackFailed;
 
-    public PublicationJournal(string targetDir, string workspaceDotDawvcDir)
+    public PublicationJournal(string targetDir, string workspaceDotDawvcDir) : this(targetDir, workspaceDotDawvcDir, null) { }
+
+    internal PublicationJournal(string targetDir, string workspaceDotDawvcDir, Action? afterMutation)
     {
+        _afterMutation = afterMutation;
         _targetDir = targetDir;
         var backupBase = Directory.Exists(workspaceDotDawvcDir) ? workspaceDotDawvcDir : targetDir;
         _backupDir = Path.Combine(backupBase, $".journal_backup_{Guid.NewGuid():N}");
@@ -126,13 +131,19 @@ public sealed class PublicationJournal : IAsyncDisposable
                             break;
                         }
                 }
+                if (action.Kind != CheckoutActionKind.Unchanged) _afterMutation?.Invoke();
             }
 
             return modifiedFiles;
         }
+        catch (OperationCanceledException ex)
+        {
+            await RollbackAfterFailureAsync(ex).ConfigureAwait(false);
+            throw;
+        }
         catch (Exception ex)
         {
-            await RollbackAsync().ConfigureAwait(false);
+            await RollbackAfterFailureAsync(ex).ConfigureAwait(false);
             throw new CheckoutStagingException($"Multi-file checkout publication failed midway and was automatically rolled back: {ex.Message}", ex);
         }
     }
@@ -171,6 +182,8 @@ public sealed class PublicationJournal : IAsyncDisposable
 
         _rolledBack = true;
 
+        var failures = new List<Exception>();
+
         // Revert applied actions in reverse chronological order
         for (int i = _appliedEntries.Count - 1; i >= 0; i--)
         {
@@ -188,7 +201,7 @@ public sealed class PublicationJournal : IAsyncDisposable
 
                     case JournalActionKind.Replaced:
                     case JournalActionKind.Deleted:
-                        if (entry.BackupPath != null && File.Exists(entry.BackupPath))
+                        if (entry.BackupPath != null)
                         {
                             var targetDir = Path.GetDirectoryName(entry.TargetPath);
                             if (!string.IsNullOrEmpty(targetDir))
@@ -200,18 +213,37 @@ public sealed class PublicationJournal : IAsyncDisposable
                         break;
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // Best-effort rollback
+                failures.Add(ex);
             }
+        }
+
+        if (failures.Count > 0)
+        {
+            _rollbackFailed = true;
+            throw new IncompleteRollbackException(_backupDir, new AggregateException(failures));
         }
 
         await CleanupBackupDirAsync().ConfigureAwait(false);
     }
 
+    private async Task RollbackAfterFailureAsync(Exception originalFailure)
+    {
+        try
+        {
+            await RollbackAsync().ConfigureAwait(false);
+        }
+        catch (IncompleteRollbackException rollbackFailure)
+        {
+            throw new IncompleteRollbackException(rollbackFailure.RecoveryPath,
+                new AggregateException(originalFailure, rollbackFailure));
+        }
+    }
+
     private Task CleanupBackupDirAsync()
     {
-        if (Directory.Exists(_backupDir))
+        if (!_rollbackFailed && Directory.Exists(_backupDir))
         {
             try
             {

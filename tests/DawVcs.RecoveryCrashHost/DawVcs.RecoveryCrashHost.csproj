@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>DawVcs.RecoveryCrashHost</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/DawVcs.Application/DawVcs.Application.csproj" />
+    <ProjectReference Include="../../src/DawVcs.Infrastructure/DawVcs.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

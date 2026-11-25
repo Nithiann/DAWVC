@@ -21,7 +21,10 @@ DAWVC uses deterministic process exit codes across all commands:
 | `6` | `DiagnosticFailure` | `doctor` or `fsck` found one or more unresolved warnings or errors. |
 | `7` | `InvalidArguments` | CLI syntax error or mutually incompatible flags passed. |
 | `8` | `RemoteError` | Remote transport failure, unreachable share/directory, repository ID mismatch, or schema error. |
-| `9` | `NonFastForward` | Push or pull rejected because local and remote branch histories have diverged (no fast-forward possible). |
+| `9` | `NonFastForward` | Push or pull rejected because the requested update is not a fast-forward (including a remote-ahead Push). |
+| `10` | `RecoveryRequired` | Active/unfinished workspace publication or conflicting recovery data; inspect `recover`. |
+| `11` | `RepositoryBusy` | Another cooperating local operation owns the working repository; await it and retry. |
+| `130` | `Cancelled` | Synchronization was cooperatively cancelled; inspect repository state before retrying. |
 
 ---
 
@@ -32,27 +35,49 @@ Initializes a new DAWVC repository in the current or specified directory.
 
 ```powershell
 dawvc init [--dir <path>] [--name <string>] [--primary <path>]
+dawvc init --bare --from <source> [--dir <path>]
 ```
 
 | Option | Type | Description |
 |---|---|---|
 | `--dir` | Path | Target directory to initialize (default: current working directory). |
+| `--bare` | Flag | Create an empty bare receiver using the source configuration/identity; requires `--from`. |
+| `--from` | Path/URL | Source repository for bare init; filesystem/file:// or dawvc:// over SSH. |
 | `--name` | String | Custom logical project name (default: directory name). |
 | `--primary` | Path | Explicit relative path to primary DAW project file (e.g. `Project.flp`). |
 
 ---
 
+Bare init copies configuration, not history or working files. It requires an
+absent/empty destination, rejects `--name`/`--primary` overrides, and never
+reinitializes an existing nonempty repository. Run it on the host or mounted
+storage, then configure the SSH alias if applicable. A source-derived ID allows
+the existing source to perform its first Push without weakening identity checks.
+
 ### 2. `dawvc clone`
 Clones a remote repository (directory or UNC share) into a new local directory, checks out the default branch, and materializes all project files and bundled sample assets.
 
 ```powershell
-dawvc clone <url> [<dir>]
+dawvc clone <url> [<dir>] [--bare]
 ```
 
 | Argument/Option | Type | Description |
 |---|---|---|
 | `<url>` | Argument | **Required.** Remote repository path (filesystem path or `\\server\share\path`). |
 | `<dir>` | Argument | Target directory for the new repository (defaults to project name). |
+
+`--bare` creates hosting storage: all fetched branches plus verified reachable
+objects, no FLP/sample checkout, index access or Doctor. HEAD retains the source
+configured default branch, even when unborn. Origin is recorded but no upstream
+is configured for this hosting copy. This is a one-time clone, not a live mirror.
+Target must be absent/empty; `--bare --force` is invalid (exit 7). Filesystem/file://
+and dawvc:// sources are supported. Normal Clone behavior is unchanged.
+
+Bare roots contain `dawvc.yaml`, `HEAD`, `objects/`, and `refs/heads/` directly;
+normal workspace commands target working copies, not bare roots. Invalid options
+or nonempty targets return exit 7; remote failures 8, corrupt objects/unsafe paths
+3, cancellation 130. Inspect the destination after interruption; isolated
+`.dawvc-provision-*` staging may remain after a crash or failed cleanup.
 
 #### Post-Clone Verification:
 `dawvc clone` automatically configures `origin` pointing to `<url>`, checks out the default branch (`main`), materializes all bundled audio samples into `./Samples/`, and runs a silent `doctor` check, reporting immediate reproducibility readiness.
@@ -323,3 +348,187 @@ dawvc fsck [--artifacts] [--json] [--dir <path>]
 
 *Exits with code `6` if repository or artifact corruption is detected.*
 
+
+## `dawvc push` — filesystem collaboration extension
+
+```powershell
+dawvc push [<remote>] [<branch>] [--dry-run] [--dir <path>]
+```
+
+Pushes a committed local branch to an initialized remote with the same repository
+ID. Supports local paths, external drives, `file://` URLs, UNC shares and `dawvc://` over SSH. Without
+arguments it uses the active branch's upstream remote/branch, falling back to
+`origin` and the active branch name. An explicit matching upstream remote preserves the mapped branch; a different
+remote defaults to the active branch name. An explicit branch selects that local
+branch and the same destination name.
+No refspec syntax, force-push or branch deletion is supported.
+
+`--dry-run` verifies the complete closure and reports missing object count/payload
+bytes without writing the destination or local tracking refs. Ordinary push sends
+missing objects through verified destination quarantine and atomically creates or
+fast-forwards the branch. Existing objects are verified and never overwritten.
+A checked-out non-bare destination branch is refused; select an inactive branch
+or use an existing bare repository. Push never updates either workspace.
+
+Fetch and integrate changes before retrying a rejected non-fast-forward push.
+Push does not automatically set upstream or update local remote-tracking refs;
+run `fetch` when you want refreshed tracking information. Dirty local work is not
+included: only the selected committed history is sent.
+
+Exit codes: 0 success/preview; 3 corrupt or unsafe objects; 7 invalid push arguments;
+8 remote rejection, unavailable/unsupported transport or concurrent writer;
+9 non-fast-forward; 130 cooperative cancellation. Parser syntax failures use the
+parser's nonzero code. Cancelled/failed operations can leave unreachable verified
+objects; inspect the destination ref before retrying after an interrupted process.
+See [Recovery Guide](Recovery_Guide.md) for cleanup boundaries.
+
+## SSH remotes and `dawvc serve`
+
+All four sync operations use the selected transport:
+
+```powershell
+dawvc remote add origin dawvc://alice@host/projects/song
+dawvc push --dry-run
+dawvc push
+dawvc clone dawvc://alice@host/projects/song MySong
+dawvc fetch
+dawvc pull
+```
+
+The scheme is `dawvc://` (one colon), always SSH; port defaults to 22 and may be
+explicit (`host:2222`). The URL path is an allowlisted logical repository alias.
+Passwords, queries, fragments, URI-escaped aliases and traversal are refused.
+OpenSSH uses strict known_hosts/public-key authentication; preconfigure verified
+host keys and an unlocked agent/IdentityFile. Login failures are not interactive.
+
+`dawvc serve [--config <absolute-host-policy-path>]` is an operator-facing stdio
+receiver started by SSH. Its default policy is `~/.config/dawvc/serve.json`. It
+produces binary protocol on stdout and is not an interactive CLI session or
+network listener. The remote client always requests the constant `dawvc serve`
+command; SSH forced-command policy can select the host config. Missing/invalid
+host policy exits 8 with a safe stderr message. The policy path is never accepted
+from protocol requests. `remote add` validates configured transport addresses
+before storing them, without initiating an SSH connection.
+
+See [SSH hosting](Self_Hosting_SSH.md) for setup/permissions and
+[Remote Protocol](Remote_Protocol.md) for streaming, deadlines and error mapping.
+
+
+## `dawvc merge` — explicit project version selection
+
+```powershell
+dawvc fetch origin
+dawvc merge origin/main --take incoming -m "Choose collaborator version"
+# Or --take local to retain the current project's complete snapshot.
+dawvc push origin main
+```
+
+Syntax: `merge <reference> --take <local|incoming> -m <message> [--author <name>]
+[--dir <path>]`. Choices are case-sensitive and required. References use the
+existing resolver: local branches first, then remote-tracking refs, full IDs or
+unambiguous object prefixes. Prefer full commit IDs when a local branch shadows
+a tracking name. Fetch first; Merge performs no network transfer and observes the
+already-local incoming tip, which may be stale relative to its host.
+
+This resolves **diverged history**, not binary FLP contents. It creates a two-parent
+commit (local first, incoming second), choosing one complete snapshot: FLP, all
+recorded assets, dependency metadata and completeness status. It never mixes
+samples from one snapshot with FLP from the other. Both original snapshots remain
+restorable; `log` displays merge parent IDs and still follows the first-parent
+chain. No support for `HEAD^`, `--abort`, `--continue`, dry-run or force is added.
+
+Only diverged tips with a common ancestor are accepted. Identical, ancestor/
+descendant, unrelated, missing and unborn tips return validation exit 7; use Pull
+for a fast-forward. Dirty tracked/staged state or selected untracked collisions
+return 4. Corrupt/missing objects or unsafe snapshot paths return 3; cancellation
+returns 130. Unexpected permission/compensation failures are reported and require
+local inspection. Both tip snapshots/blobs are verified; historical snapshots and
+blobs require Fsck for a full audit. Metadata traversal limits: 50k commits, 1m
+parent edges, 2 MiB/object and 64 MiB cumulative metadata payload.
+
+Merge does not modify source branches/tracking refs. Push/Pull stay fast-forward
+only. After remote movement another Fetch/Merge may be necessary. Cooperating local writers now fail fast on contention (exit 11); do not
+run older/raw writers or DAW saves concurrently. Failed/cancelled preparation can leave an
+unreachable merge object; cancellation/errors after publication may leave the
+merge committed. Inspect `log` and `status` before retrying. See Recovery Guide.
+
+
+## `dawvc recover` — durable workspace publication recovery
+
+```powershell
+dawvc recover [--dir <repository>]
+dawvc recover --rollback [--dir <repository>]
+```
+
+Default inspection is read-only and reports transaction ID/state and saved file/
+staged-entry counts. Explicit rollback restores Prepared state; a Committed
+transaction instead verifies final state and finalizes metadata. No force, discard,
+implicit on-open repair or arbitrary transaction-path option is provided. Multiple
+transactions, unknown schemas, bad backups or unexpected edits fail closed.
+
+New cooperating Commit/Add/Branch/Switch/Checkout/Merge/Fetch/Pull/Push, bindings/
+Doctor, remote-config mutations and Init refuse pending workspace envelopes with
+exit 10. New filesystem/SSH handshakes refuse pending hosts as a remote failure
+(exit 8). Status/Log/Fsck and external snapshot inspection remain available; a
+healthy Fsck does not mean an interrupted workspace publication is resolved.
+Read-only queries may still maintain existing filesystem/index caches. Recovery
+ownership/ref locks are persistent files: existence does not mean they are held;
+never delete them while operations may be active. See Recovery Guide for staged
+subsets, orphan data, manual conflicts, power-loss and concurrency boundaries.
+
+
+## Concurrent local operations (WP-SYNC-08)
+
+Stock local writers (including cache-writing Status and binding-writing Doctor)
+return exit **11 / RepositoryBusy** when another cooperating operation owns their
+working repository. Ownership spans Pull/Push network waits and awaited nested
+steps. Await/cancel the first operation before retrying. A busy receiving host is
+reported through the existing remote error/exit **8**. There is no wait/force-lock
+flag; self-push into the same repository is refused. Empty `operation.lock` and
+hashed sibling creation lock files persist normally: never delete live locks.
+Read-only Log/Scan/Fsck/recovery inspection stay outside this serialization.
+Old clients, raw backends, external restore targets and DAW saves still require
+exclusive coordination. See Recovery Guide and ADR-OPS-001.
+
+
+## Upstream configuration and fresh previews (WP-SYNC-09)
+
+```powershell
+dawvc remote add backup dawvc://alice@nas/projects/song
+dawvc remote track backup published [--local-branch mix] [--dir <repository>]
+dawvc push
+dawvc pull --dry-run
+dawvc pull
+```
+
+Run `remote track` without the bracketed optional arguments to map the active
+branch. This validates configured remote/local branch names and saves settings
+offline; future remote branches are allowed. It preserves HEAD, repository ID and
+other upstreams. The active unborn local branch is allowed. Invalid settings use
+exit 7; Busy uses 11, pending workspace recovery 10, cancellation 130.
+
+Push/Pull use that mapped remote and branch by default. An explicit matching remote
+preserves the mapping; another remote defaults to the local branch name. Explicit
+Push branch selects the local/destination branch; explicit Pull branch selects a
+remote source into the active local branch. Pull never switches HEAD or updates
+another local branch because a remote branch name was supplied.
+
+Fetch/Pull dry-run pins the current remote advertisement and reads missing verified
+commit/snapshot metadata in bounded memory. Pull classifies fresh ancestry even
+with missing/stale tracking refs. Fetch prints planned ref updates even if all
+payloads are already cached. No object/ref/index/config/workspace/quarantine or
+coordination-file writes occur; stale incoming sessions are not pruned. Push
+preview also avoids local writer-lock/index creation and still verifies its full
+reachable closure. All real mutating operations retain operation-wide ownership.
+
+Fetch/Pull counts are missing-transfer estimates, not blob integrity/availability,
+dirty-workspace conflict or recovery-feasibility guarantees. Limits: 2 MiB per
+metadata object, 64 MiB received metadata, 100k object identities, 50k commits and
+1m remote parent edges. Over-budget previews refuse without repository writes.
+Read-only previews take no writer lease and are not atomic views across concurrent
+local changes; actual execution fetches/revalidates again. Pending local recovery
+still refuses sync previews (exit 10); a pending host remains a remote error.
+
+Clone/Fetch/Pull/Push forward Ctrl+C and await cancellation/cleanup (exit 130).
+Effects already published can remain. Linux SIGINT/child cleanup is automated;
+Windows native console Ctrl+C remains a field acceptance gate.

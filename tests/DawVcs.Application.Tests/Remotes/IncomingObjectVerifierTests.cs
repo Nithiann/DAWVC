@@ -38,6 +38,18 @@ public sealed class IncomingObjectVerifierTests
     }
 
     [Fact]
+    public async Task VerifyAndWriteAsync_TrailingBytes_AreRejected()
+    {
+        var payload = "audio"u8.ToArray();
+        var hash = Blake3ContentHasher.Hash(payload);
+        var envelope = CreateEnvelope(ObjectType.Blob, hash, payload);
+        using var source = new MemoryStream([.. envelope, 0xFF]);
+        using var destination = new MemoryStream();
+        await Assert.ThrowsAsync<PayloadLengthMismatchException>(() => IncomingObjectVerifier.VerifyAndWriteAsync(
+            source, destination, hash, "/quarantine/blob.tmp", ObjectType.Blob));
+    }
+
+    [Fact]
     public async Task VerifyAndWriteAsync_InvalidMagicBytes_ThrowsInvalidMagicBytesException()
     {
         var payload = "data"u8.ToArray();

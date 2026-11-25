@@ -1,9 +1,12 @@
 using DawVcs.Domain.Artifacts;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Hashing;
+using DawVcs.Domain.Repositories;
 using DawVcs.Infrastructure.Repositories;
 
 using FluentAssertions;
+
+using Microsoft.Data.Sqlite;
 
 using Xunit;
 
@@ -25,6 +28,66 @@ public sealed class SqliteStagingIndexTests : IDisposable
         {
             try { Directory.Delete(_testDir, recursive: true); } catch { }
         }
+    }
+
+    [Fact]
+    public async Task Dispose_ClosesIdleNativeHandlesAndAllowsImmediateRepositoryDeletion()
+    {
+        var root = Path.Combine(_testDir, "disposal");
+        using var index = new SqliteStagingIndex(root);
+        await index.GetStagedEntriesAsync();
+        var builder = new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(root, ".dawvc", "index.db"),
+            Mode = SqliteOpenMode.ReadWriteCreate
+        };
+        var probe = new SqliteConnection(builder.ToString());
+        await probe.OpenAsync();
+        var native = probe.Handle!;
+        await probe.DisposeAsync();
+        native.IsClosed.Should().BeFalse("pooling retains the physical connection before index disposal");
+
+        index.Dispose();
+        index.Dispose(); // Context and host shutdown may both dispose owned resources.
+
+        native.IsClosed.Should().BeTrue("session disposal must release pooled native file handles");
+        Directory.Delete(root, recursive: true); // Must also pass on Windows, without retries/pool cleanup in the test.
+        Directory.Exists(root).Should().BeFalse();
+        var afterDispose = () => index.GetStagedEntriesAsync();
+        await afterDispose.Should().ThrowAsync<ObjectDisposedException>();
+    }
+
+    [Fact]
+    public async Task Dispose_DoesNotCloseActiveConnectionsOrAnotherRepositoryPool()
+    {
+        var root = Path.Combine(_testDir, "active");
+        var otherRoot = Path.Combine(_testDir, "other");
+        using var index = new SqliteStagingIndex(root);
+        using var otherIndex = new SqliteStagingIndex(otherRoot);
+        await index.GetStagedEntriesAsync();
+        await otherIndex.GetStagedEntriesAsync();
+        static SqliteConnection CreateConnection(string directory) => new(new SqliteConnectionStringBuilder
+        {
+            DataSource = Path.Combine(directory, ".dawvc", "index.db"),
+            Mode = SqliteOpenMode.ReadWriteCreate
+        }.ToString());
+        await using var active = CreateConnection(root);
+        await active.OpenAsync();
+        var activeNative = active.Handle!;
+        var other = CreateConnection(otherRoot);
+        await other.OpenAsync();
+        var otherNative = other.Handle!;
+        await other.DisposeAsync();
+
+        index.Dispose();
+
+        activeNative.IsClosed.Should().BeFalse();
+        otherNative.IsClosed.Should().BeFalse("disposal must not clear unrelated pools");
+        await using var command = active.CreateCommand();
+        command.CommandText = "SELECT 1";
+        (await command.ExecuteScalarAsync()).Should().Be(1L);
+        await active.DisposeAsync();
+        activeNative.IsClosed.Should().BeTrue("an active handle must close instead of returning to the cleared pool");
     }
 
     [Fact]
@@ -83,23 +146,41 @@ public sealed class SqliteStagingIndexTests : IDisposable
     }
 
     [Fact]
-    public async Task CorruptionRecovery_WhenDatabaseCorrupted_TransparentlyRecreatesSchema()
+    public async Task CorruptIndex_IsPreservedInsteadOfRecreatingAndLosingStagedEntries()
     {
         var dbPath = Path.Combine(_testDir, ".dawvc", "index.db");
-        Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+        using (var index = new SqliteStagingIndex(_testDir))
+            await index.StageEntryAsync(ArtifactEntry.Create(new ArtifactPath("Keep.wav"), new ContentHash(new byte[32]), 100));
+        var bytes = await File.ReadAllBytesAsync(dbPath);
+        bytes[0] = 0; // Damage the header of an actual index containing staged user state.
+        await File.WriteAllBytesAsync(dbPath, bytes);
+        using (var corrupt = new SqliteStagingIndex(_testDir))
+        {
+            var read = () => corrupt.GetStagedEntriesAsync();
+            await read.Should().ThrowAsync<StagingIndexCorruptException>();
+        }
+        // Even failed initialization can leave an idle pooled native handle. Release
+        // the owning index before offline inspection, which Windows otherwise rejects.
+        (await File.ReadAllBytesAsync(dbPath)).Should().Equal(bytes);
+    }
 
-        // Corrupt file by writing invalid header
-        await File.WriteAllTextAsync(dbPath, "NOT A VALID SQLITE DATABASE FILE - CORRUPTION TEST");
-
+    [Fact]
+    public async Task PreCancelledToken_ThrowsOperationCanceledExceptionAcrossAllMethods()
+    {
         using var index = new SqliteStagingIndex(_testDir);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var token = cts.Token;
 
-        // Must recover and succeed without throwing
+        var path = new ArtifactPath("Test.wav");
         var hash = new ContentHash(new byte[32]);
-        var entry = ArtifactEntry.Create(new ArtifactPath("Recovered.wav"), hash, 100);
-        await index.StageEntryAsync(entry);
+        var entry = ArtifactEntry.Create(path, hash, 100);
 
-        var staged = await index.GetStagedEntriesAsync();
-        staged.Should().HaveCount(1);
-        staged[0].Path.Value.Should().Be("Recovered.wav");
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => index.StageEntryAsync(entry, token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => index.UnstageEntryAsync(path, token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => index.GetStagedEntriesAsync(token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => index.ClearStagedEntriesAsync(token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => index.TryGetCachedHashAsync(path, 100, DateTimeOffset.UtcNow, token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => index.SetCachedHashAsync(path, 100, DateTimeOffset.UtcNow, hash, token));
     }
 }

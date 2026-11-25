@@ -23,9 +23,6 @@ public sealed class LooseObjectStore : IObjectStore
         _objectsRoot = Path.Combine(Path.GetFullPath(repositoryRoot), ".dawvc", "objects");
         _tempRoot = Path.Combine(_objectsRoot, ".tmp");
 
-        Directory.CreateDirectory(_objectsRoot);
-        Directory.CreateDirectory(_tempRoot);
-
         _onBeforeAtomicPublish = onBeforeAtomicPublish;
     }
 
@@ -45,6 +42,8 @@ public sealed class LooseObjectStore : IObjectStore
     public async Task<ContentHash> WriteBlobAsync(Stream payloadStream, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(payloadStream);
+        cancellationToken.ThrowIfCancellationRequested();
+        Directory.CreateDirectory(_tempRoot);
 
         var tempFilePath = Path.Combine(_tempRoot, $"blob_{Guid.NewGuid():N}.tmp");
 
@@ -84,6 +83,7 @@ public sealed class LooseObjectStore : IObjectStore
         ReadOnlyMemory<byte> payload,
         CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var hash = Blake3ContentHasher.Hash(payload.Span);
         var targetPath = GetObjectPath(hash);
 
@@ -124,15 +124,22 @@ public sealed class LooseObjectStore : IObjectStore
         }
 
         var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 64 * 1024, FileOptions.Asynchronous);
-        var header = await ObjectEnvelopeReader.ReadHeaderAsync(stream, cancellationToken).ConfigureAwait(false);
-
-        if (header.PayloadHash != hash)
+        try
         {
-            stream.Dispose();
-            throw new PayloadHashMismatchException($"Envelope header hash mismatch! Expected {hash}, but header has {header.PayloadHash}.");
-        }
+            var header = await ObjectEnvelopeReader.ReadHeaderAsync(stream, cancellationToken).ConfigureAwait(false);
 
-        return new PayloadSliceStream(stream, ObjectEnvelopeHeader.HeaderSize, (long)header.PayloadLength);
+            if (header.PayloadHash != hash)
+            {
+                throw new PayloadHashMismatchException($"Envelope header hash mismatch! Expected {hash}, but header has {header.PayloadHash}.");
+            }
+
+            return new PayloadSliceStream(stream, ObjectEnvelopeHeader.HeaderSize, (long)header.PayloadLength);
+        }
+        catch
+        {
+            await stream.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
     }
 
     public async Task<byte[]> ReadObjectPayloadAsync(ContentHash hash, CancellationToken cancellationToken = default)

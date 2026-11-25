@@ -88,3 +88,21 @@ Because DAWVC is distributed as a clean, portable single executable with no syst
 1. Remove `C:\Tools\dawvc` (or your custom directory).
 2. Remove the directory from your User `PATH` environment variable.
 3. Repositories tracked with DAWVC keep their internal metadata inside `.dawvc/` within their project folders. To remove version control from a project without deleting music files, simply delete the `.dawvc` folder in that project.
+
+## Optional SSH synchronization
+
+Clients using `dawvc://` need the OpenSSH `ssh` executable in PATH. Hosts need
+OpenSSH server and a compatible DAWVC deployment with `serve`; neither requires
+a permanent DAWVC background process. OpenSSH is an external OS prerequisite,
+not a bundled NuGet dependency. Configure trusted host keys and public-key/agent
+authentication before use. See [Self-hosting SSH](Self_Hosting_SSH.md) for
+operator configuration, OS permissions, forced commands and platform limitations.
+
+
+## Preview acceptance and deployment qualification
+
+See [Preview acceptance](Preview_Acceptance.md) for automated packaged-CLI evidence
+and the separate real Windows/FL Studio/two-PC/OpenSSH/NAS checklist. Synthetic
+single-host success does not certify native playback or deployment-specific
+locking/rename behavior. Those release gates remain pending until measured on
+actual supported setups; no GUI or additional DAW support is implied.

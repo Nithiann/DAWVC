@@ -170,4 +170,45 @@ public sealed class LooseObjectStoreTests : IDisposable
             Directory.GetFiles(tempDir).Should().BeEmpty();
         }
     }
+
+    [Fact]
+    public async Task OpenPayloadStreamAsync_WhenCancelled_DisposesFileStreamAndRethrows()
+    {
+        var payload = Encoding.UTF8.GetBytes("Payload for cancellation stream disposal test");
+        using var memStream = new MemoryStream(payload);
+        var hash = await _store.WriteBlobAsync(memStream);
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var act = async () => await _store.OpenPayloadStreamAsync(hash, cts.Token);
+        await act.Should().ThrowAsync<OperationCanceledException>();
+
+        // If file stream was not disposed, deleting the file would fail with IOException (sharing violation on Windows)
+        var path = _store.GetObjectPath(hash);
+        var deleteAct = () => File.Delete(path);
+        deleteAct.Should().NotThrow();
+    }
+
+    [Fact]
+    public async Task OpenPayloadStreamAsync_WhenHashMismatch_DisposesFileStream()
+    {
+        var payload = Encoding.UTF8.GetBytes("Original payload");
+        using var memStream = new MemoryStream(payload);
+        var hash = await _store.WriteBlobAsync(memStream);
+
+        // Compute a different hash and corrupt object path
+        var differentHash = Blake3ContentHasher.Hash(Encoding.UTF8.GetBytes("Different"));
+        var originalPath = _store.GetObjectPath(hash);
+        var corruptedPath = _store.GetObjectPath(differentHash);
+        Directory.CreateDirectory(Path.GetDirectoryName(corruptedPath)!);
+        File.Copy(originalPath, corruptedPath, overwrite: true);
+
+        var act = async () => await _store.OpenPayloadStreamAsync(differentHash);
+        await act.Should().ThrowAsync<PayloadHashMismatchException>();
+
+        // Stream must be disposed, permitting immediate file deletion
+        var deleteAct = () => File.Delete(corruptedPath);
+        deleteAct.Should().NotThrow();
+    }
 }

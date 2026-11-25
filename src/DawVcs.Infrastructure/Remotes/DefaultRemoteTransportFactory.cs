@@ -1,10 +1,11 @@
 using DawVcs.Application.Remotes;
 using DawVcs.Domain.Remotes;
+using DawVcs.Infrastructure.Remotes.Ssh;
 
 namespace DawVcs.Infrastructure.Remotes;
 
 /// <summary>
-/// Default implementation of IRemoteTransportFactory resolving filesystem paths, network shares, and file:// URLs.
+/// Resolves filesystem/file:// paths and dawvc:// addresses over OpenSSH.
 /// </summary>
 public sealed class DefaultRemoteTransportFactory : IRemoteTransportFactory
 {
@@ -13,12 +14,9 @@ public sealed class DefaultRemoteTransportFactory : IRemoteTransportFactory
         ArgumentException.ThrowIfNullOrWhiteSpace(remoteUrl);
 
         var trimmed = remoteUrl.Trim();
-        if (trimmed.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-            trimmed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new NotSupportedException($"HTTPS remote transport is not supported in v0.2. Use filesystem paths, external drives, or network shares (UNC).");
-        }
-
+        if (trimmed.StartsWith("dawvc://", StringComparison.OrdinalIgnoreCase)) return new SshRemoteTransport(trimmed);
+        if (trimmed.Contains("://", StringComparison.Ordinal) && !trimmed.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+            throw new NotSupportedException("Unsupported remote scheme. Use dawvc:// over SSH, file:// or a filesystem path.");
         var path = trimmed;
         if (path.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
         {

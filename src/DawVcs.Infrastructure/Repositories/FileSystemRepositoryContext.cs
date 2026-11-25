@@ -31,12 +31,20 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
     private readonly string _remotesFilePath;
     private readonly string _objectsPath;
     private readonly LooseObjectStore _objectStore;
-    private readonly SqliteStagingIndex _stagingIndex;
+    private readonly Lazy<SqliteStagingIndex> _stagingIndex;
+    private int _disposed;
     private readonly JsonLocalBindingStore _localBindings;
 
     public string RootPath => _rootPath;
     public IObjectStore ObjectStore => _objectStore;
-    public IStagingIndex StagingIndex => _stagingIndex;
+    public IStagingIndex StagingIndex
+    {
+        get
+        {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+            return _stagingIndex.Value;
+        }
+    }
     public ILocalBindingStore LocalBindings => _localBindings;
 
     public FileSystemRepositoryContext(string rootPath, Action<string>? onBeforeAtomicPublish = null)
@@ -52,7 +60,7 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
         _objectsPath = Path.Combine(_dotDawvcPath, "objects");
 
         _objectStore = new LooseObjectStore(_rootPath, onBeforeAtomicPublish);
-        _stagingIndex = new SqliteStagingIndex(_rootPath);
+        _stagingIndex = new Lazy<SqliteStagingIndex>(() => new SqliteStagingIndex(_rootPath));
         _localBindings = new JsonLocalBindingStore(_dotDawvcPath);
     }
 
@@ -108,6 +116,7 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
 
     public void SetCurrentBranch(BranchName branch)
     {
+        using var refLock = RepositoryRefLock.Acquire(_dotDawvcPath);
         Directory.CreateDirectory(_dotDawvcPath);
         AtomicFileWriter.WriteAtomic(_headFilePath, $"ref: refs/heads/{branch.Value}\n");
     }
@@ -143,6 +152,7 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
 
     public void CreateBranch(BranchName branch, CommitId commitId)
     {
+        using var refLock = RepositoryRefLock.Acquire(_dotDawvcPath);
         var branchRefFile = GetBranchRefFile(branch);
         var dir = Path.GetDirectoryName(branchRefFile);
         if (!string.IsNullOrEmpty(dir))
@@ -160,6 +170,7 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
 
     public bool DeleteBranch(BranchName branch)
     {
+        using var refLock = RepositoryRefLock.Acquire(_dotDawvcPath);
         var currentBranch = GetCurrentBranch();
         if (branch == currentBranch)
         {
@@ -205,6 +216,7 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
 
     public async Task UpdateBranchCommitAsync(BranchName branch, CommitId newCommit, CancellationToken cancellationToken = default)
     {
+        using var refLock = RepositoryRefLock.Acquire(_dotDawvcPath);
         var branchRefFile = GetBranchRefFile(branch);
         var dir = Path.GetDirectoryName(branchRefFile);
         if (!string.IsNullOrEmpty(dir))
@@ -471,7 +483,7 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
         {
             Directory.CreateDirectory(dir);
         }
-        File.WriteAllBytes(_remotesFilePath, bytes);
+        AtomicFileWriter.WriteAtomic(_remotesFilePath, stream => stream.Write(bytes));
     }
 
     private sealed class RemotesConfigDto
@@ -496,7 +508,8 @@ public sealed class FileSystemRepositoryContext : IRepositoryContext
 
     public void Dispose()
     {
-        _stagingIndex.Dispose();
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        if (_stagingIndex.IsValueCreated) _stagingIndex.Value.Dispose();
         _localBindings.Dispose();
     }
 }

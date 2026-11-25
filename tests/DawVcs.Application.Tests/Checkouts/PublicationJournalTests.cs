@@ -42,6 +42,27 @@ public sealed class PublicationJournalTests : IDisposable
 
     [Fact]
     [Trait("Requirement", "FR-CHK-006")]
+    public async Task RollbackFailure_RetainsBackupAfterDisposal()
+    {
+        var target = Path.Combine(_targetDir, "FileA.txt");
+        await File.WriteAllTextAsync(target, "original");
+        await File.WriteAllTextAsync(Path.Combine(_stagingDir, "FileA.txt"), "replacement");
+        var journal = new PublicationJournal(_targetDir, _dotDawvcDir);
+        await journal.ApplyAsync(_stagingDir, new CheckoutPlan(
+            [new CheckoutAction(new ArtifactPath("FileA.txt"), CheckoutActionKind.Replace)], []));
+
+        File.Delete(target);
+        Directory.CreateDirectory(target); // Blocks restoration on Windows and Linux.
+        var act = () => journal.RollbackAsync();
+        var failure = (await act.Should().ThrowAsync<IncompleteRollbackException>()).Which;
+        await journal.DisposeAsync();
+
+        (await File.ReadAllTextAsync(Path.Combine(failure.RecoveryPath, "FileA.txt")))
+            .Should().Be("original");
+    }
+
+    [Fact]
+    [Trait("Requirement", "FR-CHK-006")]
     public async Task ExecutePlanAsync_SuccessfulPlan_AppliesAllActionsCleanly()
     {
         // Arrange
@@ -117,5 +138,34 @@ public sealed class PublicationJournalTests : IDisposable
         File.Exists(fileB).Should().BeTrue("deleted file must be restored from journal backup");
         (await File.ReadAllTextAsync(fileB)).Should().Be("Original B content (should be restored)");
         File.Exists(Path.Combine(_targetDir, "FileC.txt")).Should().BeFalse("failed create file must not exist");
+    }
+
+    [Fact]
+    [Trait("Requirement", "FR-CHK-006")]
+    public async Task ApplyAsync_WhenCancelled_RollsBackAndRethrowsOperationCanceledException()
+    {
+        var fileA = Path.Combine(_targetDir, "FileA.txt");
+        await File.WriteAllTextAsync(fileA, "Original A content");
+
+        var stagedA = Path.Combine(_stagingDir, "FileA.txt");
+        await File.WriteAllTextAsync(stagedA, "New A content");
+
+        var plan = new CheckoutPlan(
+            [
+                new CheckoutAction(new ArtifactPath("FileA.txt"), CheckoutActionKind.Replace)
+            ],
+            []);
+
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await using (var journal = new PublicationJournal(_targetDir, _dotDawvcDir))
+        {
+            var act = () => journal.ApplyAsync(_stagingDir, plan, cts.Token);
+            await act.Should().ThrowAsync<OperationCanceledException>();
+        }
+
+        // Workspace must be rolled back / preserved
+        (await File.ReadAllTextAsync(fileA)).Should().Be("Original A content");
     }
 }

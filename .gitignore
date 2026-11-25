@@ -49,3 +49,6 @@ Thumbs.db
 ehthumbs.db
 desktop.ini
 [Nn]on[Cc]ommercial/
+
+# Python acceptance tooling
+scripts/__pycache__/

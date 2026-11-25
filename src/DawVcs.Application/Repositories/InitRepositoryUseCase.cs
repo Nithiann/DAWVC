@@ -1,4 +1,6 @@
 using DawVcs.Application.Common;
+using DawVcs.Application.Operations;
+using DawVcs.Application.Recovery;
 using DawVcs.Domain.Artifacts;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Configuration;
@@ -9,7 +11,10 @@ namespace DawVcs.Application.Repositories;
 public sealed record InitRequest(
     string TargetDirectory,
     string? ProjectName = null,
-    string? PrimaryArtifactPath = null);
+    string? PrimaryArtifactPath = null)
+{
+    internal RepositoryOperation? Operation { get; init; }
+}
 
 public sealed record InitResult(
     RepositoryId RepositoryId,
@@ -38,10 +43,13 @@ public sealed class InitRepositoryUseCase : IUseCase<InitRequest, InitResult>
     {
         ArgumentNullException.ThrowIfNull(request);
 
+        cancellationToken.ThrowIfCancellationRequested();
         var targetDir = Path.GetFullPath(request.TargetDirectory);
+        using var operation = RepositoryOperation.Enter(targetDir, request.Operation, create: true, cancellationToken: cancellationToken);
+        WorkspaceRecoveryGuard.ThrowIfPending(targetDir);
         Directory.CreateDirectory(targetDir);
 
-        var context = _contextFactory(targetDir);
+        using var context = _contextFactory(targetDir);
         var dotDawvc = Path.Combine(targetDir, ".dawvc");
         var configPath = Path.Combine(targetDir, "dawvc.yaml");
 
@@ -50,8 +58,10 @@ public sealed class InitRepositoryUseCase : IUseCase<InitRequest, InitResult>
         {
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var existingConfig = context.LoadConfig();
                 var currentBranch = context.GetCurrentBranch();
+                cancellationToken.ThrowIfCancellationRequested();
                 return Task.FromResult(new InitResult(
                     existingConfig.RepositoryId,
                     existingConfig.ProjectName,
@@ -59,11 +69,17 @@ public sealed class InitRepositoryUseCase : IUseCase<InitRequest, InitResult>
                     currentBranch,
                     WasAlreadyInitialized: true));
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
             catch
             {
                 // Re-initialize if corrupt
             }
         }
+
+        cancellationToken.ThrowIfCancellationRequested();
 
         var projectName = !string.IsNullOrWhiteSpace(request.ProjectName)
             ? request.ProjectName
@@ -123,6 +139,8 @@ public sealed class InitRepositoryUseCase : IUseCase<InitRequest, InitResult>
             BranchName.Main);
 
         context.SaveConfig(config);
+        Directory.CreateDirectory(Path.Combine(dotDawvc, "objects"));
+        Directory.CreateDirectory(Path.Combine(dotDawvc, "refs", "heads"));
         context.SetCurrentBranch(BranchName.Main);
 
         return Task.FromResult(new InitResult(

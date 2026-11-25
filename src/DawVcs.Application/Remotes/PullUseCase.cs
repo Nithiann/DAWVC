@@ -1,5 +1,8 @@
 using DawVcs.Application.Checkouts;
+using DawVcs.Application.Common;
 using DawVcs.Application.Diagnostics;
+using DawVcs.Application.Operations;
+using DawVcs.Application.Recovery;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Dependencies;
 using DawVcs.Domain.Remotes;
@@ -13,7 +16,10 @@ public sealed record PullRequest(
     string? Branch = null,
     bool Force = false,
     bool FfOnly = true,
-    bool DryRun = false);
+    bool DryRun = false)
+{
+    internal RepositoryOperation? Operation { get; init; }
+}
 
 public sealed record DoctorReportSummary(
     double ReproducibilityScore,
@@ -64,37 +70,51 @@ public sealed class PullUseCase
         _doctorUseCase = doctorUseCase;
     }
 
-    public async Task<PullResult> ExecuteAsync(PullRequest request, CancellationToken cancellationToken = default)
+    public Task<PullResult> ExecuteAsync(PullRequest request, CancellationToken cancellationToken = default)
+        => ExecuteAsync(request, cancellationToken, null);
+
+    public async Task<PullResult> ExecuteAsync(
+        PullRequest request, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        using var operation = request.DryRun ? null
+            : RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation, cancellationToken: cancellationToken);
+        var result = await ExecuteCoreAsync(request with { Operation = operation }, cancellationToken, progress).ConfigureAwait(false);
+        progress?.Report(new OperationProgress(OperationStage.Completed));
+        return result;
+    }
+
+    private async Task<PullResult> ExecuteCoreAsync(
+        PullRequest request, CancellationToken cancellationToken, IProgress<OperationProgress>? progress)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(request.RepositoryDirectory);
 
-        // 1. Fetch remote changes into quarantine & update remote-tracking refs (FR-PUL-001)
-        var fetchResult = await _fetchUseCase.ExecuteAsync(
-            new FetchRequest(request.RepositoryDirectory, request.RemoteName, request.Branch, request.DryRun),
-            cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        var nestedProgress = progress is null ? null : new NestedOperationProgress(progress);
 
-        var context = _contextFactory(request.RepositoryDirectory);
-        var currentBranch = context.GetCurrentBranch();
+        progress?.Report(new OperationProgress(OperationStage.OpeningRepository));
+        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
+        using var context = _contextFactory(request.RepositoryDirectory);
+        var target = SyncTarget.ForPull(context, request.RemoteName, request.Branch);
+        var targetBranch = target.LocalBranch;
+        var remoteName = target.RemoteName;
+        var finalRemoteBranch = target.RemoteBranch;
 
-        var targetBranch = !string.IsNullOrWhiteSpace(request.Branch)
-            ? BranchName.Parse(request.Branch)
-            : currentBranch;
+        // Resolve upstream before fetching, so Fetch and integration use the same source.
+        var fetchRequest = new FetchRequest(request.RepositoryDirectory, remoteName, finalRemoteBranch.Value, request.DryRun) { Operation = request.Operation };
+        var fetchResult = nestedProgress is null
+            ? await _fetchUseCase.ExecuteAsync(fetchRequest, cancellationToken).ConfigureAwait(false)
+            : await _fetchUseCase.ExecuteAsync(fetchRequest, cancellationToken, nestedProgress).ConfigureAwait(false);
 
-        var remoteName = request.RemoteName;
-        BranchName? remoteBranch = null;
-
-        if (string.IsNullOrWhiteSpace(remoteName))
-        {
-            var (upstreamRemote, upstreamBranch) = context.GetUpstream(targetBranch);
-            remoteName = !string.IsNullOrWhiteSpace(upstreamRemote) ? upstreamRemote : "origin";
-            remoteBranch = upstreamBranch;
-        }
-
-        var finalRemoteBranch = remoteBranch ?? targetBranch;
-
+        progress?.Report(new OperationProgress(OperationStage.LoadingMetadata));
+        if (context.GetCurrentBranch() != targetBranch)
+            throw new RepositoryStateChangedException("Active local branch changed during fetch. Retry Pull from the intended branch.");
         var localTip = context.GetBranchCommit(targetBranch);
-        var remoteTip = context.GetRemoteTrackingCommit(remoteName, finalRemoteBranch);
+        var preview = request.DryRun ? fetchResult.Preview
+            ?? throw new IncompatibleRemoteRepositoryException("Fetch provider did not supply a current preview snapshot.") : null;
+        var remoteTip = preview is null ? context.GetRemoteTrackingCommit(remoteName, finalRemoteBranch)
+            : preview.RemoteRefs.FirstOrDefault(head => FetchPreviewPlanner.ParseBranch(head.Name) == finalRemoteBranch)?.HeadCommit;
 
         if (!remoteTip.HasValue)
         {
@@ -102,11 +122,10 @@ public sealed class PullUseCase
         }
 
         // 2. Classify sync ancestry state (FR-PUL-003..005)
-        var classification = await _ancestryService.DetermineSyncStateAsync(
-            localTip,
-            remoteTip.Value,
-            context,
-            cancellationToken).ConfigureAwait(false);
+        progress?.Report(new OperationProgress(OperationStage.TraversingHistory));
+        var classification = preview is null
+            ? await _ancestryService.DetermineSyncStateAsync(localTip, remoteTip.Value, context, cancellationToken).ConfigureAwait(false)
+            : await _ancestryService.DeterminePreviewStateAsync(localTip, remoteTip.Value, context, preview, cancellationToken).ConfigureAwait(false);
 
         switch (classification.State)
         {
@@ -158,21 +177,27 @@ public sealed class PullUseCase
                         Array.Empty<string>(),
                         RecoveryDirectory: null,
                         DoctorSummary: null,
-                        Message: $"Would fast-forward '{targetBranch.Value}' from {localTip?.ToString()[..8] ?? "<none>"} to {remoteTip.Value.ToString()[..8]} ({classification.CommitsBehind} commit(s)).",
+                        Message: localTip.HasValue
+                            ? $"Would fast-forward '{targetBranch.Value}' from {localTip.Value.ToString()[..8]} to {remoteTip.Value.ToString()[..8]} ({classification.CommitsBehind} commit(s))."
+                            : $"Would initialize '{targetBranch.Value}' at {remoteTip.Value.ToString()[..8]}.",
                         IsDryRun: true);
                 }
 
                 // 3. Fast-forward workspace update via PublicationJournal (FR-PUL-006..008, AC-030)
                 var ffTarget = new FastForwardTarget(request.RepositoryDirectory, targetBranch, localTip, remoteTip.Value);
-                var checkoutResult = await _checkoutUseCase.ExecuteFastForwardAsync(ffTarget, request.Force, cancellationToken).ConfigureAwait(false);
+                ffTarget = ffTarget with { Operation = request.Operation };
+                var checkoutResult = nestedProgress is null
+                    ? await _checkoutUseCase.ExecuteFastForwardAsync(ffTarget, request.Force, cancellationToken).ConfigureAwait(false)
+                    : await _checkoutUseCase.ExecuteFastForwardAsync(ffTarget, request.Force, cancellationToken, nestedProgress).ConfigureAwait(false);
 
                 // 4. Non-blocking Doctor summary (FR-PUL-009)
                 DoctorReportSummary? doctorSummary = null;
                 if (_doctorUseCase is not null)
                 {
+                    progress?.Report(new OperationProgress(OperationStage.ProbingEnvironment));
                     try
                     {
-                        var docReport = await _doctorUseCase.ExecuteAsync(new DoctorRequest(request.RepositoryDirectory), cancellationToken).ConfigureAwait(false);
+                        var docReport = await _doctorUseCase.ExecuteAsync(new DoctorRequest(request.RepositoryDirectory) { Operation = request.Operation }, cancellationToken).ConfigureAwait(false);
                         var plugins = docReport.DependencyHealth.Where(d => d.Category.Equals("Plugin", StringComparison.OrdinalIgnoreCase)).ToList();
                         var assets = docReport.DependencyHealth.Where(d => d.Category.Equals("Asset", StringComparison.OrdinalIgnoreCase)).ToList();
 
@@ -183,6 +208,10 @@ public sealed class PullUseCase
                             MissingPluginsCount: plugins.Count(p => p.Status != BindingStatus.Verified),
                             ResolvedAssetsCount: assets.Count(a => a.Status == BindingStatus.Verified),
                             MissingAssetsCount: assets.Count(a => a.Status != BindingStatus.Verified));
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
                     }
                     catch
                     {

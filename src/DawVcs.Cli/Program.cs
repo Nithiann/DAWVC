@@ -1,9 +1,8 @@
 using System.CommandLine;
+using System.CommandLine.Invocation;
 using System.Text.Json;
 
 using DawVcs.Adapters.Abstractions;
-using DawVcs.Adapters.FLStudio;
-using DawVcs.Application.Adapters;
 using DawVcs.Application.Branches;
 using DawVcs.Application.Checkouts;
 using DawVcs.Application.Commits;
@@ -11,16 +10,17 @@ using DawVcs.Application.Common;
 using DawVcs.Application.Dependencies;
 using DawVcs.Application.Diagnostics;
 using DawVcs.Application.Exceptions;
+using DawVcs.Application.Recovery;
 using DawVcs.Application.Remotes;
 using DawVcs.Application.Repositories;
 using DawVcs.Application.Scanning;
 using DawVcs.Application.Staging;
+using DawVcs.Bootstrap;
 using DawVcs.Domain.Remotes;
 using DawVcs.Domain.Repositories;
 using DawVcs.Domain.Storage;
-using DawVcs.Infrastructure.Remotes;
+using DawVcs.Infrastructure.Remotes.Ssh;
 using DawVcs.Infrastructure.Repositories;
-using DawVcs.Infrastructure.Storage;
 
 using Microsoft.Extensions.DependencyInjection;
 
@@ -52,53 +52,30 @@ public static class Program
         }
 
         var services = new ServiceCollection();
-        services.AddSingleton<Func<string, IRepositoryContext>>(sp => dir => new FileSystemRepositoryContext(dir));
-        services.AddSingleton<IDawAdapterRegistry>(sp => new DawAdapterRegistry([new FLStudioAdapter()]));
-        services.AddTransient<InitRepositoryUseCase>();
-        services.AddTransient<CommitUseCase>(sp => new CommitUseCase(
-            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
-            sp.GetRequiredService<IDawAdapterRegistry>()));
-        services.AddTransient<LogUseCase>();
-        services.AddTransient<CheckoutRestoreUseCase>();
-        services.AddTransient<CheckoutUseCase>(sp => new CheckoutUseCase(
-            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
-            sp.GetRequiredService<IDawAdapterRegistry>()));
-        services.AddTransient<BindDependencyUseCase>();
-        services.AddTransient<StatusUseCase>();
-        services.AddTransient<AddUseCase>();
-        services.AddTransient<ScanUseCase>();
-        services.AddTransient<BranchUseCase>();
-        services.AddTransient<SwitchUseCase>(sp => new SwitchUseCase(
-            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
-            sp.GetRequiredService<IDawAdapterRegistry>()));
-        services.AddTransient<DoctorUseCase>(sp => new DoctorUseCase(
-            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
-            sp.GetRequiredService<IDawAdapterRegistry>()));
-        services.AddTransient<FsckUseCase>(sp => new FsckUseCase(
-            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
-            sp.GetRequiredService<IDawAdapterRegistry>()));
-        services.AddTransient<RemoteUseCase>();
-        services.AddSingleton<IRemoteTransportFactory, DefaultRemoteTransportFactory>();
-        services.AddTransient<Func<string, IQuarantineStore>>(_ => dir => new QuarantineObjectStore(dir));
-        services.AddTransient<ObjectGraphWalker>();
-        services.AddTransient<FetchUseCase>();
-        services.AddTransient<AncestryService>();
-        services.AddTransient<PullUseCase>(sp => new PullUseCase(
-            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
-            sp.GetRequiredService<FetchUseCase>(),
-            sp.GetRequiredService<CheckoutUseCase>(),
-            sp.GetRequiredService<AncestryService>(),
-            sp.GetRequiredService<DoctorUseCase>()));
-        services.AddTransient<CloneUseCase>(sp => new CloneUseCase(
-            sp.GetRequiredService<Func<string, IRepositoryContext>>(),
-            sp.GetRequiredService<IRemoteTransportFactory>(),
-            sp.GetRequiredService<FetchUseCase>(),
-            sp.GetRequiredService<CheckoutUseCase>(),
-            sp.GetRequiredService<DoctorUseCase>()));
+        services.AddDawVcs();
 
         using var serviceProvider = services.BuildServiceProvider();
 
         var rootCommand = new RootCommand("DAWVC — Version control and dependency management for DAWs");
+
+        // Protocol-only stdout: this command runs transiently under OpenSSH.
+        var serveCommand = new Command("serve", "Serve allowlisted repositories over an SSH stdio session");
+        var serveConfig = new Option<string?>("--config", "Host-owned policy file (default: ~/.config/dawvc/serve.json)");
+        serveCommand.AddOption(serveConfig);
+        serveCommand.SetHandler(async (InvocationContext invocation) =>
+        {
+            try
+            {
+                var policy = ServeConfiguration.Load(invocation.ParseResult.GetValueForOption(serveConfig) ?? ServeConfiguration.DefaultPath);
+                invocation.ExitCode = await RemoteProtocolServer.RunAsync(Console.OpenStandardInput(), Console.OpenStandardOutput(), policy, invocation.GetCancellationToken());
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or ArgumentException or DawVcs.Domain.Remotes.RemoteException)
+            {
+                Console.Error.WriteLine("DAWVC host policy could not be loaded. Check the host configuration and permissions locally.");
+                invocation.ExitCode = 8;
+            }
+        });
+        rootCommand.AddCommand(serveCommand);
 
         // --- dawvc init ---
         var initCommand = new Command("init", "Initialize a new DAWVC repository");
@@ -108,14 +85,35 @@ public static class Program
         initCommand.AddOption(initDirOption);
         initCommand.AddOption(initNameOption);
         initCommand.AddOption(initPrimaryOption);
+        var initBareOption = new Option<bool>("--bare", "Create an empty hosting repository with the source identity");
+        var initFromOption = new Option<string?>("--from", "Source repository path or dawvc:// URL (required with --bare)");
+        initCommand.AddOption(initBareOption);
+        initCommand.AddOption(initFromOption);
 
-        initCommand.SetHandler(async (dir, name, primary) =>
+        initCommand.SetHandler(async (InvocationContext invocation) =>
         {
             try
             {
+                var parsed = invocation.ParseResult;
+                var dir = parsed.GetValueForOption(initDirOption);
+                var name = parsed.GetValueForOption(initNameOption);
+                var primary = parsed.GetValueForOption(initPrimaryOption);
+                var bare = parsed.GetValueForOption(initBareOption);
+                var from = parsed.GetValueForOption(initFromOption);
                 var targetDir = string.IsNullOrWhiteSpace(dir) ? Directory.GetCurrentDirectory() : dir;
+                if (bare)
+                {
+                    if (string.IsNullOrWhiteSpace(from) || name is not null || primary is not null)
+                        throw new ArgumentException("init --bare requires --from <source>; --name and --primary are inherited and cannot be overridden.");
+                    var provisioned = await serviceProvider.GetRequiredService<BareRepositoryUseCase>()
+                        .ExecuteAsync(new BareRepositoryRequest(from, targetDir), invocation.GetCancellationToken());
+                    AnsiConsole.MarkupLine($"[green]✓[/] Initialized empty bare repository in [bold]{Markup.Escape(PathRedactor.Redact(provisioned.TargetDirectory))}[/]");
+                    AnsiConsole.MarkupLine($"  [dim]Repository ID:[/] {provisioned.Configuration.RepositoryId}");
+                    return;
+                }
+                if (from is not null) throw new ArgumentException("--from requires --bare.");
                 var useCase = serviceProvider.GetRequiredService<InitRepositoryUseCase>();
-                var result = await useCase.ExecuteAsync(new InitRequest(targetDir, name, primary));
+                var result = await useCase.ExecuteAsync(new InitRequest(targetDir, name, primary), invocation.GetCancellationToken());
 
                 if (result.WasAlreadyInitialized)
                 {
@@ -131,11 +129,83 @@ public static class Program
                 AnsiConsole.MarkupLine($"  [dim]Primary File:[/]  [cyan]{Markup.Escape(result.PrimaryArtifact.Value)}[/]");
                 AnsiConsole.MarkupLine($"  [dim]Branch:[/]        [yellow]{result.DefaultBranch.Value}[/]");
             }
-            catch (Exception ex)
+            catch (OperationCanceledException) { invocation.ExitCode = 130; WriteError("Initialization cancelled; inspect the destination before retrying."); }
+            catch (RemoteException ex) { invocation.ExitCode = 8; WriteError(ex.Message); }
+            catch (PathSecurityException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
+            catch (ArgumentException ex) { invocation.ExitCode = 7; WriteError(ex.Message); }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
+            catch (Exception ex) { invocation.ExitCode = 1; WriteError(ex.Message); }
+        });
+
+        // Explicit whole-snapshot resolution; no semantic FLP merge or implicit Fetch.
+        var mergeCommand = new Command("merge", "Resolve diverged history by choosing one complete project snapshot");
+        var mergeReference = new Argument<string>("reference", "Fetched tracking ref, local branch or commit ID");
+        var mergeTake = new Option<string>("--take", "Required: local or incoming (entire project snapshot)") { IsRequired = true };
+        var mergeMessage = new Option<string>(MessageAliases, "Merge commit message") { IsRequired = true };
+        var mergeAuthor = new Option<string?>("--author", "Author name/identity");
+        var mergeDir = new Option<string?>("--dir", "Working repository directory");
+        mergeCommand.AddArgument(mergeReference);
+        mergeCommand.AddOption(mergeTake);
+        mergeCommand.AddOption(mergeMessage);
+        mergeCommand.AddOption(mergeAuthor);
+        mergeCommand.AddOption(mergeDir);
+        mergeCommand.SetHandler(async (InvocationContext invocation) =>
+        {
+            try
             {
-                WriteError(ex.Message, 1);
+                var parsed = invocation.ParseResult;
+                var take = parsed.GetValueForOption(mergeTake) switch
+                {
+                    "local" => MergeSnapshotChoice.Local,
+                    "incoming" => MergeSnapshotChoice.Incoming,
+                    _ => throw new ArgumentException("--take must be local or incoming; it selects the complete project snapshot.")
+                };
+                var result = await serviceProvider.GetRequiredService<MergeUseCase>().ExecuteAsync(new MergeRequest(
+                    ResolveRepoDirectory(parsed.GetValueForOption(mergeDir)), parsed.GetValueForArgument(mergeReference),
+                    take, parsed.GetValueForOption(mergeMessage)!, parsed.GetValueForOption(mergeAuthor)), invocation.GetCancellationToken());
+                AnsiConsole.MarkupLine($"[green]✓[/] Created merge [bold]{result.CommitId.ToString()[..8]}[/] using the {take.ToString().ToLowerInvariant()} snapshot; both parent histories are preserved.");
             }
-        }, initDirOption, initNameOption, initPrimaryOption);
+            catch (DirtyWorkspaceException ex) { invocation.ExitCode = 4; WriteError(ex.Message); }
+            catch (RepositoryStateChangedException ex) { invocation.ExitCode = 7; WriteError(ex.Message); }
+            catch (ArgumentException ex) { invocation.ExitCode = 7; WriteError(ex.Message); }
+            catch (InvalidEnvelopeException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
+            catch (PathSecurityException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
+            catch (CheckoutStagingException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
+            catch (FileNotFoundException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
+            catch (OperationCanceledException) { invocation.ExitCode = 130; WriteError("Merge cancelled. Inspect the current branch before retrying; a completed publication is not undone."); }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
+            catch (Exception ex) { invocation.ExitCode = 1; WriteError(ex.Message); }
+        });
+
+        var recoverCommand = new Command("recover", "Inspect or roll back interrupted workspace publication");
+        var recoverDir = new Option<string?>("--dir", "Working repository directory");
+        var recoverRollback = new Option<bool>("--rollback", "Explicitly restore the previous workspace/ref/staging state; committed transactions are verified and cleaned");
+        recoverCommand.AddOption(recoverDir);
+        recoverCommand.AddOption(recoverRollback);
+        recoverCommand.SetHandler(async (InvocationContext invocation) =>
+        {
+            try
+            {
+                var root = ResolveRepoDirectory(invocation.ParseResult.GetValueForOption(recoverDir));
+                if (invocation.ParseResult.GetValueForOption(recoverRollback))
+                {
+                    var result = await serviceProvider.GetRequiredService<WorkspaceRecoveryUseCase>().RollbackAsync(root, invocation.GetCancellationToken());
+                    AnsiConsole.MarkupLine($"[green]✓[/] Recovery finished: {result.RolledBack} rolled back, {result.CommittedCleaned} committed transaction(s) cleaned.");
+                }
+                else
+                {
+                    var pending = await WorkspaceRecoveryUseCase.InspectAsync(root, invocation.GetCancellationToken());
+                    foreach (var item in pending) AnsiConsole.MarkupLine($"[yellow]{item.Id}[/] {item.State}: {item.Files} file(s), {item.StagedEntries} saved staged entry/entries.");
+                    if (pending.Count == 0) AnsiConsole.MarkupLine("No pending workspace transactions.");
+                }
+            }
+            catch (RepositoryBusyException ex) { invocation.ExitCode = 11; WriteError(ex.Message); }
+            catch (WorkspaceRecoveryRequiredException ex) { invocation.ExitCode = 10; WriteError(ex.Message); }
+            catch (OperationCanceledException) { invocation.ExitCode = 130; WriteError("Recovery cancelled; retain the transaction and retry after inspecting state."); }
+            catch (Exception ex) { invocation.ExitCode = 10; WriteError(ex.Message); }
+        });
 
         // --- dawvc commit ---
         var commitCommand = new Command("commit", "Record changes to the repository");
@@ -176,6 +246,8 @@ public static class Program
                 AnsiConsole.MarkupLine($"[yellow]{Markup.Escape(PathRedactor.Redact(ex.Message))}[/]");
                 Environment.ExitCode = 0;
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -209,11 +281,15 @@ public static class Program
                     AnsiConsole.MarkupLine($"Author:    {Markup.Escape(entry.Author)}");
                     AnsiConsole.MarkupLine($"Date:      {entry.Timestamp:yyyy-MM-dd HH:mm:ss zzz}");
                     AnsiConsole.MarkupLine($"Snapshot:  [dim]{entry.SnapshotId}[/]");
+                    if (entry.Parents.Count > 1)
+                        AnsiConsole.MarkupLine($"Parents:   [dim]{string.Join(" ", entry.Parents)}[/]");
                     AnsiConsole.WriteLine();
                     AnsiConsole.WriteLine($"    {entry.Message}");
                     AnsiConsole.WriteLine();
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -286,6 +362,8 @@ public static class Program
             {
                 WriteError(ex.Message, 5);
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -327,6 +405,8 @@ public static class Program
                         break;
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -401,6 +481,8 @@ public static class Program
                     AnsiConsole.MarkupLine("nothing to commit, working tree clean");
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -430,6 +512,8 @@ public static class Program
                     AnsiConsole.MarkupLine($"  [green]+[/] {Markup.Escape(path.Value)}");
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -542,6 +626,8 @@ public static class Program
                 }
                 AnsiConsole.WriteLine();
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -599,6 +685,8 @@ public static class Program
                     }
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -657,6 +745,8 @@ public static class Program
                 WriteError($"Staging conflict (Exit Code 7): {ex.Message}", 7);
                 AnsiConsole.MarkupLine("[yellow]Remediation:[/] Commit or stage your changes, or use [bold]dawvc switch --force <branch>[/] to create a recovery copy.");
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -868,6 +958,8 @@ public static class Program
                     Environment.ExitCode = 0;
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -966,6 +1058,8 @@ public static class Program
                     Environment.ExitCode = 0;
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -992,6 +1086,8 @@ public static class Program
                 var remote = useCase.AddRemote(new RemoteAddRequest(repoDir, name, url));
                 AnsiConsole.MarkupLine($"[green]✓[/] Added remote '[yellow]{Markup.Escape(remote.Name.Value)}[/]' -> [cyan]{Markup.Escape(PathRedactor.Redact(remote.Url))}[/]");
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -1020,6 +1116,8 @@ public static class Program
                     WriteError($"Remote '{name}' not found.", 1);
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
@@ -1047,11 +1145,40 @@ public static class Program
                     AnsiConsole.MarkupLine($"[yellow]{Markup.Escape(rem.Name.Value)}[/]\t{Markup.Escape(PathRedactor.Redact(rem.Url))}");
                 }
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
             }
         }, remoteDirOption);
+
+        var remoteTrackCommand = new Command("track", "Set the upstream remote branch for a local branch without contacting the host");
+        var trackRemoteArg = new Argument<string>("name", "Configured remote name");
+        var trackBranchArg = new Argument<string>("branch", "Remote branch name (may be created by a future push)");
+        var trackLocalOption = new Option<string?>("--local-branch", "Local branch (default: active branch)");
+        remoteTrackCommand.AddArgument(trackRemoteArg);
+        remoteTrackCommand.AddArgument(trackBranchArg);
+        remoteTrackCommand.AddOption(trackLocalOption);
+        remoteTrackCommand.AddOption(remoteDirOption);
+        remoteTrackCommand.SetHandler((InvocationContext invocation) =>
+        {
+            try
+            {
+                var parsed = invocation.ParseResult;
+                var result = serviceProvider.GetRequiredService<RemoteUseCase>().TrackRemote(new TrackRemoteRequest(
+                    ResolveRepoDirectory(parsed.GetValueForOption(remoteDirOption)),
+                    parsed.GetValueForArgument(trackRemoteArg), parsed.GetValueForArgument(trackBranchArg),
+                    parsed.GetValueForOption(trackLocalOption)), invocation.GetCancellationToken());
+                AnsiConsole.MarkupLine($"[green]✓[/] {Markup.Escape(result.LocalBranch.Value)} tracks {Markup.Escape(result.RemoteName)}/{Markup.Escape(result.RemoteBranch.Value)}.");
+            }
+            catch (ArgumentException ex) { invocation.ExitCode = 7; WriteError(ex.Message); }
+            catch (OperationCanceledException) { invocation.ExitCode = 130; WriteError("Upstream configuration cancelled."); }
+            catch (RepositoryBusyException ex) { invocation.ExitCode = 11; WriteError(ex.Message); }
+            catch (WorkspaceRecoveryRequiredException ex) { invocation.ExitCode = 10; WriteError(ex.Message); }
+            catch (Exception ex) { invocation.ExitCode = 1; WriteError(ex.Message); }
+        });
+        remoteCommand.AddCommand(remoteTrackCommand);
 
         remoteCommand.AddCommand(remoteAddCommand);
         remoteCommand.AddCommand(remoteRemoveCommand);
@@ -1085,34 +1212,35 @@ public static class Program
         fetchCommand.AddOption(fetchDryRunOption);
         fetchCommand.AddOption(fetchDirOption);
 
-        fetchCommand.SetHandler(async (remote, branch, dryRun, dir) =>
+        fetchCommand.SetHandler(async (InvocationContext invocation) =>
         {
+            var parsed = invocation.ParseResult;
+            var remote = parsed.GetValueForArgument(fetchRemoteArg);
+            var branch = parsed.GetValueForArgument(fetchBranchArg);
+            var dryRun = parsed.GetValueForOption(fetchDryRunOption);
+            var dir = parsed.GetValueForOption(fetchDirOption);
             try
             {
                 var repoDir = ResolveRepoDirectory(dir);
                 var useCase = serviceProvider.GetRequiredService<FetchUseCase>();
-                var result = await useCase.ExecuteAsync(new FetchRequest(repoDir, remote, branch, dryRun));
+                var result = await useCase.ExecuteAsync(new FetchRequest(repoDir, remote, branch, dryRun), invocation.GetCancellationToken());
 
                 if (result.IsDryRun)
                 {
-                    AnsiConsole.MarkupLine($"[yellow]Dry run:[/] Would fetch {result.ObjectsFetched} object(s) ({FormatBytes(result.BytesFetched)}) from remote [bold]{Markup.Escape(result.RemoteName)}[/].");
+                    AnsiConsole.MarkupLine($"[yellow]Dry run:[/] Would fetch an estimated {result.ObjectsFetched} object(s) ({FormatBytes(result.BytesFetched)}) from remote [bold]{Markup.Escape(result.RemoteName)}[/].");
                 }
                 else
                 {
                     AnsiConsole.MarkupLine($"[green]✓[/] Fetched from [bold]{Markup.Escape(result.RemoteName)}[/]: {result.ObjectsFetched} object(s) ({FormatBytes(result.BytesFetched)}).");
-                    if (result.UpdatedRefs.Count > 0)
-                    {
-                        foreach (var r in result.UpdatedRefs)
-                        {
-                            var oldStr = r.OldCommit?.ToString()[..8] ?? "<new>";
-                            var newStr = r.NewCommit.ToString()[..8];
-                            AnsiConsole.MarkupLine($"  [cyan]{Markup.Escape(result.RemoteName)}/{Markup.Escape(r.Branch.Value)}[/] [dim]{oldStr}..{newStr}[/]");
-                        }
-                    }
-                    else
-                    {
+                    if (result.UpdatedRefs.Count == 0)
                         AnsiConsole.MarkupLine("  [dim]All remote branches already up to date.[/]");
-                    }
+                }
+                foreach (var reference in result.UpdatedRefs)
+                {
+                    var oldTip = reference.OldCommit?.ToString()[..8] ?? "<new>";
+                    var newTip = reference.NewCommit.ToString()[..8];
+                    var action = result.IsDryRun ? "Would update " : "";
+                    AnsiConsole.MarkupLine($"  {action}[cyan]{Markup.Escape(result.RemoteName)}/{Markup.Escape(reference.Branch.Value)}[/] [dim]{oldTip}..{newTip}[/]");
                 }
             }
             catch (RemoteException ex)
@@ -1127,16 +1255,23 @@ public static class Program
             {
                 WriteError($"Security violation in remote snapshot (Exit Code 3): {ex.Message}", 3);
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
+            catch (OperationCanceledException)
+            {
+                invocation.ExitCode = 130;
+                WriteError("Synchronization cancelled. Inspect repository state before retrying; cancellation does not guarantee rollback.");
+            }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
             }
-        }, fetchRemoteArg, fetchBranchArg, fetchDryRunOption, fetchDirOption);
+        });
 
         // --- dawvc pull ---
         var pullCommand = new Command("pull", "Fetch and integrate remote changes into the current branch (FR-PUL-001..012, AC-030..AC-037)");
         var pullRemoteArg = new Argument<string?>("remote", () => null, "Remote name to pull from (default: configured upstream or origin)");
-        var pullBranchArg = new Argument<string?>("branch", () => null, "Branch to pull (default: active branch)");
+        var pullBranchArg = new Argument<string?>("branch", () => null, "Remote source branch to integrate into the active local branch (default: upstream)");
         var pullForceOption = new Option<bool>("--force", "Force pull on a dirty workspace after creating a full recovery copy");
         var pullFfOnlyOption = new Option<bool>("--ff-only", () => true, "Refuse to merge and only allow fast-forward updates");
         var pullDryRunOption = new Option<bool>("--dry-run", "Simulate pull without modifying workspace or tracking branches");
@@ -1149,13 +1284,20 @@ public static class Program
         pullCommand.AddOption(pullDryRunOption);
         pullCommand.AddOption(pullDirOption);
 
-        pullCommand.SetHandler(async (remote, branch, force, ffOnly, dryRun, dir) =>
+        pullCommand.SetHandler(async (InvocationContext invocation) =>
         {
+            var parsed = invocation.ParseResult;
+            var remote = parsed.GetValueForArgument(pullRemoteArg);
+            var branch = parsed.GetValueForArgument(pullBranchArg);
+            var force = parsed.GetValueForOption(pullForceOption);
+            var ffOnly = parsed.GetValueForOption(pullFfOnlyOption);
+            var dryRun = parsed.GetValueForOption(pullDryRunOption);
+            var dir = parsed.GetValueForOption(pullDirOption);
             try
             {
                 var repoDir = ResolveRepoDirectory(dir);
                 var useCase = serviceProvider.GetRequiredService<PullUseCase>();
-                var result = await useCase.ExecuteAsync(new PullRequest(repoDir, remote, branch, force, ffOnly, dryRun));
+                var result = await useCase.ExecuteAsync(new PullRequest(repoDir, remote, branch, force, ffOnly, dryRun), invocation.GetCancellationToken());
 
                 if (result.IsDryRun)
                 {
@@ -1229,11 +1371,58 @@ public static class Program
             {
                 WriteError($"Security violation in remote snapshot (Exit Code 3): {ex.Message}", 3);
             }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
+            catch (OperationCanceledException)
+            {
+                invocation.ExitCode = 130;
+                WriteError("Synchronization cancelled. Inspect repository state before retrying; cancellation does not guarantee rollback.");
+            }
             catch (Exception ex)
             {
                 WriteError(ex.Message, 1);
             }
-        }, pullRemoteArg, pullBranchArg, pullForceOption, pullFfOnlyOption, pullDryRunOption, pullDirOption);
+        });
+
+        // --- dawvc push ---
+        var pushCommand = new Command("push", "Push a local branch to a filesystem or dawvc:// SSH remote (fast-forward only)");
+        var pushRemoteArg = new Argument<string?>("remote", () => null, "Destination remote (default: upstream or origin)");
+        var pushBranchArg = new Argument<string?>("branch", () => null, "Local and destination branch (default: active branch/upstream)");
+        var pushDryRunOption = new Option<bool>("--dry-run", "Verify and preview without destination writes");
+        var pushDirOption = new Option<string?>("--dir", "Repository directory");
+        pushCommand.AddArgument(pushRemoteArg);
+        pushCommand.AddArgument(pushBranchArg);
+        pushCommand.AddOption(pushDryRunOption);
+        pushCommand.AddOption(pushDirOption);
+        pushCommand.SetHandler(async (InvocationContext invocation) =>
+        {
+            try
+            {
+                var parsed = invocation.ParseResult;
+                var useCase = serviceProvider.GetRequiredService<PushUseCase>();
+                var result = await useCase.ExecuteAsync(new PushRequest(
+                    ResolveRepoDirectory(parsed.GetValueForOption(pushDirOption)),
+                    parsed.GetValueForArgument(pushRemoteArg), parsed.GetValueForArgument(pushBranchArg),
+                    parsed.GetValueForOption(pushDryRunOption)), invocation.GetCancellationToken());
+                var action = result.IsDryRun ? "Would push" : "Pushed";
+                var message = result.UpToDate ? $"Already up to date: {result.RemoteName}/{result.RemoteBranch.Value}."
+                    : $"{action} {result.LocalBranch.Value} to {result.RemoteName}/{result.RemoteBranch.Value}: {result.ObjectsTransferred} object(s), {FormatBytes(result.BytesTransferred)} payload.";
+                AnsiConsole.MarkupLine($"[green]✓[/] {Markup.Escape(PathRedactor.Redact(message))}");
+            }
+            catch (PushNonFastForwardException ex) { invocation.ExitCode = 9; WriteError(ex.Message); }
+            catch (RemoteException ex) { invocation.ExitCode = 8; WriteError(ex.Message); }
+            catch (InvalidEnvelopeException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
+            catch (PathSecurityException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
+            catch (FileNotFoundException ex) { invocation.ExitCode = 3; WriteError(ex.Message); }
+            catch (OperationCanceledException) { invocation.ExitCode = 130; WriteError("Push cancelled. If publication already finished, the destination may have advanced; inspect its branch before retrying."); }
+            catch (ArgumentException ex) { invocation.ExitCode = 7; WriteError(ex.Message); }
+            catch (NotSupportedException ex) { invocation.ExitCode = 8; WriteError(ex.Message); }
+            catch (IOException ex) { invocation.ExitCode = 8; WriteError(ex.Message); }
+            catch (UnauthorizedAccessException ex) { invocation.ExitCode = 8; WriteError(ex.Message); }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
+            catch (Exception ex) { invocation.ExitCode = 1; WriteError(ex.Message); }
+        });
 
         // --- dawvc clone ---
         var cloneCommand = new Command("clone", "Clone a remote DAWVC repository into a new directory (FR-REM-001..012, FR-PUL-001..012)");
@@ -1244,13 +1433,18 @@ public static class Program
         cloneCommand.AddArgument(cloneUrlArg);
         cloneCommand.AddArgument(cloneDirArg);
         cloneCommand.AddOption(cloneForceOption);
+        var cloneBareOption = new Option<bool>("--bare", "Copy all branches and objects for hosting, without a working tree");
+        cloneCommand.AddOption(cloneBareOption);
 
-        cloneCommand.SetHandler(async (url, dir, force) =>
+        cloneCommand.SetHandler(async (InvocationContext invocation) =>
         {
             try
             {
+                var parsed = invocation.ParseResult;
                 var useCase = serviceProvider.GetRequiredService<CloneUseCase>();
-                var result = await useCase.ExecuteAsync(new CloneRequest(url, dir, force));
+                var result = await useCase.ExecuteAsync(new CloneRequest(parsed.GetValueForArgument(cloneUrlArg),
+                    parsed.GetValueForArgument(cloneDirArg), parsed.GetValueForOption(cloneForceOption),
+                    parsed.GetValueForOption(cloneBareOption)), invocation.GetCancellationToken());
 
                 AnsiConsole.MarkupLine($"[green]✓[/] Cloned project [bold]{Markup.Escape(result.ProjectName)}[/] into [cyan]{Markup.Escape(PathRedactor.Redact(result.TargetDirectory))}[/]");
                 if (result.HeadCommit.HasValue)
@@ -1286,11 +1480,12 @@ public static class Program
             {
                 WriteError($"Security violation in remote snapshot (Exit Code 3): {ex.Message}", 3);
             }
-            catch (Exception ex)
-            {
-                WriteError(ex.Message, 1);
-            }
-        }, cloneUrlArg, cloneDirArg, cloneForceOption);
+            catch (OperationCanceledException) { invocation.ExitCode = 130; WriteError("Clone cancelled; inspect the destination before retrying."); }
+            catch (ArgumentException ex) { invocation.ExitCode = 7; WriteError(ex.Message); }
+            catch (RepositoryBusyException ex) { WriteError(ex.Message, 11); }
+            catch (WorkspaceRecoveryRequiredException ex) { WriteError(ex.Message, 10); }
+            catch (Exception ex) { invocation.ExitCode = 1; WriteError(ex.Message); }
+        });
 
         // Chronologically ordered workflow:
         // 1. Getting started / Setup
@@ -1307,17 +1502,20 @@ public static class Program
         // 3. Branching & navigation
         rootCommand.AddCommand(branchCommand);
         rootCommand.AddCommand(switchCommand);
+        rootCommand.AddCommand(mergeCommand);
         rootCommand.AddCommand(checkoutCommand);
 
         // 4. Remote collaboration & synchronization
         rootCommand.AddCommand(remoteCommand);
         rootCommand.AddCommand(fetchCommand);
         rootCommand.AddCommand(pullCommand);
+        rootCommand.AddCommand(pushCommand);
 
         // 5. Diagnostics, reproducibility & maintenance
         rootCommand.AddCommand(doctorCommand);
         rootCommand.AddCommand(bindCommand);
         rootCommand.AddCommand(fsckCommand);
+        rootCommand.AddCommand(recoverCommand);
 
         Environment.ExitCode = 0;
         var exitCode = await rootCommand.InvokeAsync(args);

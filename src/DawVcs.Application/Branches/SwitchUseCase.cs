@@ -1,5 +1,7 @@
 using DawVcs.Application.Adapters;
 using DawVcs.Application.Checkouts;
+using DawVcs.Application.Operations;
+using DawVcs.Application.Recovery;
 using DawVcs.Domain.Common;
 using DawVcs.Domain.Hashing;
 using DawVcs.Domain.Repositories;
@@ -11,7 +13,10 @@ public sealed record SwitchRequest(
     string BranchName,
     bool CreateBranch = false,
     string? StartPoint = null,
-    bool Force = false);
+    bool Force = false)
+{
+    internal RepositoryOperation? Operation { get; init; }
+}
 
 public sealed record SwitchResult(
     BranchName Branch,
@@ -46,12 +51,16 @@ public sealed class SwitchUseCase
             throw new ArgumentException(validationError ?? $"Invalid branch name '{request.BranchName}'.", nameof(request));
         }
 
-        var context = _contextFactory(request.RepositoryDirectory);
+        cancellationToken.ThrowIfCancellationRequested();
+        using var operation = RepositoryOperation.Enter(request.RepositoryDirectory, request.Operation, cancellationToken: cancellationToken);
+        WorkspaceRecoveryGuard.ThrowIfPending(request.RepositoryDirectory);
+        using var context = _contextFactory(request.RepositoryDirectory);
         var currentBranch = context.GetCurrentBranch();
 
         // 1. Reeds op de doelbranch?
         if (targetBranch == currentBranch && !request.CreateBranch)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var headCommit = context.GetBranchCommit(currentBranch);
             return new SwitchResult(
                 Branch: currentBranch,
@@ -102,7 +111,8 @@ public sealed class SwitchUseCase
             var checkoutRequest = new CheckoutRequest(
                 request.RepositoryDirectory,
                 targetBranch.Value,
-                Force: request.Force);
+                Force: request.Force)
+            { Operation = operation };
 
             try
             {
@@ -110,7 +120,7 @@ public sealed class SwitchUseCase
             }
             catch
             {
-                if (createdNew)
+                if (createdNew && !WorkspaceRecoveryGuard.HasPending(context.RootPath))
                 {
                     try
                     {

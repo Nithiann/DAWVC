@@ -413,18 +413,20 @@ public sealed class CheckoutAcTests
         await addUseCase.ExecuteAsync(new AddRequest(temp.Path, ["LocalOnly.wav"]));
 
         // Simuleer fout tijdens het leegmaken van staging index bij checkout
-        var faultyContext = new FaultyStagingIndexContext(ContextFactory(temp.Path));
-        var faultyCheckoutUseCase = new CheckoutUseCase(_ => faultyContext, Registry);
+        // Checkout and nested status each own/dispose their factory-created context.
+        var faultyCheckoutUseCase = new CheckoutUseCase(directory => new FaultyStagingIndexContext(ContextFactory(directory)), Registry);
 
         // WHEN checkout naar feature wordt uitgevoerd met force
         var act = () => faultyCheckoutUseCase.ExecuteAsync(new CheckoutRequest(temp.Path, "feature", Force: true));
 
         // THEN staging fout wordt gegooid
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*Simulated staging index SQLite failure during clear*");
+        var failure = (await act.Should().ThrowAsync<IncompleteRollbackException>()).Which;
+        failure.RecoveryPath.Should().Be(temp.Path);
+        ((AggregateException)failure.InnerException!).InnerExceptions.Should()
+            .Contain(e => e is InvalidOperationException);
 
         // EN HEAD moet gerolled back zijn naar 'main'
-        var normalContext = ContextFactory(temp.Path);
+        using var normalContext = ContextFactory(temp.Path);
         normalContext.GetCurrentBranch().Value.Should().Be("main");
 
         // EN bestanden van feature (Synth.wav) moeten gerolled back zijn (niet aanwezig)

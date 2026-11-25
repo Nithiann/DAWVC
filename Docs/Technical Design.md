@@ -1082,7 +1082,10 @@ Pessimistic project locking for binary files prevents concurrent editing conflic
 
 # 34. Remote Model
 
-Supports `clone`, `fetch`, `pull`, and `push` over HTTPS REST endpoints with content negotiation.
+The default network model is `dawvc://` over SSH, with versioned stdio object
+negotiation and a transient `dawvc serve` receiver. Local/filesystem transports
+remain available. HTTPS REST is an optional future hosted transport, not required
+for self-hosting. See [Remote Protocol](Remote_Protocol.md).
 
 ---
 
@@ -1094,13 +1097,20 @@ Clients exchange missing object inventories and stream only missing blobs, follo
 
 # 36. Remote Storage Architecture
 
-PostgreSQL for relational metadata and access control; S3-compatible object storage for immutable blobs.
+Basic self-hosting uses initialized DAWVC repositories on an operator-selected
+filesystem, with per-account/key alias policies. PostgreSQL and S3-compatible
+object storage are optional future hosted-service architecture, not dependencies
+of the SSH baseline.
 
 ---
 
 # 37. Authentication & Authorization
 
-OIDC/OAuth2 bearer tokens with local credential store integration. Role-based permissions (Owner, Maintainer, Contributor, ReadOnly).
+The SSH baseline uses OpenSSH public-key/agent authentication, strict known-host
+verification and forced-command policies. Allowlisted aliases grant reads;
+AllowPush grants writes. Per-key/account policy and OS permissions provide the
+current authorization boundary. OIDC/OAuth2 and hosted application roles are
+future service options rather than implemented dependencies.
 
 ---
 
@@ -1361,3 +1371,100 @@ DAWVC establishes a reproducible foundation for audio production:
 Success is measured by one defining capability:
 
 > **"Can two producers reliably reconstruct, version, and collaborate on the same musical project across different workstations and DAWs without local folder structures, missing assets, implicit dependencies, or unsafe format conversions damaging the native project?"**
+
+# Engine integration amendment (23 November 2026)
+
+The implemented CLI composition root is now `DawVcs.Bootstrap.AddDawVcs`.
+Application exposes presentation-neutral progress, cancellation, typed failures,
+repository opening and paged queries for independently maintained clients.
+Desktop architecture described above remains a product direction, not a shipped
+GUI in this core solution. See [Engine integration](Engine_Integration.md) and
+[ADR-CORE-001](adr/ADR-CORE-001-shared-engine-composition.md).
+
+The SQLite index contains staged intent in addition to derived hashes. Automatic
+corrupt-index deletion/rebuilding is superseded by the preservation amendment in
+[ADR-009](adr/ADR-009-sqlite-local-index.md). Persisted schemas are unchanged.
+
+# Filesystem Push amendment (23 November 2026)
+
+Sections 34–37 describe the long-term hosted architecture. The implemented
+filesystem collaboration baseline now adds fast-forward-only `push` to clone,
+fetch and pull. `IRemotePushTransport` is an optional capability, with caller-owned
+`IRemotePushSession` reception; the read-only transport API is unchanged.
+Application plans and verifies complete immutable closure; Infrastructure repeats
+closure validation at receipt, promotes objects and conditionally publishes refs
+under a shared ref-writer lock. Checked-out destination branches are refused.
+The CLI uses the same Bootstrap-registered `PushUseCase` as independent clients.
+
+Filesystem handshakes optionally carry versioned configuration, allowing Clone
+to read bare-repository configuration without constructing a writable context
+and accidentally creating a `.dawvc` directory in the source. No on-disk schema
+changes. See [ADR-REM-001](adr/ADR-REM-001-filesystem-push.md), FR-PSH-001..010
+and WP-PUSH-01 in the existing implementation plan.
+
+# SSH transport amendment (23 November 2026)
+
+`IRemoteTransport` and the optional push capability are implemented by
+`SshRemoteTransport`. The existing Application clone/fetch/pull/push use cases
+remain transport-independent. Host metadata reads reject reparse points as well
+as writes; advertised refs are bounded in count and file length. `remote add`
+validates transports and refuses embedded passwords before persisting them.
+
+The OpenSSH child uses argument-list execution and a fixed command. A host starts
+`serve` per connection; there is no permanent DAWVC daemon. No new NuGet dependency
+or on-disk repository schema is introduced. Operational policy/protocol definitions
+are in [Self-hosting SSH](Self_Hosting_SSH.md), [Remote Protocol](Remote_Protocol.md)
+and [ADR-REM-002](adr/ADR-REM-002-ssh-hosting.md).
+
+
+# Bare provisioning amendment — WP-SYNC-04
+
+ADR-REM-005 defines explicit source-derived empty receivers and bare cloning.
+A bare root uses dawvc.yaml, HEAD, objects/ and refs/heads/ directly, as already
+understood by filesystem/SSH transports. No schema or wire-format change.
+Application provisioning reuses normal contexts only in isolated sibling staging,
+then publishes their metadata/shared configuration as bare storage by same-volume
+rename after disposing resources. Clone copies verified fetched tips to branch
+heads, without checkout/Doctor. Empty init copies source identity/configuration
+only. Existing nonempty targets, links/junctions and force replacement are refused.
+Host alias/SSH permissions remain operator-owned; no remote arbitrary-path create.
+
+
+# Explicit snapshot Merge amendment — WP-SYNC-05
+
+ADR-REM-006 introduces deliberate whole-snapshot divergence resolution. Reuse the
+existing multi-parent commit payload: parents are local/incoming tips in that
+order; snapshotId is exactly one chosen existing snapshot. No new object/schema
+or protocol format. Validate bounded complete commit ancestry and both tip
+snapshots/blobs, then reuse staged checkout publication with dirty/collision
+guards and opt-in expected branch/tip checking. Source/tracking refs are retained;
+Push/Pull continue enforcing fast-forward ancestry. No semantic/native FLP writer,
+per-file merge, force, persistent merge state or global transaction is introduced.
+
+
+# Durable workspace recovery amendment — WP-SYNC-07
+
+ADR-REC-001 adds private schema-1 write-ahead recovery envelopes, atomically moved
+from transaction-preparation to active transactions before publication. Flushed
+before/after identities, backups, HEAD/ref metadata and staged intent support
+explicit restartable rollback; a durable Committed decision precedes cleanup.
+Terminal directory rename precedes recursive deletion. Existing immutable/shared
+object formats and remote protocol remain unchanged. SQLite staging synchronous
+mode changes from NORMAL to FULL for durability; no database schema migration.
+Process termination, handled compensation and actual power/storage qualification
+are distinct guarantees. Global local-writer serialization remains a separate WP.
+
+## WP-SYNC-09: integrated synchronization workflow
+
+SyncTarget resolves local/remote branches once before transfer; Pull integrates
+into the active local branch. Track persists validated upstreams atomically under
+operation/pending guards. Fetch dry-run uses FetchPreviewPlanner before any
+quarantine/index creation; Pull uses the immutable advertisement/parent overlay
+plus local commits for ancestry. Metadata limits and DTO contracts are documented
+in ADR-REM-004/007. Both merge parents participate in traversal.
+
+Dry-runs skip writer ownership to preserve filesystem layout; real operations
+retain explicit nested capabilities and durable checkout publication. Backend
+constructors are side-effect free, index creation is lazy, and only an accessed
+index is disposed/cleared. Previews remain advisory across concurrent changes;
+actual execution re-fetches. No shared object or wire schema is changed.

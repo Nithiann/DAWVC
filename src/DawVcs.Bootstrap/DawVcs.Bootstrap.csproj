@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>DawVcs.Bootstrap</RootNamespace>
+    <AssemblyName>DawVcs.Bootstrap</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DawVcs.Application\DawVcs.Application.csproj" />
+    <ProjectReference Include="..\DawVcs.Infrastructure\DawVcs.Infrastructure.csproj" />
+    <ProjectReference Include="..\DawVcs.Adapters.FLStudio\DawVcs.Adapters.FLStudio.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+</Project>
