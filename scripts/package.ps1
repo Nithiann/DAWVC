@@ -25,7 +25,7 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
         $Version = $xml.Project.PropertyGroup.Version | Select-Object -First 1
     }
     if ([string]::IsNullOrWhiteSpace($Version)) {
-        $Version = "0.1.0-preview.3"
+        $Version = "0.3.0-preview.1"
     }
 }
 
@@ -54,8 +54,8 @@ $PublishDir = Join-Path $ArtifactsDir "staging"
     /p:DebugType=none `
     /p:Version=$Version `
     /p:InformationalVersion=$Version `
-    /p:AssemblyVersion=0.1.0.0 `
-    /p:FileVersion=0.1.0.0 `
+    /p:AssemblyVersion=0.3.0.0 `
+    /p:FileVersion=0.3.0.0 `
     -o $PublishDir
 
 if ($LASTEXITCODE -ne 0) {
